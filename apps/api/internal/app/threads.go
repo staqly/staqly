@@ -242,6 +242,10 @@ func (s *Service) publishReply(ctx context.Context, postID, channelID string, in
 	if index >= len(parts) || replies[index].Status == "published" || replies[index].Status == "skipped" {
 		return nil
 	}
+	// An earlier attempt of this job sent the reply but could not record it: record it now, never send again.
+	if sent, ok := sentReceipt(jobFrom(ctx)); ok {
+		return s.recordSent(ctx, postID, channelID, sent, func() error { return s.replyEnded(ctx, postID, channelID, index, sent, "") })
+	}
 	if s.suspended(ctx, row.WorkspaceID) {
 		return s.replyEnded(ctx, postID, channelID, index, providers.Result{}, ErrSuspended.Message)
 	}
@@ -298,7 +302,7 @@ func (s *Service) publishReply(ctx context.Context, postID, channelID string, in
 	}
 	switch {
 	case err == nil:
-		return s.replyEnded(wctx, postID, channelID, index, result, "")
+		return s.recordSent(wctx, postID, channelID, result, func() error { return s.replyEnded(wctx, postID, channelID, index, result, "") })
 	case errors.Is(err, providers.ErrReauth):
 		_ = s.channelNeedsReconnect(wctx, ch, err)
 		return s.replyEnded(wctx, postID, channelID, index, providers.Result{}, err.Error())
@@ -311,7 +315,12 @@ func (s *Service) publishReply(ctx context.Context, postID, channelID string, in
 // replyEnded records a reply's outcome. Published: the next part is queued under it. Failed: the thread stops
 // there and the parts after it are skipped; the post itself stays published.
 func (s *Service) replyEnded(ctx context.Context, postID, channelID string, index int, result providers.Result, errMsg string) error {
-	row, err := s.Q.GetPostByID(ctx, postID)
+	return s.tx(ctx, func(q *db.Queries) error { return s.replyEndedIn(ctx, q, postID, channelID, index, result, errMsg) })
+}
+
+// replyEndedIn is replyEnded inside the caller's transaction (cancelling a job ends its reply with it).
+func (s *Service) replyEndedIn(ctx context.Context, q *db.Queries, postID, channelID string, index int, result providers.Result, errMsg string) error {
+	row, err := q.GetPostByID(ctx, postID)
 	if isNoRows(err) {
 		return nil
 	}
@@ -319,50 +328,49 @@ func (s *Service) replyEnded(ctx context.Context, postID, channelID string, inde
 		return err
 	}
 	sys := Principal{WorkspaceID: row.WorkspaceID, Kind: PrincipalSystem, ID: "publisher", Name: "Publisher"}
-	return s.tx(ctx, func(q *db.Queries) error {
-		t, err := q.GetTarget(ctx, db.GetTargetParams{PostID: postID, ChannelID: channelID})
-		if isNoRows(err) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		parts := targetThread(row.Thread, t.Settings)
-		if index >= len(parts) {
-			return nil
-		}
-		replies := repliesFor(len(parts), t.Replies)
-		now := s.now()
-		typ, data := "post.reply_published", map[string]any{"channel_id": channelID, "index": index, "url": result.URL, "external_id": result.ExternalID}
-		if errMsg == "" {
-			replies[index] = Reply{Index: index, Status: "published", ExternalID: result.ExternalID, ExternalURL: result.URL, PublishedAt: &now}
-			if ch, err := q.GetChannelByID(ctx, channelID); err == nil && ch.Provider == ProviderX {
-				text, _ := providers.ApplyLinks(channelLinks(ch), parts[index].Content)
-				ref := fmt.Sprintf("reply:%s:%s:%d", postID, channelID, index)
-				if err := s.meterX(ctx, q, row.WorkspaceID, ref, xUnits(text)); err != nil {
-					return err
-				}
-				if err := q.DeletePublishingAllowanceReservation(ctx, db.DeletePublishingAllowanceReservationParams{WorkspaceID: row.WorkspaceID, Ref: ref}); err != nil {
-					return err
-				}
-			}
-		} else {
-			typ, data = "post.reply_failed", map[string]any{"channel_id": channelID, "index": index, "error": errMsg}
-			replies[index] = Reply{Index: index, Status: "failed", Error: truncateRunes(errMsg, 500)}
-			for i := index + 1; i < len(replies); i++ {
-				replies[i] = Reply{Index: i, Status: "skipped"}
-			}
-		}
-		if err := q.SetTargetReplies(ctx, db.SetTargetRepliesParams{Replies: mustJSON(replies), UpdatedAt: now, PostID: postID, ChannelID: channelID}); err != nil {
-			return err
-		}
-		if _, err := s.emitRef(ctx, q, sys, typ, Ref{Collection: row.CollectionID, Post: postID, Channel: channelID},
-			s.postEventData(ctx, q, row.WorkspaceID, postID, data)); err != nil {
-			return err
-		}
-		if errMsg == "" && index+1 < len(parts) && t.Removal == "" {
-			return s.enqueueReply(ctx, q, row.WorkspaceID, postID, channelID, index+1, result.ExternalID, parts[index+1].DelaySeconds)
-		}
+	t, err := q.GetTarget(ctx, db.GetTargetParams{PostID: postID, ChannelID: channelID})
+	if isNoRows(err) {
 		return nil
-	})
+	}
+	if err != nil {
+		return err
+	}
+	parts := targetThread(row.Thread, t.Settings)
+	if index >= len(parts) {
+		return nil
+	}
+	replies := repliesFor(len(parts), t.Replies)
+	now := s.now()
+	typ, data := "post.reply_published", map[string]any{"channel_id": channelID, "index": index, "url": result.URL, "external_id": result.ExternalID}
+	if errMsg == "" {
+		replies[index] = Reply{Index: index, Status: "published", ExternalID: result.ExternalID, ExternalURL: result.URL, PublishedAt: &now}
+		if ch, err := q.GetChannelByID(ctx, channelID); err == nil && ch.Provider == ProviderX {
+			text, _ := providers.ApplyLinks(channelLinks(ch), parts[index].Content)
+			ref := fmt.Sprintf("reply:%s:%s:%d", postID, channelID, index)
+			if err := s.meterX(ctx, q, row.WorkspaceID, ref, xUnits(text)); err != nil {
+				return err
+			}
+			if err := q.DeletePublishingAllowanceReservation(ctx, db.DeletePublishingAllowanceReservationParams{WorkspaceID: row.WorkspaceID, Ref: ref}); err != nil {
+				return err
+			}
+		}
+	} else {
+		typ, data = "post.reply_failed", map[string]any{"channel_id": channelID, "index": index, "error": errMsg}
+		// With a link only when it went out and its result could not be saved (jobFailed): a person checks it.
+		replies[index] = Reply{Index: index, Status: "failed", Error: truncateRunes(errMsg, 500), ExternalID: result.ExternalID, ExternalURL: result.URL}
+		for i := index + 1; i < len(replies); i++ {
+			replies[i] = Reply{Index: i, Status: "skipped"}
+		}
+	}
+	if err := q.SetTargetReplies(ctx, db.SetTargetRepliesParams{Replies: mustJSON(replies), UpdatedAt: now, PostID: postID, ChannelID: channelID}); err != nil {
+		return err
+	}
+	if _, err := s.emitRef(ctx, q, sys, typ, Ref{Collection: row.CollectionID, Post: postID, Channel: channelID},
+		s.postEventData(ctx, q, row.WorkspaceID, postID, data)); err != nil {
+		return err
+	}
+	if errMsg == "" && index+1 < len(parts) && t.Removal == "" {
+		return s.enqueueReply(ctx, q, row.WorkspaceID, postID, channelID, index+1, result.ExternalID, parts[index+1].DelaySeconds)
+	}
+	return nil
 }

@@ -90,13 +90,14 @@ request and credential save, and so do Stripe subscription refreshes (`lockBilli
   process); one rescued on its last attempt is discarded, and `settleRescuedJobs` (the
   minute sweep) calls `jobFailed` for it. Never call a platform inside `s.tx`; providers run from the job. A send whose
   result can't be written is retried in place, then kept as a receipt in the job's output
-  (`recordSent`): the next attempts only record it, and a job out of attempts fails the target
-  with its link. Delivery is still at least once across a crash: a process that dies after the
+  (`recordSent`, for a post's target and a thread's reply): the next attempts only record it, and a
+  job out of attempts fails the target (or reply) with its link. Delivery is still at least once across a crash: a process that dies after the
   platform accepted a post but before the result or the receipt was written publishes again on
   the retry (nothing deduplicates on the platform's side). A custom target's attempt is its
   `publish_target` job (`attempt_id` in `post.publish_requested`, the endpoint's body, the result
   request and the `target_timeout` job): an outcome naming an older job than the target's latest
-  is dropped (`currentAttempt`). The minute sweep also queues the run of an enabled schedule
+  is dropped (`currentAttempt`). Retry in the queue is a new job too. Cancelling a queued job
+  settles what it stood for in the same transaction (`cancelQueuedJob`). The minute sweep also queues the run of an enabled schedule
   that is overdue without a job (`sweepSchedules`). PostgreSQL: statements on `river_*` tables pass
   the SQLite→PostgreSQL rewrite untouched (`store.Postgres`), so application SQL on
   them is written per dialect. The old `jobs` table is only read at startup

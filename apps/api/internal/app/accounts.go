@@ -242,8 +242,9 @@ func loginErr(code, msg string) *Error { return &Error{Code: code, Status: 401, 
 // CompleteGoogleLogin checks the callback against the sealed state, exchanges the code (with the PKCE
 // verifier), verifies the ID token (signature, issuer, audience, expiry, nonce), then signs the person in:
 // an invitation they came with is accepted, a returning person lands in their workspace, a new person gets
-// a first workspace (when sign-ups are open). Always a fresh session (no fixation).
-func (s *Service) CompleteGoogleLogin(ctx context.Context, sealedState, state, code, userAgent string) (_ LoginResult, err error) {
+// a first workspace (when sign-ups are open). Always a fresh session (no fixation). sessionToken is the
+// browser's session cookie: adding Google to a person (link mode) needs their session to be still good.
+func (s *Service) CompleteGoogleLogin(ctx context.Context, sealedState, state, code, userAgent, sessionToken string) (_ LoginResult, err error) {
 	defer func() { s.trackSignInFailed(ProviderGoogle, err) }()
 	if err := googleOnly(s); err != nil {
 		return LoginResult{}, err
@@ -288,7 +289,11 @@ func (s *Service) CompleteGoogleLogin(ctx context.Context, sealedState, state, c
 	}
 	ident := Identity{Provider: ProviderGoogle, Subject: id.Subject, Email: id.Email, Name: id.Name, Picture: id.Picture}
 	if st.Link != "" {
-		// Link mode: no new session; the outcome shows on the sign-in methods page.
+		// Link mode: no new session; the outcome shows on the sign-in methods page. The session that started it
+		// may have been signed out since (a stolen one): it must not leave a sign-in method behind.
+		if p, _, err := s.AuthenticateSession(ctx, sessionToken); err != nil || p.UserID != st.Link {
+			return LoginResult{}, loginErr("login_expired", "you were signed out before Google answered; sign in and add Google again")
+		}
 		next := signInMethodsPath + "?linked=google"
 		if err := s.linkIdentity(ctx, st.Link, ident); err != nil {
 			code := "sign_in_failed"

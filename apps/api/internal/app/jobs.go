@@ -167,8 +167,13 @@ func (s *Service) jobFailed(ctx context.Context, kind string, a jobArgs, cause e
 		return s.enqueue(ctx, s.W, a.WorkspaceID, "refresh_channel", "refresh_channel:"+p.ChannelID,
 			map[string]any{"channel_id": p.ChannelID}, s.Now().Add(refreshRetryDelay), 3)
 	case "publish_reply":
-		// The post is out; its thread stops at this part.
-		return s.replyEnded(ctx, p.PostID, p.ChannelID, p.Index, providers.Result{}, cause.Error())
+		// The post is out; its thread stops at this part (with the link of a reply whose result was never saved).
+		result := providers.Result{}
+		var sent *unrecordedSend
+		if errors.As(cause, &sent) {
+			result = sent.result
+		}
+		return s.replyEnded(ctx, p.PostID, p.ChannelID, p.Index, result, cause.Error())
 	}
 	return nil
 }
@@ -483,10 +488,18 @@ func (s *Service) RetryJob(ctx context.Context, p Principal, id string) (Job, er
 		}
 		switch r.Kind {
 		case "publish_target":
-			// The same checks and the same way back to publishing as Retry on the post's channel.
+			// The same checks and the same way back to publishing as Retry on the post's channel, and like it a
+			// new job: the job is the attempt your own automation names in its result, and a late answer to the
+			// failed one must not settle the retry (currentAttempt).
 			if _, err := s.retryTargetTx(ctx, q, p.WorkspaceID, pl.PostID, pl.ChannelID); err != nil {
 				return err
 			}
+			if err := s.enqueue(ctx, q, p.WorkspaceID, "publish_target", a.Key,
+				map[string]any{"post_id": pl.PostID, "channel_id": pl.ChannelID}, s.Now(), 3); err != nil {
+				return err
+			}
+			id, err = s.currentAttempt(ctx, q, pl.PostID, pl.ChannelID)
+			return err
 		case "publish_post":
 			// Its last failure failed the post (or someone changed it since): the run would find nothing to do.
 			row, err := q.GetPost(ctx, db.GetPostParams{WorkspaceID: p.WorkspaceID, ID: pl.PostID})
@@ -530,6 +543,12 @@ func (s *Service) CancelJob(ctx context.Context, p Principal, id string) (Job, e
 	if _, test := testJobKinds[r.Kind]; !cancellableJobKinds[r.Kind] && !test {
 		return Job{}, conflict("this is staqly's own work (billing, alerts, timeouts) and can't be cancelled")
 	}
+	// Cancelling a schedule's run changes the schedule (it skips the run, a one-time schedule turns off).
+	if r.Kind == "run_schedule" {
+		if err := p.require(ScopeSchedulesManage); err != nil {
+			return Job{}, err
+		}
+	}
 	if err := s.cancelQueuedJob(ctx, p, r); err != nil {
 		return Job{}, err
 	}
@@ -540,9 +559,13 @@ func (s *Service) CancelJob(ctx context.Context, p Principal, id string) (Job, e
 // worker that claimed the job since keeps it (409), because cancelling a run in progress would fail its target
 // while the post goes out.
 func (s *Service) cancelQueuedJob(ctx context.Context, p Principal, r *rivertype.JobRow) error {
+	var a jobArgs
+	_ = json.Unmarshal(r.EncodedArgs, &a)
+	pl := a.Payload
+	const cancelled = "the job was cancelled"
 	// The state is read again in the transaction that cancels: SQLite holds the write lock, PostgreSQL reruns
 	// the transaction when a worker claimed the row meanwhile.
-	err := s.tx(ctx, func(q *db.Queries) error {
+	return s.tx(ctx, func(q *db.Queries) error {
 		tx := s.sqlTx(q)
 		cur, err := s.river.JobGetTx(ctx, tx, r.ID)
 		if errors.Is(err, river.ErrNotFound) {
@@ -554,29 +577,30 @@ func (s *Service) cancelQueuedJob(ctx context.Context, p Principal, r *rivertype
 		if jobStatus(cur.State) != "queued" {
 			return conflict("only a queued job can be cancelled (this one is " + jobStatus(cur.State) + ")")
 		}
-		_, err = s.river.JobCancelTx(ctx, tx, r.ID)
-		return err
-	})
-	if err != nil {
-		return err
-	}
-	// Settle what the job would have done, or the post waits for it for good: a target fails (Retry brings it
-	// back), a reply ends its thread, a scheduled post goes back to draft as if taken off the schedule, a
-	// schedule skips this run and queues its next one.
-	var a jobArgs
-	_ = json.Unmarshal(r.EncodedArgs, &a)
-	switch r.Kind {
-	case "publish_target", "publish_reply":
-		return s.jobFailed(ctx, r.Kind, a, errors.New("the job was cancelled"))
-	case "run_schedule":
-		return s.scheduleRunSkipped(ctx, a.Payload.ScheduleID)
-	case "publish_post":
-		var e *Error
-		if _, err := s.CancelPost(ctx, p, a.Payload.PostID); err != nil && !errors.As(err, &e) {
-			return err // a conflict (not scheduled any more) or a deleted post needs nothing
+		if _, err := s.river.JobCancelTx(ctx, tx, r.ID); err != nil {
+			return err
 		}
-	}
-	return nil
+		// Settle what the job would have done in the same transaction, or a write that fails here would leave
+		// the post waiting for a cancelled job for good: a target fails (Retry brings it back), a reply ends
+		// its thread, a scheduled post goes back to draft as if taken off the schedule, a schedule skips this
+		// run and queues its next one.
+		switch r.Kind {
+		case "publish_target":
+			if err := s.settleTargetIn(ctx, q, pl.PostID, pl.ChannelID, "failed", providers.Result{}, cancelled, ""); !errors.Is(err, errTargetSettled) {
+				return err
+			}
+		case "publish_reply":
+			return s.replyEndedIn(ctx, q, pl.PostID, pl.ChannelID, pl.Index, providers.Result{}, cancelled)
+		case "run_schedule":
+			return s.scheduleRunSkipped(ctx, q, pl.ScheduleID)
+		case "publish_post":
+			var e *Error
+			if err := s.cancelPostIn(ctx, q, p, pl.PostID); err != nil && !errors.As(err, &e) {
+				return err // a conflict (not scheduled any more) or a deleted post needs nothing
+			}
+		}
+		return nil
+	})
 }
 
 func contains(list []string, v string) bool {

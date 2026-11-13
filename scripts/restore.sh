@@ -27,6 +27,46 @@ if [ ! -s "$dir/workspace.db" ]; then
   echo "missing or empty $dir/workspace.db" >&2
   exit 1
 fi
+# A database that is not SQLite, was cut off (the header says how many pages the file has) or fails
+# SQLite's own check (when sqlite3 is installed here; on a copy, so the backup stays as it is) would
+# replace a working one.
+db="$dir/workspace.db"
+bad_db() {
+  echo "$db $1; nothing was changed" >&2
+  exit 1
+}
+
+if [ "$(head -c 15 "$db" 2>/dev/null)" != "SQLite format 3" ]; then
+  bad_db "is not a SQLite database"
+fi
+
+# shellcheck disable=SC2207  # sixteen numbers, split on purpose
+header=($(od -An -tu1 -j16 -N16 "$db"))
+page=$((header[0] * 256 + header[1]))
+
+if [ "$page" -eq 1 ]; then
+  page=65536
+fi
+
+pages=$((((header[12] * 256 + header[13]) * 256 + header[14]) * 256 + header[15]))
+
+if [ "$(wc -c <"$db")" -lt $((page * pages)) ]; then
+  bad_db "is incomplete (shorter than its header says)"
+fi
+
+if command -v sqlite3 >/dev/null 2>&1; then
+  check=$(mktemp -d)
+  trap 'rm -rf "$check"' EXIT
+  cp "$db" "$check/workspace.db"
+  result=$(sqlite3 "$check/workspace.db" 'PRAGMA integrity_check;' 2>&1) || true
+  rm -rf "$check"
+  trap - EXIT
+
+  if [ "$result" != "ok" ]; then
+    bad_db "fails SQLite's integrity check"
+  fi
+fi
+
 if [ -f "$dir/uploads.tar.gz" ] && ! tar tzf "$dir/uploads.tar.gz" >/dev/null; then
   echo "$dir/uploads.tar.gz is damaged or incomplete; nothing was changed" >&2
   exit 1
@@ -133,6 +173,13 @@ docker run --rm \
 
     rm -rf "$old"
   ' || status=$?
+
+# A helper that was killed ran no rollback: unless the volume shows that nothing was left aside, the
+# data may be half swapped and the container must not start on it.
+if [ "$status" -ne 0 ] && [ "$status" -ne 3 ] &&
+  ! docker run --rm -v "$volume:/data" alpine:3.24 sh -c '[ ! -e /data/.restore-old ]'; then
+  status=3
+fi
 
 if [ "$status" -eq 3 ]; then
   echo "Restore failed and the previous data is not back in place: it is in /data/.restore-old of the" >&2

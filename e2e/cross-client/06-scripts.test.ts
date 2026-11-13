@@ -9,6 +9,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, 
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 
 import { describe, expect, inject, it } from 'vitest'
 
@@ -55,7 +56,7 @@ describe('scripts/seed.sh', () => {
 describe('scripts/restore.sh (stub docker, throwaway folders)', () => {
   // The stub runs the script's inner shell on folders instead of a volume: /data and /backup become
   // $STUB_ROOT/data and $STUB_ROOT/backup, chown is dropped, and STUB_FAIL_AFTER makes the swap fail
-  // right after that file was moved into place.
+  // right after that file was moved into place (STUB_KILL_AFTER kills the helper there instead: no trap runs).
   const STUB = `#!/bin/sh
 echo "$1" >> "$STUB_ROOT/calls.log"
 case "$1" in
@@ -63,6 +64,9 @@ case "$1" in
   run)
     for last; do :; done
     script=$(printf '%s' "$last" | sed "s#/data#$STUB_ROOT/data#g; s#/backup#$STUB_ROOT/backup#g; s#chown -R 10001:10001#: #")
+    if [ -n "\${STUB_KILL_AFTER:-}" ]; then
+      script=$(printf '%s' "$script" | sed "s#installed=\\"\\$installed \\$name\\"#&; [ \\"\\$name\\" != \\"$STUB_KILL_AFTER\\" ] || kill -9 \\$\\$#")
+    fi
     if [ -n "\${STUB_FAIL_AFTER:-}" ]; then
       script=$(printf '%s' "$script" | sed "s#installed=\\"\\$installed \\$name\\"#&; [ \\"\\$name\\" != \\"$STUB_FAIL_AFTER\\" ] || exit 9#")
     fi
@@ -86,7 +90,11 @@ esac
     writeFileSync(at('data/uploads/current.png'), 'current picture')
     writeFileSync(at('data/secret.key'), 'current key')
     writeFileSync(at('data/access_token'), 'current token')
-    writeFileSync(at('backup/workspace.db'), 'BACKUP DATABASE')
+    // A real database: the script refuses a backup whose workspace.db is not one.
+    const backupDb = new DatabaseSync(at('backup/workspace.db'))
+
+    backupDb.exec("CREATE TABLE marker (value TEXT); INSERT INTO marker VALUES ('BACKUP DATABASE')")
+    backupDb.close()
     writeFileSync(at('archive/uploads/old.png'), randomBytes(200_000)) // does not compress: truncating cuts into it
     writeFileSync(at('archive/secret.key'), 'backup key')
     execFileSync('tar', ['czf', at('backup/uploads.tar.gz'), '-C', at('archive'), 'uploads', 'secret.key'])
@@ -115,7 +123,7 @@ esac
 
     expect(r).toMatchObject({ code: 0, err: '' })
     expect(t.calls()).toEqual(['stop', 'run', 'start'])
-    expect(t.read('data/workspace.db')).toBe('BACKUP DATABASE')
+    expect(readFileSync(t.at('data/workspace.db')).equals(readFileSync(t.at('backup/workspace.db')))).toBe(true)
     expect(existsSync(t.at('data/workspace.db-wal'))).toBe(false) // never replayed onto the restored database
     expect(existsSync(t.at('data/uploads/old.png'))).toBe(true)
     expect(existsSync(t.at('data/uploads/current.png'))).toBe(false)
@@ -140,15 +148,15 @@ esac
   it('leaves the current data alone when the backup cannot be unpacked in the volume', async () => {
     const t = install()
 
-    // Readable for the check on the host, but not a file the copy in the container accepts.
-    execFileSync('rm', [t.at('backup/workspace.db')])
-    mkdirSync(t.at('backup/workspace.db'))
-    writeFileSync(t.at('backup/workspace.db/x'), 'x')
+    // The backup passes the checks on the host, but the helper cannot stage it: the volume takes no new folder.
+    chmodSync(t.at('data'), 0o555)
     const r = await t.restore()
+
+    chmodSync(t.at('data'), 0o755)
 
     expect(r.code).toBe(1)
     expect(r.err).toContain('previous data is unchanged')
-    expect(t.calls()).toEqual(['stop', 'run', 'start'])
+    expect(t.calls()).toEqual(['stop', 'run', 'run', 'start'])
     t.untouched()
   })
 
@@ -158,9 +166,33 @@ esac
 
     expect(r.code).toBe(1)
     expect(r.err).toContain('previous data is unchanged')
-    expect(t.calls()).toEqual(['stop', 'run', 'start'])
+    expect(t.calls()).toEqual(['stop', 'run', 'run', 'start'])
     t.untouched()
     expect(existsSync(t.at('data/.restore-old'))).toBe(false)
+  })
+
+  it('refuses a database that is cut off or not SQLite before it stops or changes anything', async () => {
+    for (const damaged of [readFileSync(install().at('backup/workspace.db')).subarray(0, 2000), 'BACKUP DATABASE']) {
+      const t = install()
+
+      writeFileSync(t.at('backup/workspace.db'), damaged)
+      const r = await t.restore()
+
+      expect(r.code).toBe(1)
+      expect(r.err).toContain('nothing was changed')
+      expect(t.calls()).toEqual([])
+      t.untouched()
+    }
+  })
+
+  it('leaves the container stopped when the helper was killed in the middle of the swap', async () => {
+    const t = install()
+    const r = await t.restore({ STUB_KILL_AFTER: 'workspace.db' })
+
+    expect(r.code).toBe(1)
+    expect(r.err).toMatch(/left STOPPED/)
+    expect(t.calls()).toEqual(['stop', 'run', 'run'])
+    expect(t.read('data/.restore-old/workspace.db')).toBe('CURRENT DATABASE')
   })
 
   it('says so when it leaves the container stopped: an earlier restore left data aside', async () => {

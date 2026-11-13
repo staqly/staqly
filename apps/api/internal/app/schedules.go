@@ -759,39 +759,38 @@ func scheduleNotEdited(ctx context.Context, q *db.Queries, before db.Schedule) (
 }
 
 // scheduleRunSkipped: someone cancelled the schedule's queued run. That run is skipped and the next one queued
-// (a one-time schedule has no next one and turns off), so an enabled schedule never sits without a job.
-func (s *Service) scheduleRunSkipped(ctx context.Context, id string) error {
-	return s.tx(ctx, func(q *db.Queries) error {
-		r, err := q.GetScheduleByID(ctx, id)
-		if isNoRows(err) || (err == nil && (r.Enabled != 1 || !r.NextRunAt.Valid)) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		// The run after the skipped one (or after now, when the skipped one was overdue).
-		after := s.Now()
-		if skipped, err := time.Parse(timeFormat, r.NextRunAt.String); err == nil && skipped.After(after) {
-			after = skipped
-		}
-		var rule ScheduleRule
-		_ = json.Unmarshal([]byte(r.Rule), &rule)
-		r.Enabled, r.NextRunAt = 0, nullStr("")
-		if at, ok := nextRun(rule, after); ok && r.Kind == "recurring" {
-			r.Enabled, r.NextRunAt = 1, nullStr(formatTime(at))
-		}
-		r.LastResult, r.UpdatedAt = "skipped: its queued run was cancelled", s.now()
-		if err := q.FinishScheduleRun(ctx, db.FinishScheduleRunParams{Enabled: r.Enabled, NextRunAt: r.NextRunAt, LastRunAt: r.LastRunAt,
-			LastResult: r.LastResult, UpdatedAt: r.UpdatedAt, ID: r.ID}); err != nil {
-			return err
-		}
-		if err := s.queueScheduleJob(ctx, q, r); err != nil {
-			return err
-		}
-		sys := Principal{WorkspaceID: r.WorkspaceID, Kind: PrincipalSystem, ID: "scheduler", Name: "Scheduler"}
-		_, err = s.emitRef(ctx, q, sys, "schedule.updated", Ref{Collection: r.CollectionID, Schedule: r.ID}, map[string]any{"schedule": s.toSchedule(ctx, r)})
+// (a one-time schedule has no next one and turns off), so an enabled schedule never sits without a job. It runs
+// in the transaction that cancels the job (q).
+func (s *Service) scheduleRunSkipped(ctx context.Context, q *db.Queries, id string) error {
+	r, err := q.GetScheduleByID(ctx, id)
+	if isNoRows(err) || (err == nil && (r.Enabled != 1 || !r.NextRunAt.Valid)) {
+		return nil
+	}
+	if err != nil {
 		return err
-	})
+	}
+	// The run after the skipped one (or after now, when the skipped one was overdue).
+	after := s.Now()
+	if skipped, err := time.Parse(timeFormat, r.NextRunAt.String); err == nil && skipped.After(after) {
+		after = skipped
+	}
+	var rule ScheduleRule
+	_ = json.Unmarshal([]byte(r.Rule), &rule)
+	r.Enabled, r.NextRunAt = 0, nullStr("")
+	if at, ok := nextRun(rule, after); ok && r.Kind == "recurring" {
+		r.Enabled, r.NextRunAt = 1, nullStr(formatTime(at))
+	}
+	r.LastResult, r.UpdatedAt = "skipped: its queued run was cancelled", s.now()
+	if err := q.FinishScheduleRun(ctx, db.FinishScheduleRunParams{Enabled: r.Enabled, NextRunAt: r.NextRunAt, LastRunAt: r.LastRunAt,
+		LastResult: r.LastResult, UpdatedAt: r.UpdatedAt, ID: r.ID}); err != nil {
+		return err
+	}
+	if err := s.queueScheduleJob(ctx, q, r); err != nil {
+		return err
+	}
+	sys := Principal{WorkspaceID: r.WorkspaceID, Kind: PrincipalSystem, ID: "scheduler", Name: "Scheduler"}
+	_, err = s.emitRef(ctx, q, sys, "schedule.updated", Ref{Collection: r.CollectionID, Schedule: r.ID}, map[string]any{"schedule": s.toSchedule(ctx, r)})
+	return err
 }
 
 // sweepSchedules queues the run of every enabled schedule whose time passed a few minutes ago and that has no
