@@ -83,7 +83,11 @@ func (s *Server) googleCallback(w http.ResponseWriter, r *http.Request) {
 		loginRedirect(w, r, &app.Error{Code: "google_cancelled", Status: 401, Message: "the sign-in at Google was cancelled"})
 		return
 	}
-	res, err := s.svc.CompleteGoogleLogin(r.Context(), sealed, q.Get("state"), q.Get("code"), r.UserAgent())
+	session := ""
+	if c, err := r.Cookie(sessionCookie); err == nil {
+		session = c.Value
+	}
+	res, err := s.svc.CompleteGoogleLogin(r.Context(), sealed, q.Get("state"), q.Get("code"), r.UserAgent(), session)
 	if err != nil {
 		loginRedirect(w, r, err)
 		return

@@ -18,45 +18,59 @@ import (
 	"github.com/staqly/staqly/apps/api/internal/providers"
 )
 
-// Audit 2026-11-13, finding 4: a thread reply the platform accepted, whose result the database refused, must
-// not be sent again by the job's retry.
+// Was a bug: a thread reply the platform accepted, whose result the database refused, was sent again by the
+// job's retry (the receipt that protects a post's target was not kept for replies).
 func TestReplyIsNotSentAgainAfterAFailedResultWrite(t *testing.T) {
-	s, p, post := publishTest(t)
-	ctx := context.Background()
-	var got []string
-	f := &fakeReplier{Base: providers.NewBase("fakereplier", "Fake Replier", providers.AuthNone, providers.Limits{MaxChars: 280, MaxMedia: 4}), replies: &got}
-	providers.Register(f, providers.StatusAvailable)
-	t.Cleanup(func() { providers.Unregister(f.ID()) })
-	e, _ := providers.Get(f.ID())
-	ch, err := s.saveChannel(ctx, p, e, "Replies", providers.Credentials{}, providers.Profile{}, nil, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.UpdatePost(ctx, p, post.ID, PostPatch{Targets: &[]PostTargetInput{{ChannelID: ch.ID}},
-		Thread: &[]ThreadPart{{Content: "part one", DelaySeconds: 3600}}}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.PublishPost(ctx, p, post.ID); err != nil {
-		t.Fatal(err)
-	}
-	s.RunDueJobsOnce(ctx) // the post is out; its reply waits an hour
-	if pub, _ := s.GetPost(ctx, p, post.ID); pub.Status != "published" || len(got) != 0 {
-		t.Fatalf("fixture: post %s, replies sent %q", pub.Status, got)
-	}
+	for _, outage := range []string{"one attempt", "every attempt"} {
+		t.Run(outage, func(t *testing.T) {
+			s, p, post := publishTest(t)
+			ctx := context.Background()
+			old := settleRetry
+			settleRetry = nil
+			t.Cleanup(func() { settleRetry = old })
+			var got []string
+			f := &fakeReplier{Base: providers.NewBase("fakereplier", "Fake Replier", providers.AuthNone, providers.Limits{MaxChars: 280, MaxMedia: 4}), replies: &got}
+			providers.Register(f, providers.StatusAvailable)
+			t.Cleanup(func() { providers.Unregister(f.ID()) })
+			e, _ := providers.Get(f.ID())
+			ch, err := s.saveChannel(ctx, p, e, "Replies", providers.Credentials{}, providers.Profile{}, nil, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.UpdatePost(ctx, p, post.ID, PostPatch{Targets: &[]PostTargetInput{{ChannelID: ch.ID}},
+				Thread: &[]ThreadPart{{Content: "part one", DelaySeconds: 3600}}}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.PublishPost(ctx, p, post.ID); err != nil {
+				t.Fatal(err)
+			}
+			s.RunDueJobsOnce(ctx) // the post is out; its reply waits an hour
+			if pub, _ := s.GetPost(ctx, p, post.ID); pub.Status != "published" || len(got) != 0 {
+				t.Fatalf("setup: post %s, replies sent %q", pub.Status, got)
+			}
 
-	lift := refuseWrites(t, s, `UPDATE OF replies ON post_targets`)
-	s.Now = func() time.Time { return time.Now().Add(2 * time.Hour) }
-	s.RunDueJobsOnce(ctx) // the platform takes the reply; recording it fails
-	lift()
-	if len(got) != 1 {
-		t.Fatalf("fixture: the reply was sent %d times while the database refused its result, want 1", len(got))
-	}
-	for hours := 3; hours <= 5; hours++ { // the job's retries (1, 5, 15 min)
-		s.Now = func() time.Time { return time.Now().Add(time.Duration(hours) * time.Hour) }
-		s.RunDueJobsOnce(ctx)
-	}
-	if len(got) != 1 {
-		t.Fatalf("the platform got the same reply %d times: %q", len(got), got)
+			lift := refuseWrites(t, s, `UPDATE OF replies ON post_targets`)
+			s.Now = func() time.Time { return time.Now().Add(2 * time.Hour) }
+			s.RunDueJobsOnce(ctx) // the platform takes the reply; recording it fails
+			if outage == "one attempt" {
+				lift()
+			}
+			for hours := 3; hours <= 5; hours++ { // the job's retries (1, 5, 15 min)
+				s.Now = func() time.Time { return time.Now().Add(time.Duration(hours) * time.Hour) }
+				s.RunDueJobsOnce(ctx)
+			}
+			if len(got) != 1 {
+				t.Fatalf("the platform got the same reply %d times: %q", len(got), got)
+			}
+			if outage == "every attempt" {
+				lift() // out of attempts: the minute sweep is not needed, jobFailed already ran (and was refused)
+				return
+			}
+			pub, _ := s.GetPost(ctx, p, post.ID)
+			if r := pub.Targets[0].Replies; len(r) != 1 || r[0].Status != "published" || r[0].ExternalID != "rpart one" {
+				t.Fatalf("the reply was recorded as %+v, want published with the platform's id", r)
+			}
+		})
 	}
 }
 
@@ -72,8 +86,8 @@ func (f *fakeSlowRefresh) Refresh(_ context.Context, _ providers.App, c provider
 		"expires_at": time.Now().Add(60 * 24 * time.Hour).UTC().Format(time.RFC3339)}, nil
 }
 
-// Audit 2026-11-13, finding 5: a token refresh in flight when Meta's data deletion request wipes the channel
-// must not write the sign-in back.
+// Was a bug: a token refresh in flight when Meta's data deletion request wiped the channel wrote the renewed
+// sign-in back afterwards. The refresh writes only over the credentials it read.
 func TestRefreshDoesNotBringBackCredentialsAfterMetaDataDeletion(t *testing.T) {
 	s, p, _ := publishTest(t)
 	ctx := context.Background()
@@ -100,9 +114,9 @@ func TestRefreshDoesNotBringBackCredentialsAfterMetaDataDeletion(t *testing.T) {
 	select {
 	case <-f.started:
 	case err := <-done:
-		t.Fatalf("fixture: the refresh ended without asking the platform: %v", err)
+		t.Fatalf("setup: the refresh ended without asking the platform: %v", err)
 	case <-time.After(5 * time.Second):
-		t.Fatal("fixture: the refresh never reached the platform")
+		t.Fatal("setup: the refresh never reached the platform")
 	}
 	if _, _, err := s.MetaDataDeletion(ctx, signedRequest("th-secret", `{"user_id":"17841"}`)); err != nil {
 		t.Fatal(err)
@@ -114,7 +128,7 @@ func TestRefreshDoesNotBringBackCredentialsAfterMetaDataDeletion(t *testing.T) {
 		return creds
 	}
 	if stored() != "" {
-		t.Fatal("fixture: the data deletion did not wipe the sign-in")
+		t.Fatal("setup: the data deletion did not wipe the sign-in")
 	}
 	close(f.release)
 	if err := <-done; err != nil {
@@ -128,9 +142,9 @@ func TestRefreshDoesNotBringBackCredentialsAfterMetaDataDeletion(t *testing.T) {
 	}
 }
 
-// Audit 2026-11-13, finding 6: a channel disconnected while its send is at the platform; the platform then
-// accepts the post. What went out must stay on record (the target with its link, or a published event).
-func TestDisconnectDuringASendKeepsTheRecordOfWhatWentOut(t *testing.T) {
+// Was a bug: a channel removed while its send was at the platform took the target with it; the platform then
+// accepted the post, and staqly had no record of what went out (the post ended failed, with no target).
+func TestRemovingAChannelDuringASendKeepsWhatWentOut(t *testing.T) {
 	s, p, post := publishTest(t)
 	ctx := context.Background()
 	f, ch := scriptedChannelOn(t, s, p, "scriptdc1")
@@ -151,24 +165,19 @@ func TestDisconnectDuringASendKeepsTheRecordOfWhatWentOut(t *testing.T) {
 	close(f.hold)
 	<-done
 	if _, sent := f.counts(); sent != 1 {
-		t.Fatalf("fixture: the platform accepted the post %d times, want 1", sent)
-	}
-	var withLink, events int
-	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM post_targets WHERE post_id = ? AND external_url = 'https://example.com/ext'`, post.ID).Scan(&withLink); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM events WHERE type = 'post.target_published'`).Scan(&events); err != nil {
-		t.Fatal(err)
+		t.Fatalf("setup: the platform accepted the post %d times, want 1", sent)
 	}
 	got, _ := s.GetPost(ctx, p, post.ID)
-	if withLink == 0 && events == 0 {
-		t.Fatalf("the post is live at https://example.com/ext and staqly has no record of it: post %s, %d targets, "+
-			"no target with the link, no post.target_published event", got.Status, len(got.Targets))
+	if len(got.Targets) != 1 || got.Targets[0].Status != "published" || got.Targets[0].ExternalURL != "https://example.com/ext" || got.Status != "published" {
+		t.Fatalf("the post is live at https://example.com/ext; staqly says post %s, targets %+v", got.Status, got.Targets)
+	}
+	if n := len(eventsOfType(t, s, p, "post.target_published")); n != 1 {
+		t.Fatalf("%d post.target_published events, want 1", n)
 	}
 }
 
-// Audit 2026-11-13, finding 7: a key with posts:publish but without schedules:manage must not change a
-// schedule by cancelling its queued run.
+// Was a bug: a key with posts:publish but without schedules:manage turned a one-time schedule off by cancelling
+// its queued run. Cancelling a schedule's run needs schedules:manage too.
 func TestCancellingAScheduleRunNeedsSchedulesManage(t *testing.T) {
 	s, p, post := publishTest(t)
 	ctx := context.Background()
@@ -179,27 +188,35 @@ func TestCancellingAScheduleRunNeedsSchedulesManage(t *testing.T) {
 	}
 	jobs := jobsByKey(t, s, "run_schedule:"+sc.ID)
 	if len(jobs) != 1 || !sc.Enabled {
-		t.Fatalf("fixture: %d run_schedule jobs, schedule enabled %v", len(jobs), sc.Enabled)
+		t.Fatalf("setup: %d run_schedule jobs, schedule enabled %v", len(jobs), sc.Enabled)
 	}
 	key := Principal{WorkspaceID: p.WorkspaceID, Kind: PrincipalAPIKey, ID: "key_publisher", Name: "Publisher key",
 		Scopes: []string{ScopePostsRead, ScopePostsPublish}}
 	if _, err := s.UpdateSchedule(ctx, key, sc.ID, ScheduleInput{Enabled: ptrTo(false)}); err == nil {
-		t.Fatal("fixture: the key may manage schedules")
+		t.Fatal("setup: the key may manage schedules")
 	}
 	_, cancelErr := s.CancelJob(ctx, key, jobPublicID(jobs[0].ID))
 	got, err := s.GetSchedule(ctx, p, sc.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cancelErr == nil || !got.Enabled {
-		t.Fatalf("a key without schedules:manage cancelled the schedule's run (error: %v); the schedule is now enabled=%v, last result %q",
+	var e *Error
+	if !errors.As(cancelErr, &e) || e.Status != 403 || !got.Enabled {
+		t.Fatalf("a key without schedules:manage cancelled the schedule's run (error: %v, want 403); the schedule is now enabled=%v, last result %q",
 			cancelErr, got.Enabled, got.LastResult)
+	}
+	key.Scopes = append(key.Scopes, ScopeSchedulesManage)
+	if _, err := s.CancelJob(ctx, key, jobPublicID(jobs[0].ID)); err != nil {
+		t.Fatalf("cancel with schedules:manage: %v", err)
+	}
+	if got, _ = s.GetSchedule(ctx, p, sc.ID); got.Enabled {
+		t.Fatal("the cancelled one-time schedule is still on")
 	}
 }
 
-// Audit 2026-11-13, finding 8: a custom endpoint failed every try of attempt A; the person retries the failed
-// job in the queue. A late result naming A must not settle the retried target (as after Retry on the post:
-// TestLateResultOfATimedOutAttemptDoesNotSettleTheRetry).
+// Was a bug: a custom endpoint failed every try of attempt A and the person retried the failed job in the queue,
+// which brought the same job back: a late result naming A settled the retry. The retry is a new job, as after
+// Retry on the post (TestLateResultOfATimedOutAttemptDoesNotSettleTheRetry).
 func TestLateResultOfAFailedJobDoesNotSettleItsQueueRetry(t *testing.T) {
 	s, p, post := publishTest(t)
 	ctx := context.Background()
@@ -240,13 +257,14 @@ func TestLateResultOfAFailedJobDoesNotSettleItsQueueRetry(t *testing.T) {
 	}
 	mu.Unlock()
 	if len(jobs) != 1 || jobStatus(jobs[0].State) != "failed" || got.Targets[0].Status != "failed" || attemptA == "" {
-		t.Fatalf("fixture: jobs %d, target %+v, endpoint asked with attempts %v", len(jobs), got.Targets[0], asked)
+		t.Fatalf("setup: jobs %d, target %+v, endpoint asked with attempts %v", len(jobs), got.Targets[0], asked)
 	}
-	if _, err := s.RetryJob(ctx, p, jobPublicID(jobs[0].ID)); err != nil {
+	retried, err := s.RetryJob(ctx, p, jobPublicID(jobs[0].ID))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if got, _ = s.GetPost(ctx, p, post.ID); got.Targets[0].Status != "publishing" {
-		t.Fatalf("fixture: the retried target is %s", got.Targets[0].Status)
+	if got, _ = s.GetPost(ctx, p, post.ID); got.Targets[0].Status != "publishing" || retried.ID == attemptA || retried.Status != "queued" {
+		t.Fatalf("the retry is job %s (%s), attempt A was %s; the target is %s", retried.ID, retried.Status, attemptA, got.Targets[0].Status)
 	}
 	var e *Error
 	_, err = s.ReportTargetResult(ctx, p, post.ID, ch.ID, ResultInput{Status: "failed", Error: "attempt A gave up", AttemptID: attemptA})
@@ -257,9 +275,10 @@ func TestLateResultOfAFailedJobDoesNotSettleItsQueueRetry(t *testing.T) {
 	}
 }
 
-// Audit 2026-11-13, finding 9: cancelling a queued publish_target job whose settling fails (the database
-// refuses the write once) must not leave the target publishing with no job and no way out.
-func TestCancelWhoseSettleFailedDoesNotStrandTheTarget(t *testing.T) {
+// Was a bug: cancelling a queued publish_target job cancelled the job in one transaction and failed its target
+// in the next; when that second write was refused the target stayed publishing with no job, and cancel, retry
+// of the job and retry of the target were all refused. Both happen together now, so the cancel can be repeated.
+func TestCancelThatCannotSettleTheTargetLeavesTheJobQueued(t *testing.T) {
 	s, p, post := publishTest(t)
 	ctx := context.Background()
 	ch := post.Targets[0].ChannelID
@@ -268,27 +287,29 @@ func TestCancelWhoseSettleFailedDoesNotStrandTheTarget(t *testing.T) {
 	}
 	jobs := jobsByKey(t, s, "publish_target:"+post.ID+":"+ch)
 	if len(jobs) != 1 {
-		t.Fatalf("fixture: %d publish_target jobs", len(jobs))
+		t.Fatalf("setup: %d publish_target jobs", len(jobs))
 	}
 	id := jobPublicID(jobs[0].ID)
 	lift := refuseWrites(t, s, `UPDATE ON post_targets WHEN NEW.status = 'failed'`)
 	_, cancelErr := s.CancelJob(ctx, p, id)
 	lift()
 	if cancelErr == nil {
-		t.Fatal("fixture: the cancel succeeded although the target could not be settled")
+		t.Fatal("setup: the cancel succeeded although the target could not be settled")
 	}
-	// Everything that runs by itself: due jobs, the minute sweep, two days later.
-	s.Now = func() time.Time { return time.Now().Add(48 * time.Hour) }
-	s.RunDueJobsOnce(ctx)
-	s.settleRescuedJobs(ctx)
-	got, _ := s.GetPost(ctx, p, post.ID)
 	job, _ := s.getJob(ctx, p, id)
-	_, again := s.CancelJob(ctx, p, id)
-	_, retryJob := s.RetryJob(ctx, p, id)
-	_, retryTarget := s.RetryTarget(ctx, p, post.ID, ch)
-	if got.Targets[0].Status == "publishing" && again != nil && retryJob != nil && retryTarget != nil {
-		t.Fatalf("the job is %s and the target is still %s two days later (post %s); cancel again: %v; retry job: %v; retry target: %v",
-			job.Status, got.Targets[0].Status, got.Status, again, retryJob, retryTarget)
+	got, _ := s.GetPost(ctx, p, post.ID)
+	if job.Status != "queued" || got.Targets[0].Status != "publishing" {
+		t.Fatalf("after the refused cancel the job is %s and the target %s, want queued and publishing (nothing changed)", job.Status, got.Targets[0].Status)
+	}
+	if _, err := s.CancelJob(ctx, p, id); err != nil {
+		t.Fatalf("cancel again: %v", err)
+	}
+	job, _ = s.getJob(ctx, p, id)
+	if got, _ = s.GetPost(ctx, p, post.ID); job.Status != "cancelled" || got.Targets[0].Status != "failed" || got.Status != "failed" {
+		t.Fatalf("after the cancel the job is %s, the target %s and the post %s", job.Status, got.Targets[0].Status, got.Status)
+	}
+	if _, err := s.RetryTarget(ctx, p, post.ID, ch); err != nil {
+		t.Fatalf("retry of the cancelled target: %v", err)
 	}
 }
 
@@ -341,8 +362,8 @@ func exportTest(t *testing.T) (*Service, Principal, *faultyBlob) {
 	return s, p, b
 }
 
-// Audit 2026-11-13, finding 10: builder A stalls past its lease, builder B takes the export over and finishes
-// it; A then wakes up and fails. B's ready archive must still be there.
+// Was a bug: builder A stalled past its lease, builder B took the export over and finished it; A then woke up,
+// failed and removed the ZIP under the export's name, which was B's by then.
 func TestStaleExportBuilderLeavesTheWinnersArchive(t *testing.T) {
 	s, p, b := exportTest(t)
 	ctx := t.Context()
@@ -355,7 +376,7 @@ func TestStaleExportBuilderLeavesTheWinnersArchive(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !x.IncludesMedia {
-		t.Fatal("fixture: a data-only export never opens a media file")
+		t.Fatal("setup: a data-only export never opens a media file")
 	}
 	b.stall.Store(1)
 	aDone := make(chan struct{})
@@ -364,10 +385,10 @@ func TestStaleExportBuilderLeavesTheWinnersArchive(t *testing.T) {
 	ahead.Store(int64(exportLease + time.Minute))
 	s.ProcessExports(ctx) // builder B: the lease ran out, it builds the export again
 	if st := exportStatus(t, s, x.ID); st != "ready" {
-		t.Fatalf("fixture: builder B left the export %s", st)
+		t.Fatalf("setup: builder B left the export %s", st)
 	}
 	if _, err := os.Stat(s.exportPath(x.ID)); err != nil {
-		t.Fatalf("fixture: builder B's archive: %v", err)
+		t.Fatalf("setup: builder B's archive: %v", err)
 	}
 	close(b.release) // A wakes up and its build fails
 	<-aDone
@@ -378,11 +399,21 @@ func TestStaleExportBuilderLeavesTheWinnersArchive(t *testing.T) {
 	}
 }
 
-// Audit 2026-11-13, finding 11: a full export whose media files cannot be read (the store is failing, the
-// files are not missing) must not be handed out as ready without them.
-func TestExportDoesNotTurnReadyWithoutMediaTheStoreFailedToOpen(t *testing.T) {
+// Was a bug: a full export whose media files could not be opened because the store was failing (not because
+// they were gone) turned ready without them. It fails now; a file that is really missing is still left out.
+func TestExportFailsWhenTheStoreCannotOpenAMediaFile(t *testing.T) {
 	s, p, b := exportTest(t)
 	ctx := t.Context()
+	b.openErr = blob.ErrNotExist
+	gone, err := s.RequestWorkspaceExport(ctx, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.ProcessExports(ctx)
+	if st := exportStatus(t, s, gone.ID); st != "ready" {
+		t.Fatalf("an export with a media file that is gone is %s, want ready without it", st)
+	}
+	s.Now = func() time.Time { return time.Now().Add(48 * time.Hour) } // the first export expired
 	b.openErr = errors.New("s3: 503 SlowDown")
 	x, err := s.RequestWorkspaceExport(ctx, p)
 	if err != nil {
@@ -394,9 +425,9 @@ func TestExportDoesNotTurnReadyWithoutMediaTheStoreFailedToOpen(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !got.IncludesMedia {
-		t.Fatal("fixture: a data-only export")
+		t.Fatal("setup: a data-only export")
 	}
-	if got.Status == "ready" {
-		t.Fatalf("the export is ready (includes_media %v, error %q) although the store failed to open its one media file", got.IncludesMedia, got.Error)
+	if got.Status != "failed" {
+		t.Fatalf("the export is %s (includes_media %v, error %q) although the store failed to open its one media file", got.Status, got.IncludesMedia, got.Error)
 	}
 }

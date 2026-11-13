@@ -436,12 +436,20 @@ func (q *Queries) DeleteProviderApp(ctx context.Context, arg DeleteProviderAppPa
 }
 
 const deleteUnpublishedTargetsOfChannel = `-- name: DeleteUnpublishedTargetsOfChannel :exec
-DELETE FROM post_targets WHERE channel_id = ? AND status <> 'published'
+DELETE FROM post_targets WHERE channel_id = ?1 AND status <> 'published'
+  AND post_id NOT IN (SELECT value FROM json_each(?2))
 `
 
-// A removed channel takes the targets that never went out with it; the published ones stay as history.
-func (q *Queries) DeleteUnpublishedTargetsOfChannel(ctx context.Context, channelID string) error {
-	_, err := q.db.ExecContext(ctx, deleteUnpublishedTargetsOfChannel, channelID)
+type DeleteUnpublishedTargetsOfChannelParams struct {
+	ChannelID string      `json:"channel_id"`
+	Sending   interface{} `json:"sending"`
+}
+
+// A removed channel takes the targets that never went out with it; the published ones stay as history. A send
+// that is at the platform right now (@sending: its post ids, a JSON array) keeps its target until its job has
+// recorded what the platform answered.
+func (q *Queries) DeleteUnpublishedTargetsOfChannel(ctx context.Context, arg DeleteUnpublishedTargetsOfChannelParams) error {
+	_, err := q.db.ExecContext(ctx, deleteUnpublishedTargetsOfChannel, arg.ChannelID, arg.Sending)
 	return err
 }
 
@@ -781,6 +789,33 @@ func (q *Queries) PruneInboundEvents(ctx context.Context, receivedAt string) err
 	return err
 }
 
+const renewChannelCredentials = `-- name: RenewChannelCredentials :execrows
+UPDATE channels SET credentials = ?1, updated_at = ?2
+WHERE id = ?3 AND deleted_at IS NULL AND credentials = ?4
+`
+
+type RenewChannelCredentialsParams struct {
+	Credentials string `json:"credentials"`
+	UpdatedAt   string `json:"updated_at"`
+	ID          string `json:"id"`
+	Was         string `json:"was"`
+}
+
+// Renewed tokens, written only over the credentials the refresh read (@was): a channel that was removed, wiped
+// by a platform's data deletion request or connected again while the platform was asked keeps what it has now.
+func (q *Queries) RenewChannelCredentials(ctx context.Context, arg RenewChannelCredentialsParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, renewChannelCredentials,
+		arg.Credentials,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.Was,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const setChannelComments = `-- name: SetChannelComments :exec
 UPDATE channels SET comments = ? WHERE id = ?
 `
@@ -805,7 +840,7 @@ type SetChannelCredentialsParams struct {
 	ID          string `json:"id"`
 }
 
-// Renewed tokens. Not into a removed channel: a refresh that ends after the removal must not bring credentials back.
+// Credentials with something added (a webhook secret the platform showed once). Not into a removed channel.
 func (q *Queries) SetChannelCredentials(ctx context.Context, arg SetChannelCredentialsParams) error {
 	_, err := q.db.ExecContext(ctx, setChannelCredentials, arg.Credentials, arg.UpdatedAt, arg.ID)
 	return err

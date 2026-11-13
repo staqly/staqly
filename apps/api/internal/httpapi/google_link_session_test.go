@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-// Audit 2026-11-13, finding 1: a Google link started from a session that is revoked before the callback
-// must not add the sign-in method.
+// Was a bug: adding Google to a person was finished by the public callback with nothing but the sealed state,
+// so a session signed out meanwhile (a stolen one) still left its holder's Google account as a sign-in method.
 func TestGoogleLinkRefusedAfterSessionRevoked(t *testing.T) {
 	e := newAccountsEnv(t, "")
 	owner := e.mustSignIn(ana, "")

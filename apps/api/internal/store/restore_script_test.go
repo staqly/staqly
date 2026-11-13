@@ -56,12 +56,10 @@ esac
 	return root, run
 }
 
-// Audit 2026-11-13, finding 2: a backup whose workspace.db is not a readable SQLite database must be
-// refused before the current data is replaced.
-func TestRestoreRefusesCorruptDatabase(t *testing.T) {
-	root, run := restoreFixture(t)
-	current := filepath.Join(root, "data/workspace.db")
-	database, err := store.Open(t.Context(), current)
+// sqliteFile writes a real database to name (checkpointed, no WAL files) and returns its bytes.
+func sqliteFile(t *testing.T, name string) []byte {
+	t.Helper()
+	database, err := store.Open(t.Context(), name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,35 +67,47 @@ func TestRestoreRefusesCorruptDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	database.Close()
-	_ = os.Remove(current + "-wal")
-	_ = os.Remove(current + "-shm")
-	healthy, err := os.ReadFile(current)
+	_ = os.Remove(name + "-wal")
+	_ = os.Remove(name + "-shm")
+	b, err := os.ReadFile(name)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The backup: the same database cut in half (an interrupted copy).
-	if err := os.WriteFile(filepath.Join(root, "backup/workspace.db"), healthy[:len(healthy)/2], 0o600); err != nil {
-		t.Fatal(err)
-	}
+	return b
+}
 
-	out, err := run()
-	now, _ := os.ReadFile(current)
-	if err == nil || !bytes.Equal(now, healthy) {
-		_, openErr := store.Open(t.Context(), current)
-		t.Fatalf("restore accepted a truncated database (exit error: %v; healthy database still in place: %v; "+
-			"previous copy kept in .restore-old: %v; the restored database opens: %v)\n%s",
-			err, bytes.Equal(now, healthy), exists(filepath.Join(root, "data/.restore-old")), openErr == nil, out)
+// Was a bug: a backup whose workspace.db is not a readable SQLite database (cut off by an interrupted copy,
+// or another file under that name) replaced the working one, and the previous data was deleted.
+func TestRestoreRefusesADamagedDatabase(t *testing.T) {
+	for name, damage := range map[string]func([]byte) []byte{
+		"cut off":    func(b []byte) []byte { return b[:len(b)/2] },
+		"not sqlite": func([]byte) []byte { return []byte("BACKUP DATABASE") },
+	} {
+		t.Run(name, func(t *testing.T) {
+			root, run := restoreFixture(t)
+			current := filepath.Join(root, "data/workspace.db")
+			healthy := sqliteFile(t, current)
+			if err := os.WriteFile(filepath.Join(root, "backup/workspace.db"), damage(healthy), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			out, err := run()
+			now, _ := os.ReadFile(current)
+			calls, _ := os.ReadFile(filepath.Join(root, "calls.log"))
+			if err == nil || !bytes.Equal(now, healthy) || len(calls) != 0 || !strings.Contains(out, "nothing was changed") {
+				t.Fatalf("restore of a damaged database: exit error %v, working database still in place %v, docker calls %q\n%s",
+					err, bytes.Equal(now, healthy), calls, out)
+			}
+		})
 	}
 }
 
-// Audit 2026-11-13, finding 3: a helper killed in the middle of the swap (no trap runs) leaves a mix of new
-// and previous files; the container must stay stopped.
+// Was a bug: a helper killed in the middle of the swap (no trap runs) leaves a mix of new and previous files,
+// and the container was started on it.
 func TestRestoreKilledDuringSwapLeavesContainerStopped(t *testing.T) {
 	root, run := restoreFixture(t)
-	for name, body := range map[string]string{"data/workspace.db": "CURRENT DATABASE", "backup/workspace.db": "BACKUP DATABASE"} {
-		if err := os.WriteFile(filepath.Join(root, name), []byte(body), 0o600); err != nil {
-			t.Fatal(err)
-		}
+	backup := string(sqliteFile(t, filepath.Join(root, "backup/workspace.db")))
+	if err := os.WriteFile(filepath.Join(root, "data/workspace.db"), []byte("CURRENT DATABASE"), 0o600); err != nil {
+		t.Fatal(err)
 	}
 	out, err := run("STUB_KILL_AFTER=workspace.db")
 	if err == nil {
@@ -107,19 +117,13 @@ func TestRestoreKilledDuringSwapLeavesContainerStopped(t *testing.T) {
 		b, _ := os.ReadFile(filepath.Join(root, name))
 		return string(b)
 	}
-	// The fixture did what the finding describes: new database, previous uploads and key, old data aside.
-	if read("data/workspace.db") != "BACKUP DATABASE" || read("data/secret.key") != "current key" ||
+	// The fixture: new database, previous uploads and key, the previous database only aside.
+	if read("data/workspace.db") != backup || read("data/secret.key") != "current key" ||
 		read("data/.restore-old/workspace.db") != "CURRENT DATABASE" {
-		t.Fatalf("fixture: the swap was not interrupted half way: db=%q key=%q old=%q\n%s",
-			read("data/workspace.db"), read("data/secret.key"), read("data/.restore-old/workspace.db"), out)
+		t.Fatalf("fixture: the swap was not interrupted half way: key=%q old=%q\n%s", read("data/secret.key"), read("data/.restore-old/workspace.db"), out)
 	}
-	if calls := strings.Fields(read("calls.log")); len(calls) != 2 {
-		t.Fatalf("docker calls %v: the container was started on half-swapped data (backup database, previous "+
-			"uploads and secret.key, previous database only in .restore-old)\n%s", calls, out)
+	// stop, the helper, the look for .restore-old; never start.
+	if calls := strings.Fields(read("calls.log")); strings.Join(calls, " ") != "stop run run" || !strings.Contains(out, "left STOPPED") {
+		t.Fatalf("docker calls %v: the container was started on half-swapped data\n%s", calls, out)
 	}
-}
-
-func exists(name string) bool {
-	_, err := os.Stat(name)
-	return err == nil
 }

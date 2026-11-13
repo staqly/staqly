@@ -1031,15 +1031,26 @@ func (s *Service) DeleteChannel(ctx context.Context, p Principal, id string) err
 		}
 		// The channel stays as a row without credentials, so posts it published still show where they went. Its
 		// targets that never went out go with it: posts still publishing to it lose that target, and their other
-		// targets decide how they end, or they would wait for this one for good.
+		// targets decide how they end, or they would wait for this one for good. A send that is at the platform
+		// right now keeps its target: its job records what the platform answered (the post may be live).
 		publishing, err := q.PublishingPostsOfChannel(ctx, id)
 		if err != nil {
 			return err
 		}
+		sending := []string{}
+		for _, postID := range publishing {
+			running, err := s.jobRunning(ctx, q, "publish_target:"+postID+":"+id)
+			if err != nil {
+				return err
+			}
+			if running {
+				sending = append(sending, postID)
+			}
+		}
 		if _, err := q.DeleteChannel(ctx, db.DeleteChannelParams{DeletedAt: nullStr(s.now()), WorkspaceID: p.WorkspaceID, ID: id}); err != nil {
 			return err
 		}
-		if err := q.DeleteUnpublishedTargetsOfChannel(ctx, id); err != nil {
+		if err := q.DeleteUnpublishedTargetsOfChannel(ctx, db.DeleteUnpublishedTargetsOfChannelParams{ChannelID: id, Sending: mustJSON(sending)}); err != nil {
 			return err
 		}
 		if err := s.cancelJobs(ctx, q, "refresh_channel:"+id); err != nil {
@@ -1083,7 +1094,7 @@ func (s *Service) TestChannel(ctx context.Context, p Principal, id string) (map[
 		}
 		defer unlock() // a refresh rotates the refresh token: read it under the lock
 	}
-	_, creds, err := s.storedCredentials(ctx, row.ID)
+	stored, creds, err := s.storedCredentials(ctx, row.ID)
 	if errors.Is(err, providers.ErrReauth) {
 		return map[string]any{"ok": false, "error": err.Error()}, nil
 	}
@@ -1107,8 +1118,9 @@ func (s *Service) TestChannel(ctx context.Context, p Principal, id string) (map[
 			return map[string]any{"ok": false, "error": truncateRunes(err.Error(), 500)}, nil
 		}
 		if sealed, err := s.seal(fresh); err == nil {
-			_ = s.W.SetChannelCredentials(context.WithoutCancel(ctx), db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: row.ID})
-			s.shareRefresh(ctx, row, creds, fresh)
+			if n, err := s.W.RenewChannelCredentials(context.WithoutCancel(ctx), db.RenewChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: row.ID, Was: stored.Credentials}); err == nil && n > 0 {
+				s.shareRefresh(ctx, row, creds, fresh)
+			}
 		}
 		profile = providers.Profile{Handle: row.Handle, Name: row.Name}
 	default:
@@ -1251,7 +1263,10 @@ func (s *Service) refreshChannel(ctx context.Context, channelID string) error {
 		return err
 	}
 	// Saved even if the job's budget just ran out: the platform may have spent the old refresh token already.
-	if err := s.W.SetChannelCredentials(context.WithoutCancel(ctx), db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: row.ID}); err != nil {
+	// Only over the credentials read above: a channel removed, wiped (a platform's data deletion request) or
+	// connected again meanwhile keeps what it has now.
+	n, err := s.W.RenewChannelCredentials(context.WithoutCancel(ctx), db.RenewChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: row.ID, Was: row.Credentials})
+	if err != nil || n == 0 {
 		return err
 	}
 	s.shareRefresh(ctx, row, creds, fresh)
@@ -1365,11 +1380,12 @@ func (s *Service) refreshIfDue(ctx context.Context, row db.Channel, e providers.
 		return nil, err
 	}
 	defer unlock()
-	if _, stored, err := s.storedCredentials(ctx, row.ID); err == nil {
+	was := row.Credentials
+	if now, stored, err := s.storedCredentials(ctx, row.ID); err == nil {
 		if !due(stored) {
 			return stored, nil // refreshed by another run while this one waited
 		}
-		creds = stored
+		creds, was = stored, now.Credentials
 	}
 	app, err := s.providerApp(ctx, row.WorkspaceID, row.Provider)
 	var appErr *Error
@@ -1396,8 +1412,14 @@ func (s *Service) refreshIfDue(ctx context.Context, row db.Channel, e providers.
 	if err != nil {
 		return nil, err
 	}
-	if err := s.W.SetChannelCredentials(context.WithoutCancel(ctx), db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: row.ID}); err != nil {
+	n, err := s.W.RenewChannelCredentials(context.WithoutCancel(ctx), db.RenewChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: row.ID, Was: was})
+	if err != nil {
 		return nil, err
+	}
+	if n == 0 {
+		// Removed, wiped (a platform's data deletion request) or connected again while the platform was asked:
+		// the renewed sign-in is dropped, and the publish is retried with what the channel has now.
+		return nil, &providers.Failure{Msg: "the channel's sign-in changed while it was being renewed"}
 	}
 	s.shareRefresh(ctx, row, creds, fresh)
 	s.syncComments(ctx, row, creds, fresh)
@@ -1442,7 +1464,7 @@ func (s *Service) shareRefresh(ctx context.Context, row db.Channel, old, fresh p
 			}
 		}
 		if sealed, err := s.seal(c); err == nil {
-			_ = s.W.SetChannelCredentials(context.WithoutCancel(ctx), db.SetChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: other.ID})
+			_, _ = s.W.RenewChannelCredentials(context.WithoutCancel(ctx), db.RenewChannelCredentialsParams{Credentials: sealed, UpdatedAt: s.now(), ID: other.ID, Was: other.Credentials})
 		}
 	}
 }

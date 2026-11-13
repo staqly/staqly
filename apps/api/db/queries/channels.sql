@@ -39,8 +39,14 @@ UPDATE channels SET status = ?, last_error = ?, updated_at = ? WHERE id = ?;
 UPDATE channels SET status = 'needs_reconnect', last_error = ?, updated_at = ? WHERE id = ? AND status NOT IN ('needs_reconnect', 'disabled');
 
 -- name: SetChannelCredentials :exec
--- Renewed tokens. Not into a removed channel: a refresh that ends after the removal must not bring credentials back.
+-- Credentials with something added (a webhook secret the platform showed once). Not into a removed channel.
 UPDATE channels SET credentials = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL;
+
+-- name: RenewChannelCredentials :execrows
+-- Renewed tokens, written only over the credentials the refresh read (@was): a channel that was removed, wiped
+-- by a platform's data deletion request or connected again while the platform was asked keeps what it has now.
+UPDATE channels SET credentials = @credentials, updated_at = @updated_at
+WHERE id = @id AND deleted_at IS NULL AND credentials = @was;
 
 -- name: DeleteChannel :execrows
 -- Kept as a row for the posts it published (their targets stay); its credentials go.
@@ -48,8 +54,11 @@ UPDATE channels SET deleted_at = @deleted_at, credentials = '', status = 'disabl
 WHERE workspace_id = @workspace_id AND id = @id AND deleted_at IS NULL;
 
 -- name: DeleteUnpublishedTargetsOfChannel :exec
--- A removed channel takes the targets that never went out with it; the published ones stay as history.
-DELETE FROM post_targets WHERE channel_id = ? AND status <> 'published';
+-- A removed channel takes the targets that never went out with it; the published ones stay as history. A send
+-- that is at the platform right now (@sending: its post ids, a JSON array) keeps its target until its job has
+-- recorded what the platform answered.
+DELETE FROM post_targets WHERE channel_id = @channel_id AND status <> 'published'
+  AND post_id NOT IN (SELECT value FROM json_each(@sending));
 
 -- name: CountChannels :one
 SELECT COUNT(*) FROM channels WHERE workspace_id = ? AND deleted_at IS NULL;
