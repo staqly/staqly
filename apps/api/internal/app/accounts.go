@@ -750,6 +750,16 @@ func (s *Service) requireOwner(ctx context.Context, p Principal) error {
 	return forbidden("only an owner of this workspace can do this")
 }
 
+// requirePerson: paying and managing the subscription are a signed-in person's, like members and invitations
+// (requirePeopleManager): a key that leaked, or an agent holding one, must not spend the card on file. Reading
+// billing stays open to keys.
+func requirePerson(p Principal) error {
+	if p.Kind != PrincipalSession {
+		return forbidden("billing is managed by a signed-in person: API keys cannot pay, change the plan or its add-ons")
+	}
+	return nil
+}
+
 // workspaceHasPeople: the workspace has members with roles (a workspace from before accounts has none until its
 // first owner accepts the invitation `server attach-workspace` sends).
 func (s *Service) workspaceHasPeople(ctx context.Context, q *db.Queries, workspaceID string) bool {

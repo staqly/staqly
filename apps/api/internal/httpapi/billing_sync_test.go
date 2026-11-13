@@ -116,7 +116,7 @@ func TestBillingRefreshesKeepNewestSnapshot(t *testing.T) {
 	}))
 	defer stripe.Close()
 	e.svc.Cfg.Billing = app.BillingConfig{SecretKey: "sk_test_order", WebhookSecret: testWhsec, APIBase: stripe.URL}
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "starter"}, 200, nil) // makes cus_1
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "starter"}, 200, nil) // makes cus_1
 	owner := app.Principal{WorkspaceID: ws, Kind: app.PrincipalSession, ID: "ses_test", Name: "Owner", Scopes: app.AllScopes}
 	var wg sync.WaitGroup
 	errs := make([]error, 2)

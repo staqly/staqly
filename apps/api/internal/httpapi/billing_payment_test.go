@@ -111,7 +111,7 @@ func TestTrialUpgradeNeedsAuthentication(t *testing.T) {
 	admin := e.keyWith(app.ScopeAdmin)
 
 	var errBody paymentErr
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "pro"}, 402, &errBody)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "pro"}, 402, &errBody)
 	if f.updated.Get("expand[]") != "latest_invoice" || f.updated.Get("payment_behavior") != "pending_if_incomplete" {
 		t.Fatalf("update: %v", f.updated)
 	}
@@ -164,7 +164,7 @@ func TestTrialUpgradeDeclined(t *testing.T) {
 	admin := e.keyWith(app.ScopeAdmin)
 
 	var errBody paymentErr
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "pro"}, 402, &errBody)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "pro"}, 402, &errBody)
 	d := errBody.Error.Details
 	if d["reason"] != "insufficient_funds" || d["decline_code"] != "insufficient_funds" || !strings.Contains(errBody.Error.Message, "declined") {
 		t.Fatalf("402: %+v", errBody.Error)
@@ -238,7 +238,7 @@ func TestUpgradeOfPayingSubscription(t *testing.T) {
 
 	// The card is declined: 402 says why, Stripe keeps the change pending and the workspace stays on Starter.
 	var errBody paymentErr
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "business", "interval": "year"}, 402, &errBody)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "business", "interval": "year"}, 402, &errBody)
 	if f := sent(); f.Get("proration_behavior") != "always_invoice" || f.Get("payment_behavior") != "pending_if_incomplete" ||
 		f.Get("items[0][price]") != "price_business_year" || f.Get("trial_end") != "" {
 		t.Fatalf("upgrade: %v", f)
@@ -257,7 +257,7 @@ func TestUpgradeOfPayingSubscription(t *testing.T) {
 	declined = false
 	mu.Unlock()
 	var out struct{ URL string }
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "business", "interval": "year"}, 200, &out)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "business", "interval": "year"}, 200, &out)
 	if !strings.HasSuffix(out.URL, "?checkout=switched") || sent().Get("proration_behavior") != "always_invoice" {
 		t.Fatalf("paid upgrade: %q %v", out.URL, sent())
 	}
@@ -271,7 +271,7 @@ func TestUpgradeOfPayingSubscription(t *testing.T) {
 
 	// A lower plan, and the same plan billed monthly: invoiced at once (a credit), nothing waits.
 	for _, to := range [][2]string{{"plus", "year"}, {"business", "month"}} {
-		e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": to[0], "interval": to[1]}, 200, nil)
+		e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": to[0], "interval": to[1]}, 200, nil)
 		if f := sent(); f.Get("proration_behavior") != "always_invoice" || f.Get("payment_behavior") != "" {
 			t.Fatalf("switch to %v: %v", to, f)
 		}
@@ -317,13 +317,12 @@ func TestMonthlyToYearlyIsChargedAtOnce(t *testing.T) {
 		}
 	}))
 	defer stripe.Close()
-	admin := e.keyWith(app.ScopeAdmin)
 	e.svc.Cfg.Billing = app.BillingConfig{SecretKey: "sk_test_year", WebhookSecret: testWhsec, APIBase: stripe.URL}
 	e.stripeEvent("evt_1", "customer.subscription.created", sub, testWhsec)
 
 	// The card is declined: 402, an invoice was made, the change waits and the workspace stays as it was.
 	var errBody paymentErr
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "starter", "interval": "year"}, 402, &errBody)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "starter", "interval": "year"}, 402, &errBody)
 	mu.Lock()
 	f, n := switched, invoices
 	declined = false
@@ -356,7 +355,7 @@ func TestMonthlyToYearlyIsChargedAtOnce(t *testing.T) {
 		sub["items"].(map[string]any)["data"].([]any)[0].(map[string]any)["price"] = stripePriceObject(c.plan, c.interval)
 		before := invoices
 		mu.Unlock()
-		e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": c.toPlan, "interval": c.toInterval}, 200, nil)
+		e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": c.toPlan, "interval": c.toInterval}, 200, nil)
 		mu.Lock()
 		f, made := switched, invoices-before
 		mu.Unlock()

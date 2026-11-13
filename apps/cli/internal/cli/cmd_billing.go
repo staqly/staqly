@@ -61,7 +61,7 @@ func billingCommand() *Command {
 					return nil
 				}
 			}, "staqly billing status", "staqly billing status --json"),
-			leaf("checkout", "", "Pay for a plan (Starter, Plus, Pro, Business), monthly or yearly: prints a Stripe Checkout link; a paying workspace is switched instead", 0, 0, func(fs *flag.FlagSet) runFunc {
+			leaf("checkout", "", "Pay for a plan (Starter, Plus, Pro, Business), monthly or yearly: prints a Stripe Checkout link; a paying workspace is switched instead. The server takes this from a signed-in person only: with an API key it answers 403 (pay in the app, Settings → Plan & usage)", 0, 0, func(fs *flag.FlagSet) runFunc {
 				plan := fs.String("plan", "pro", "starter, plus, pro or business")
 				yearly := fs.Bool("yearly", false, "billed yearly (20% off twelve months, or more)")
 				return func(c *Ctx, _ []string) error {
@@ -87,7 +87,7 @@ func billingCommand() *Command {
 					return nil
 				}
 			}, "staqly billing checkout --plan plus --yearly", "staqly billing checkout --plan business"),
-			leaf("portal", "", "Print a Stripe customer portal link (payment method, invoices, cancel)", 0, 0,
+			leaf("portal", "", "Print a Stripe customer portal link (payment method, invoices, cancel). The server takes this from a signed-in person only: with an API key it answers 403 (open it in the app, Settings → Plan & usage)", 0, 0,
 				url("/v1/billing/portal", "manage billing"), "staqly billing portal"),
 		},
 	}

@@ -104,11 +104,11 @@ func TestXPostsAreMetered(t *testing.T) {
 	defer stripe.Close()
 	e.svc.Cfg.Billing = app.BillingConfig{SecretKey: "sk_test_credits", WebhookSecret: testWhsec, APIBase: stripe.URL}
 	var out struct{ URL string }
-	e.do(nil, "POST", "/v1/billing/credits/checkout", e.admin, map[string]any{"posts": 1000}, 200, &out)
+	e.pay("POST", "/v1/billing/credits/checkout", map[string]any{"posts": 1000}, 200, &out)
 	if out.URL != "https://checkout.stripe.test/cs_credits" {
 		t.Fatalf("checkout url: %q", out.URL)
 	}
-	e.do(nil, "POST", "/v1/billing/credits/checkout", e.admin, map[string]any{"posts": 300}, 422, nil)
+	e.pay("POST", "/v1/billing/credits/checkout", map[string]any{"posts": 300}, 422, nil)
 	e.do(nil, "POST", "/v1/billing/credits/checkout", e.key, map[string]any{"posts": 1000}, 403, nil)
 	session := map[string]any{"id": "cs_credits", "mode": "payment", "payment_status": "paid", "client_reference_id": ws.ID,
 		"metadata": map[string]string{"workspace_id": ws.ID, "staqly_kind": "credits", "staqly_provider": "x", "staqly_posts": "200"}}

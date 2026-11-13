@@ -268,12 +268,12 @@ func TestRepeatedTrialChannels(t *testing.T) {
 
 	// C starts the paid plan: the trial ends now and the card is charged; everything works again.
 	f.setCharge("active")
-	e.do(nil, "POST", "/v1/billing/start-paid-plan", keyC, nil, 200, &b)
+	e.payAs(keyC, "POST", "/v1/billing/start-paid-plan", nil, 200, &b)
 	if f.endedCount("sub_c") != 1 || b.TrialReview != nil || deref(b.SubscriptionStatus) != "active" {
 		t.Fatalf("C after starting the paid plan: %+v (%v)", b, f.ended)
 	}
 	e.connectAccount(keyC, "brand-new", 201)
-	e.do(nil, "POST", "/v1/billing/start-paid-plan", keyC, nil, 409, nil) // no trial any more
+	e.payAs(keyC, "POST", "/v1/billing/start-paid-plan", nil, 409, nil) // no trial any more
 
 	// B reconnects A's account (a reconnect counts as a connect): one personal account is enough to pause.
 	f.setCharge("past_due")
@@ -442,7 +442,7 @@ func TestRepeatedTrialCardAttached(t *testing.T) {
 	if b := e.billingOf(keyC); b.Trial != app.TrialCardUsed {
 		t.Fatalf("C's trial offer: %q", b.Trial)
 	}
-	e.do(nil, "POST", "/v1/billing/checkout", keyC, map[string]string{"plan": "starter", "interval": "month"}, 200, nil)
+	e.payAs(keyC, "POST", "/v1/billing/checkout", map[string]string{"plan": "starter", "interval": "month"}, 200, nil)
 	if f.checkout == nil || f.checkout.Get("subscription_data[trial_period_days]") != "" {
 		t.Fatalf("checkout with a used card: %v", f.checkout)
 	}

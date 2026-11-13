@@ -215,6 +215,7 @@ type stripePrice struct {
 	ID        string            `json:"id"`
 	LookupKey string            `json:"lookup_key"`
 	Metadata  map[string]string `json:"metadata"`
+	Product   json.RawMessage   `json:"product"` // an id, or the product when expanded
 	Recurring struct {
 		Interval string `json:"interval"`
 	} `json:"recurring"`
@@ -397,6 +398,9 @@ func (s *Service) CheckoutSession(ctx context.Context, p Principal, planID, inte
 	}
 	if !s.BillingEnabled() {
 		return "", errBillingOff
+	}
+	if err := requirePerson(p); err != nil {
+		return "", err
 	}
 	plan, interval, err := checkoutPlan(planID, interval)
 	if err != nil {
@@ -855,6 +859,9 @@ func (s *Service) PortalSession(ctx context.Context, p Principal) (string, error
 	}
 	if !s.BillingEnabled() {
 		return "", errBillingOff
+	}
+	if err := requirePerson(p); err != nil {
+		return "", err
 	}
 	w, err := s.Q.GetWorkspaceBilling(ctx, p.WorkspaceID)
 	if err != nil {

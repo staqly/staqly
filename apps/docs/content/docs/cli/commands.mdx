@@ -490,8 +490,9 @@ staqly billing checkout --plan plus --yearly   # Stripe Checkout link; a paying 
 staqly billing portal        # prints a link to change the card, get invoices or cancel
 ```
 
-The links are for a person to open in a browser; the plan changes when Stripe confirms the
-payment.
+`billing status` works with any admin key. Paying and managing the subscription are for a signed-in
+person: the server answers `billing checkout` and `billing portal` with 403 when the CLI uses an API
+key, so pay and manage the plan in the app (**Settings → Plan & usage**).
 
 ## Sign in other browsers: `connect`, `sessions`
 

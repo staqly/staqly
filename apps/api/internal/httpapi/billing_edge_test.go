@@ -215,7 +215,7 @@ func TestStripeSubscriptionMatchedByCustomerAndStaleSubscriptions(t *testing.T) 
 	e := newEnv(t)
 	admin := e.keyWith(app.ScopeAdmin)
 	f := withStripe(t, e)
-	e.do(nil, "POST", "/v1/billing/checkout", admin, nil, 200, nil) // creates customer cus_1
+	e.pay("POST", "/v1/billing/checkout", nil, 200, nil) // creates customer cus_1
 	if b := e.billing(admin); !b.HasCustomer {
 		t.Fatalf("customer not stored: %+v", b)
 	}
@@ -236,7 +236,7 @@ func TestStripeSubscriptionMatchedByCustomerAndStaleSubscriptions(t *testing.T) 
 	f.routes["GET /v1/subscriptions/sub_2"] = func() (int, any) {
 		return 200, map[string]any{"id": "sub_2", "items": map[string]any{"data": []any{map[string]any{"id": "si_2", "price": map[string]any{"id": "price_pro"}}}}}
 	}
-	e.do(nil, "POST", "/v1/billing/checkout", admin, nil, 409, nil)
+	e.pay("POST", "/v1/billing/checkout", nil, 409, nil)
 
 	// An older subscription of the same customer ending does not touch the live one.
 	old := map[string]any{"id": "sub_old", "customer": "cus_1", "status": "canceled"}
@@ -339,16 +339,16 @@ func TestBillingPortalNeedsCustomerAndAdmin(t *testing.T) {
 	e := newEnv(t)
 	admin := e.keyWith(app.ScopeAdmin)
 	e.do(nil, "GET", "/v1/billing", e.key, nil, 403, nil)
-	e.do(nil, "POST", "/v1/billing/portal", admin, nil, 409, nil) // billing off
+	e.pay("POST", "/v1/billing/portal", nil, 409, nil) // billing off
 	f := withStripe(t, e)
 	e.do(nil, "POST", "/v1/billing/portal", e.key, nil, 403, nil)
-	e.do(nil, "POST", "/v1/billing/portal", admin, nil, 409, nil) // no customer yet
+	e.pay("POST", "/v1/billing/portal", nil, 409, nil) // no customer yet
 	if f.called("POST /v1/billing_portal/sessions") != 0 {
 		t.Fatalf("stripe called without a customer: %v", f.calls)
 	}
 	// Stripe rejecting the customer creation surfaces as 502 and stores nothing.
 	f.set("POST /v1/customers", func() (int, any) { return 400, map[string]any{"error": map[string]string{"message": "bad"}} })
-	e.do(nil, "POST", "/v1/billing/checkout", admin, nil, 502, nil)
+	e.pay("POST", "/v1/billing/checkout", nil, 502, nil)
 	if b := e.billing(admin); b.HasCustomer || !b.Enabled {
 		t.Fatalf("after failed checkout: %+v", b)
 	}
@@ -386,7 +386,7 @@ func TestOneSubscriptionPerWorkspace(t *testing.T) {
 
 	// A second plan checkout closes the first; a checkout for extra posts is left alone.
 	for range 2 {
-		e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "pro"}, 200, nil)
+		e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "pro"}, 200, nil)
 	}
 	if n, m := f.called("POST /v1/checkout/sessions/cs_old/expire"), f.called("POST /v1/checkout/sessions/cs_posts/expire"); n != 1 || m != 0 {
 		t.Fatalf("expired the older plan checkout %d times (want 1), the posts checkout %d times (want 0)", n, m)
@@ -455,7 +455,7 @@ func TestOperatorPlanSurvivesEndedSubscription(t *testing.T) {
 			f := withStripe(t, e)
 			ws := workspaceID(e)
 			admin := e.keyWith(app.ScopeAdmin)
-			e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "pro"}, 200, nil) // makes cus_1
+			e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "pro"}, 200, nil) // makes cus_1
 			e.stripeEvent("evt_1", "customer.subscription.created", subObject("sub_1", ws, "active", "starter", "month"), testWhsec)
 			ended := subObject("sub_1", ws, "canceled", "starter", "month")
 			e.stripeEvent("evt_2", "customer.subscription.deleted", ended, testWhsec)

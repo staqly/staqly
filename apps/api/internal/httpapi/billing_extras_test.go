@@ -135,7 +135,7 @@ func TestAddonWithADecliningCard(t *testing.T) {
 	f.mu.Unlock()
 
 	var errBody paymentErr
-	e.do(nil, "POST", "/v1/billing/addons/webhooks_pack", admin, nil, 402, &errBody)
+	e.pay("POST", "/v1/billing/addons/webhooks_pack", nil, 402, &errBody)
 	d := errBody.Error.Details
 	if errBody.Error.Code != "payment_failed" || d["reason"] != "insufficient_funds" || d["addon"] != "webhooks_pack" || d["plan"] != "" ||
 		d["pay_url"] != "https://invoice.stripe.com/i/acct_1/test_in_addon" || !strings.Contains(errBody.Error.Message, "your subscription stays as it was") {
@@ -169,7 +169,7 @@ func TestAddonWithADecliningCard(t *testing.T) {
 	f.mu.Lock()
 	f.declines, f.pending = false, false
 	f.mu.Unlock()
-	e.do(nil, "POST", "/v1/billing/addons/webhooks_pack", admin, nil, 204, nil)
+	e.pay("POST", "/v1/billing/addons/webhooks_pack", nil, 204, nil)
 	pp = app.PendingPayment{}
 	e.do(nil, "GET", "/v1/billing/pending-payment", admin, nil, 200, &pp)
 	e.do(nil, "GET", "/v1/billing/addons", admin, nil, 200, &list)
@@ -185,7 +185,6 @@ func TestAddonWithADecliningCard(t *testing.T) {
 func TestRemovingAnUnpaidAddon(t *testing.T) {
 	e := newEnv(t)
 	f := newAddonStripe(t, e)
-	admin := e.keyWith(app.ScopeAdmin)
 	line := func(item string) map[string]any { // a line as Stripe API 2025-03-31 and later carries its item
 		return map[string]any{"parent": map[string]any{"subscription_item_details": map[string]any{"subscription_item": item}}}
 	}
@@ -211,7 +210,7 @@ func TestRemovingAnUnpaidAddon(t *testing.T) {
 	}
 
 	unpaid()
-	e.do(nil, "DELETE", "/v1/billing/addons/webhooks_pack", admin, nil, 204, nil)
+	e.pay("DELETE", "/v1/billing/addons/webhooks_pack", nil, 204, nil)
 	removed, voided, _ := state()
 	if fmt.Sprint(removed) != "[none]" || fmt.Sprint(voided) != "[in_addon in_addon_old]" {
 		t.Fatalf("unpaid add-on: removed %v, voided %v", removed, voided)
@@ -222,7 +221,7 @@ func TestRemovingAnUnpaidAddon(t *testing.T) {
 	f.addon, f.status, f.invoices = true, "active", nil
 	f.mu.Unlock()
 	_, _, before := state()
-	e.do(nil, "DELETE", "/v1/billing/addons/webhooks_pack", admin, nil, 204, nil)
+	e.pay("DELETE", "/v1/billing/addons/webhooks_pack", nil, 204, nil)
 	removed, voided, reads := state()
 	if fmt.Sprint(removed) != "[none always_invoice]" || len(voided) != 2 || reads != before {
 		t.Fatalf("paid add-on: removed %v, voided %v, %d invoice reads", removed, voided, reads-before)
@@ -233,7 +232,7 @@ func TestRemovingAnUnpaidAddon(t *testing.T) {
 	f.mu.Lock()
 	f.voidFails = true
 	f.mu.Unlock()
-	e.do(nil, "DELETE", "/v1/billing/addons/webhooks_pack", admin, nil, 204, nil)
+	e.pay("DELETE", "/v1/billing/addons/webhooks_pack", nil, 204, nil)
 	if removed, voided, _ = state(); fmt.Sprint(removed) != "[none always_invoice always_invoice]" || len(voided) != 2 {
 		t.Fatalf("invoice not voided: removed %v, voided %v", removed, voided)
 	}
@@ -247,7 +246,6 @@ func TestRemovingAnUnpaidAddon(t *testing.T) {
 func TestCreditsBecomeBalanceAtOnce(t *testing.T) {
 	e := newEnv(t)
 	ws := workspaceID(e)
-	admin := e.keyWith(app.ScopeAdmin)
 	var mu sync.Mutex
 	plan, addon := "business", true
 	var pendingItems, credit, charged int64 // cents: pending invoice items, the customer's balance, what the card paid
@@ -315,15 +313,15 @@ func TestCreditsBecomeBalanceAtOnce(t *testing.T) {
 	e.stripeEvent("evt_credit_1", "customer.subscription.created", first, testWhsec)
 
 	// Business to Starter, then the add-on removed: 90.00 and 9.00 of credit.
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "starter", "interval": "month"}, 200, nil)
-	e.do(nil, "DELETE", "/v1/billing/addons/webhooks_pack", admin, nil, 204, nil)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "starter", "interval": "month"}, 200, nil)
+	e.pay("DELETE", "/v1/billing/addons/webhooks_pack", nil, 204, nil)
 	mu.Lock()
 	if pendingItems != 0 || credit != 9900 || charged != 0 {
 		t.Errorf("after the credits: %d pending, balance %d, charged %d (want 0, 9900, 0)", pendingItems, credit, charged)
 	}
 	mu.Unlock()
 	// The upgrade to Plus (20.00 more) is paid from the balance, not by the card.
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "plus", "interval": "month"}, 200, nil)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "plus", "interval": "month"}, 200, nil)
 	mu.Lock()
 	defer mu.Unlock()
 	if pendingItems != 0 || credit != 7900 || charged != 0 {

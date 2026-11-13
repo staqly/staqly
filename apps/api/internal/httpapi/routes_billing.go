@@ -25,6 +25,9 @@ import (
 //	POST /v1/billing/addons/{id}    add an add-on to the live subscription (account owner)
 //	DELETE /v1/billing/addons/{id}  remove it (account owner)
 //	POST /v1/billing/webhook   Stripe events (Stripe-Signature, no API key)
+//
+// Paying and managing the subscription (checkout, portal, start-paid-plan, credits/checkout, adding and removing
+// an add-on) are a signed-in person's: an API key gets 403 (app.requirePerson). Reads stay open to keys.
 func init() {
 	RegisterAuthedRoutes(func(s *Server, r chi.Router) {
 		r.Get("/billing", s.getBilling)

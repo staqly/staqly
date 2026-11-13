@@ -387,6 +387,9 @@ export function PlanUsagePage() {
     : payFirst
       ? 'Not while the workspace is locked. Pay the open invoice first.'
       : 'Not while the workspace is locked. Choose a plan first.'
+  // Stripe charges nothing during the trial, so an add-on would be free until its end: the API answers 409.
+  const addBlocked =
+    b?.subscription_status === 'trialing' ? 'Add-ons come with a paid plan. Choose a plan first.' : undefined
 
   const summary = u ? (
     <PlanSummary
@@ -514,10 +517,10 @@ export function PlanUsagePage() {
         description={
           !canBuy
             ? 'The account owner buys them.'
-            : (blocked ?? 'On top of the plan, excl. VAT, charged with the subscription.')
+            : (blocked ?? addBlocked ?? 'On top of the plan, excl. VAT, charged with the subscription.')
         }
       >
-        <AddonsSection canBuy={canBuy} yearly={sub?.interval === 'year'} blocked={blocked} />
+        <AddonsSection canBuy={canBuy} yearly={sub?.interval === 'year'} blocked={blocked} addBlocked={addBlocked} />
       </Group>
     ) : null
 

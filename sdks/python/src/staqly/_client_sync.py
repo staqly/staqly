@@ -2460,7 +2460,8 @@ class BillingResource(_Resource):
         ``"month"``): open ``url`` in a browser to pay. A workspace that already pays is switched to
         that plan instead (prorated) and gets the billing page URL. The plan changes when Stripe
         confirms. Raises :class:`~staqly.ConflictError` when billing is off, the price is not set
-        up, or it is the plan and interval it already has."""
+        up, or it is the plan and interval it already has. For a signed-in person only: with an API key
+        the server answers 403, whatever the key's scopes (pay in the app)."""
         body = {k: v for k, v in {"plan": plan, "interval": interval}.items() if v is not None}
         r = self._http.request(
             RequestSpec("POST", "/v1/billing/checkout", json=body, options=_opts(request_options))
@@ -2476,7 +2477,8 @@ class BillingResource(_Resource):
         self, posts: int, *, provider: str = "x", request_options: RequestOptions | None = None
     ) -> BillingURL:
         """Buys a bundle of extra posts to X (``200``, ``1000`` or ``4000``): open ``url`` in a browser to
-        pay. The posts are added when Stripe confirms and expire at the end of the billing period."""
+        pay. The posts are added when Stripe confirms and expire at the end of the billing period. For a
+        signed-in person only: with an API key the server answers 403."""
         r = self._http.request(
             RequestSpec(
                 "POST",
@@ -2488,7 +2490,8 @@ class BillingResource(_Resource):
         return _model(BillingURL, r)
 
     def portal(self, *, request_options: RequestOptions | None = None) -> BillingURL:
-        """Stripe customer portal URL (payment method, invoices, cancel). 409 before the first checkout."""
+        """Stripe customer portal URL (payment method, invoices, cancel). 409 before the first checkout. For a
+        signed-in person only: with an API key the server answers 403."""
         r = self._http.request(RequestSpec("POST", "/v1/billing/portal", options=_opts(request_options)))
         return _model(BillingURL, r)
 

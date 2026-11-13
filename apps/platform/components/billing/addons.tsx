@@ -42,11 +42,14 @@ export function AddonsSection({
   canBuy,
   yearly,
   blocked,
+  addBlocked,
 }: {
   canBuy: boolean
   yearly: boolean
   /** Why nothing can be added or removed now (a locked workspace); the buttons are disabled and say it. */
   blocked?: string
+  /** Why nothing can be added now, while removing still works (the free trial: add-ons come with a paid plan). */
+  addBlocked?: string
 }) {
   const { isLocal } = useMode()
   const addons = useAddons({ enabled: !isLocal })
@@ -115,10 +118,10 @@ export function AddonsSection({
               ) : (
                 <Button
                   variant="outline"
-                  onClick={blocked ? undefined : () => setAdding(a)}
+                  onClick={(blocked ?? addBlocked) ? undefined : () => setAdding(a)}
                   disabled={add.isPending || !(yearly ? a.price_year : a.price_month)}
-                  aria-disabled={!!blocked || undefined}
-                  tooltip={blocked}
+                  aria-disabled={!!(blocked ?? addBlocked) || undefined}
+                  tooltip={blocked ?? addBlocked}
                 >
                   <Plus /> Add
                 </Button>

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
 	"slices"
@@ -40,6 +41,25 @@ func (e *env) stripeEvent(id, typ string, object any, secret string) int {
 	}
 	resp.Body.Close()
 	return resp.StatusCode
+}
+
+// pay sends a billing request that pays or manages the subscription as the signed-in owner: these are a person's,
+// an API key gets 403 (TestBillingIsManagedByPeople).
+func (e *env) pay(method, path string, body any, want int, out any) {
+	e.t.Helper()
+	e.do(e.browser, method, path, "", body, want, out, "X-CSRF-Token", e.csrf)
+}
+
+// payAs is pay for another workspace: a browser signed in with its admin key.
+func (e *env) payAs(key, method, path string, body any, want int, out any) {
+	e.t.Helper()
+	jar, _ := cookiejar.New(nil)
+	c := &http.Client{Jar: jar}
+	var session struct {
+		CSRF string `json:"csrf_token"`
+	}
+	e.do(c, "POST", "/v1/sessions/api-key", "", map[string]string{"api_key": key}, 201, &session)
+	e.do(c, method, path, "", body, want, out, "X-CSRF-Token", session.CSRF)
 }
 
 // The server applies a customer.subscription.* event by reading the subscription back from Stripe (events come
@@ -150,18 +170,18 @@ func TestStripeBillingLifecycle(t *testing.T) {
 	if b.Enabled || b.Plan != app.TrialPlan || b.PlanExpiresAt == nil {
 		t.Fatalf("billing must be off without Stripe settings, the trial on: %+v", b)
 	}
-	e.do(nil, "POST", "/v1/billing/checkout", admin, nil, 409, nil)
+	e.pay("POST", "/v1/billing/checkout", nil, 409, nil)
 	e.svc.Cfg.Billing = app.BillingConfig{SecretKey: "sk_test_1", WebhookSecret: testWhsec, APIBase: stripe.URL}
 
 	var out struct{ URL string }
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "enterprise"}, 422, nil)
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "plus", "interval": "week"}, 422, nil)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "enterprise"}, 422, nil)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "plus", "interval": "week"}, 422, nil)
 	var errBody struct{ Error app.Error }
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "starter", "interval": "year"}, 409, &errBody)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "starter", "interval": "year"}, 409, &errBody)
 	if errBody.Error.Code != "not_available" {
 		t.Fatalf("a price that doesn't exist: %+v", errBody.Error)
 	}
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "plus", "interval": "year"}, 200, &out)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "plus", "interval": "year"}, 200, &out)
 	if out.URL != "https://checkout.stripe.test/cs_1" {
 		t.Fatalf("checkout url = %q", out.URL)
 	}
@@ -180,7 +200,7 @@ func TestStripeBillingLifecycle(t *testing.T) {
 		t.Errorf("customer form = %v", customer)
 	}
 	// Starter: Stripe's 7-day trial with a card required (cancelled if no card is on file at its end).
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "starter", "interval": "month"}, 200, &out)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "starter", "interval": "month"}, 200, &out)
 	if checkout.Get("line_items[0][price]") != "price_starter_month" || checkout.Get("subscription_data[trial_period_days]") != "7" ||
 		checkout.Get("subscription_data[trial_settings][end_behavior][missing_payment_method]") != "cancel" ||
 		checkout.Get("payment_method_collection") != "always" {
@@ -188,7 +208,7 @@ func TestStripeBillingLifecycle(t *testing.T) {
 	}
 	// Managed Payments: Stripe is the merchant of record and refuses the tax and customer parameters.
 	e.svc.Cfg.Billing.ManagedPayments = true
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "plus", "interval": "year"}, 200, &out)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "plus", "interval": "year"}, 200, &out)
 	if checkout.Get("managed_payments[enabled]") != "true" || checkout.Has("automatic_tax[enabled]") ||
 		checkout.Has("tax_id_collection[enabled]") || checkout.Has("customer_update[name]") || checkout.Has("customer_update[address]") ||
 		checkout.Get("line_items[0][price]") != "price_plus_year" || checkout.Get("billing_address_collection") != "required" {
@@ -220,8 +240,8 @@ func TestStripeBillingLifecycle(t *testing.T) {
 
 	// Paying already: a checkout for another plan switches the subscription, back to the billing page. A higher
 	// plan is invoiced at once and waits for that payment (TestUpgradeOfPayingSubscription has the rest).
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "plus", "interval": "year"}, 409, nil) // same price
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "business", "interval": "month"}, 200, &out)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "plus", "interval": "year"}, 409, nil) // same price
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "business", "interval": "month"}, 200, &out)
 	if !strings.HasSuffix(out.URL, "/settings/plan?checkout=switched") || switched.Get("items[0][id]") != "si_1" ||
 		switched.Get("items[0][price]") != "price_business_month" || switched.Get("proration_behavior") != "always_invoice" ||
 		switched.Get("payment_behavior") != "pending_if_incomplete" {
@@ -233,7 +253,7 @@ func TestStripeBillingLifecycle(t *testing.T) {
 	if b.Plan != "business" {
 		t.Fatalf("after the switch: %+v", b)
 	}
-	e.do(nil, "POST", "/v1/billing/portal", admin, nil, 200, &out)
+	e.pay("POST", "/v1/billing/portal", nil, 200, &out)
 	if out.URL != "https://billing.stripe.test/p_1" {
 		t.Fatalf("portal url = %q", out.URL)
 	}
@@ -251,7 +271,7 @@ func TestStripeBillingLifecycle(t *testing.T) {
 	if !b.Suspended {
 		t.Fatalf("canceled subscription should suspend: %+v", b)
 	}
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "pro"}, 200, &out) // paying again works while suspended
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "pro"}, 200, &out) // paying again works while suspended
 	if strings.Count(strings.Join(calls, ",")+",", "POST /v1/customers,") != 1 {
 		t.Fatalf("customer must be created once: %v", calls)
 	}
@@ -267,7 +287,7 @@ func TestStripeBillingLifecycle(t *testing.T) {
 	switched = nil
 	sub["id"], sub["status"] = "sub_1b", "active" // paying again: a new subscription (a canceled one stays canceled)
 	e.stripeEvent("evt_4", "customer.subscription.updated", sub, testWhsec)
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "pro", "interval": "year"}, 200, &out)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "pro", "interval": "year"}, 200, &out)
 	if switched.Get("items[0][price]") != "price_custom" {
 		t.Fatalf("override: %v", switched)
 	}
@@ -448,7 +468,7 @@ func TestPinnedPriceFallsBackToLookupKey(t *testing.T) {
 	e.svc.Cfg.Billing = app.BillingConfig{SecretKey: "sk_test_pinned", WebhookSecret: testWhsec, APIBase: stripe.URL,
 		Prices: map[string]string{"plus_month": "price_archived"}}
 	var out struct{ URL string }
-	e.do(nil, "POST", "/v1/billing/checkout", e.admin, map[string]string{"plan": "plus", "interval": "month"}, 200, &out)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "plus", "interval": "month"}, 200, &out)
 	if out.URL != "https://checkout.stripe.test/ok" || strings.Join(used, ",") != "price_archived,price_live_plus" {
 		t.Fatalf("fallback: %q %v", out.URL, used)
 	}

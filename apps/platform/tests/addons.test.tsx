@@ -84,6 +84,31 @@ describe('add-ons and entitlements', () => {
     await waitFor(() => expect(api.find('DELETE', '/v1/billing/addons/ai_pack')).toHaveLength(1))
   })
 
+  it('adds nothing during the free trial, and says why; removing still works', async () => {
+    const api = mockApi({
+      'GET /v1/billing/addons': { data: [PACK, { ...PACK, id: 'ai_pack', name: 'AI pack', active: true }] },
+      'DELETE /v1/billing/addons/ai_pack': { status: 204 },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(
+      <AddonsSection canBuy yearly={false} addBlocked="Add-ons come with a paid plan. Choose a plan first." />,
+      { mode: 'cloud' },
+    )
+    const list = await screen.findByTestId('addons')
+    const add = within(list).getByRole('button', { name: /add/i })
+
+    expect(add).toHaveAttribute('aria-disabled', 'true')
+    await user.click(add)
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(api.find('POST', '/v1/billing/addons/channels_pack')).toHaveLength(0)
+
+    await user.click(within(list).getByRole('button', { name: 'Remove' }))
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Remove' }))
+    await waitFor(() => expect(api.find('DELETE', '/v1/billing/addons/ai_pack')).toHaveLength(1))
+  })
+
   it('shows prices only to people who cannot buy, and nothing when none are on sale', async () => {
     mockApi({ 'GET /v1/billing/addons': { data: [PACK] } })
     renderWithProviders(<AddonsSection canBuy={false} yearly />, { mode: 'cloud' })

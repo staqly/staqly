@@ -346,6 +346,9 @@ func (s *Service) StartPaidPlan(ctx context.Context, p Principal) (Billing, erro
 	if !s.BillingEnabled() {
 		return Billing{}, errBillingOff
 	}
+	if err := requirePerson(p); err != nil {
+		return Billing{}, err
+	}
 	w, err := s.Q.GetWorkspaceBilling(ctx, p.WorkspaceID)
 	if err != nil {
 		return Billing{}, err

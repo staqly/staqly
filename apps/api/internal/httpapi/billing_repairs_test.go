@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
 	"strings"
@@ -21,9 +22,8 @@ import (
 func TestDeleteWorkspaceExpiresOpenCheckouts(t *testing.T) {
 	e := newEnv(t)
 	f := withStripe(t, e)
-	admin := e.keyWith(app.ScopeAdmin)
 	ok := func() (int, any) { return 200, map[string]string{} }
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "pro"}, 200, nil) // cus_1, a checkout left open
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "pro"}, 200, nil) // cus_1, a checkout left open
 	f.set("GET /v1/checkout/sessions", func() (int, any) {
 		return 200, map[string]any{"data": []any{map[string]string{"id": "cs_open", "mode": "subscription"}}}
 	})
@@ -46,7 +46,7 @@ func TestSyncReadsTheLiveSubscriptionBehindACancelledDuplicate(t *testing.T) {
 	ws := workspaceID(e)
 	admin := e.keyWith(app.ScopeAdmin)
 	ok := func() (int, any) { return 200, map[string]string{} }
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "pro"}, 200, nil) // cus_1
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "pro"}, 200, nil) // cus_1
 
 	const day = 24 * time.Hour
 	withEnd := func(sub map[string]any, end time.Time) map[string]any {
@@ -265,7 +265,6 @@ func TestFeatureNewerThanTheCatalogCacheGetsItsAllowance(t *testing.T) {
 	e := newEnv(t)
 	ws := workspaceID(e)
 	ctx := context.Background()
-	admin := e.keyWith(app.ScopeAdmin)
 	if err := e.svc.SetPlan(ctx, ws, "starter", ""); err != nil {
 		t.Fatal(err)
 	}
@@ -286,13 +285,15 @@ func TestFeatureNewerThanTheCatalogCacheGetsItsAllowance(t *testing.T) {
 			json.NewEncoder(w).Encode(map[string]any{"data": active})
 		case "GET /v1/entitlements/features":
 			json.NewEncoder(w).Encode(map[string]any{"data": features})
+		case "GET /v1/subscriptions/sub_1":
+			json.NewEncoder(w).Encode(subObject("sub_1", ws, "active", "starter", "month"))
 		default:
 			w.WriteHeader(404)
 		}
 	}))
 	defer stripe.Close()
 	e.svc.Cfg.Billing = app.BillingConfig{SecretKey: "sk_test_1", WebhookSecret: testWhsec, APIBase: stripe.URL}
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "starter", "interval": "month"}, 200, nil)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "starter", "interval": "month"}, 200, nil)
 	if code := e.stripeEvent("evt_sub", "customer.subscription.created", subObject("sub_1", ws, "active", "starter", "month"), testWhsec); code != 200 {
 		t.Fatalf("subscription event: %d", code)
 	}
@@ -358,7 +359,7 @@ func TestStartPaidPlanHoldsTheBillingLock(t *testing.T) {
 	defer stripe.Close()
 	e.svc.Cfg.Billing = app.BillingConfig{SecretKey: "sk_test_1", WebhookSecret: testWhsec, APIBase: stripe.URL}
 	key, ws := e.trialWorkspace("C")
-	e.do(nil, "POST", "/v1/billing/checkout", key, map[string]string{"plan": "starter", "interval": "month"}, 200, nil) // cus_c
+	e.payAs(key, "POST", "/v1/billing/checkout", map[string]string{"plan": "starter", "interval": "month"}, 200, nil) // cus_c
 	end := time.Now().Add(app.TrialDays * 24 * time.Hour).Unix()
 	object := func(status, plan string) map[string]any {
 		return map[string]any{"id": "sub_c", "customer": "cus_c", "status": status, "trial_end": end, "metadata": map[string]string{"workspace_id": ws},
@@ -375,11 +376,17 @@ func TestStartPaidPlanHoldsTheBillingLock(t *testing.T) {
 		t.Fatalf("setup: %+v", b)
 	}
 
+	jar, _ := cookiejar.New(nil)
+	owner := &http.Client{Jar: jar} // the owner, signed in: an API key can't start the paid plan
+	var session struct {
+		CSRF string `json:"csrf_token"`
+	}
+	e.do(owner, "POST", "/v1/sessions/api-key", "", map[string]string{"api_key": key}, 201, &session)
 	started := make(chan int, 1)
 	go func() {
 		req, _ := http.NewRequest("POST", e.srv.URL+"/v1/billing/start-paid-plan", nil)
-		req.Header.Set("Authorization", "Bearer "+key)
-		resp, err := http.DefaultClient.Do(req)
+		req.Header.Set("X-CSRF-Token", session.CSRF)
+		resp, err := owner.Do(req)
 		if err != nil {
 			started <- 0
 			return
@@ -464,7 +471,6 @@ func TestOperatorPlanSurvivesActiveSubscriptionToldAgain(t *testing.T) {
 func TestIntervalChangeMovesAddons(t *testing.T) {
 	e := newEnv(t)
 	ws := workspaceID(e)
-	admin := e.keyWith(app.ScopeAdmin)
 	var mu sync.Mutex
 	var switched url.Values
 	sub := subObject("sub_1", ws, "active", "starter", "month")
@@ -498,12 +504,185 @@ func TestIntervalChangeMovesAddons(t *testing.T) {
 	if code := e.stripeEvent("evt_1", "customer.subscription.created", sub, testWhsec); code != 200 {
 		t.Fatalf("event: %d", code)
 	}
-	e.do(nil, "POST", "/v1/billing/checkout", admin, map[string]string{"plan": "starter", "interval": "year"}, 200, nil)
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "starter", "interval": "year"}, 200, nil)
 	mu.Lock()
 	defer mu.Unlock()
 	if switched.Get("items[0][id]") != "si_sub_1" || switched.Get("items[0][price]") != "price_starter_year" ||
 		switched.Get("items[1][id]") != "si_addon" || switched.Get("items[1][price]") != "price_addon_webhooks_pack_year" ||
 		switched.Get("items[1][quantity]") != "" || switched.Get("payment_behavior") != "pending_if_incomplete" {
 		t.Fatalf("monthly to yearly with an add-on: %v", switched)
+	}
+}
+
+// Was a bug (found on the Stripe sandbox): an add-on bought during the trial was free until its end, as Stripe
+// charges nothing in a trial. Add-ons come with a paid plan: refused in the trial before Stripe is asked about
+// the subscription. Only what the list shows is sold (was a bug: a draft product's id was accepted), and an add-on
+// the subscription holds several times (a quantity set at Stripe) adds that many times its bonus.
+func TestAddonsNeedAPaidPlanAndCountTheirQuantity(t *testing.T) {
+	e := newEnv(t)
+	f := withStripe(t, e)
+	ws := workspaceID(e)
+	ctx := context.Background()
+	if err := e.svc.SetPlan(ctx, ws, "starter", ""); err != nil {
+		t.Fatal(err)
+	}
+	f.set("GET /v1/products", func() (int, any) {
+		return 200, map[string]any{"data": []any{
+			map[string]any{"name": "Webhooks pack", "metadata": map[string]string{"staqly_kind": "addon", "staqly_addon": "webhooks_pack"}},
+			map[string]any{"name": "Draft pack", "metadata": map[string]string{"staqly_kind": "draft", "staqly_addon": "draft_pack"}},
+			map[string]any{"name": "Starter", "metadata": map[string]string{"staqly_kind": "plan"}},
+		}}
+	})
+	f.set("GET /v1/prices", func() (int, any) {
+		return 200, map[string]any{"data": []any{map[string]any{"id": "price_addon", "unit_amount": 900, "currency": "eur"}}}
+	})
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "pro"}, 200, nil) // cus_1
+	f.set("POST /v1/subscriptions/sub_1", func() (int, any) { return 200, map[string]string{"id": "sub_1"} })
+	sub := subObject("sub_1", ws, "trialing", "starter", "month")
+	sub["trial_end"] = time.Now().Add(app.TrialDays * 24 * time.Hour).Unix()
+	f.set("GET /v1/subscriptions/sub_1", func() (int, any) { return 200, sub })
+	tell := func(id string) {
+		t.Helper()
+		if code := e.stripeEvent(id, "customer.subscription.updated", sub, testWhsec); code != 200 {
+			t.Fatalf("event %s: %d", id, code)
+		}
+	}
+	tell("evt_trial")
+	reads := f.called("GET /v1/subscriptions/sub_1")
+
+	var errBody struct{ Error app.Error }
+	e.pay("POST", "/v1/billing/addons/webhooks_pack", nil, 409, &errBody)
+	if errBody.Error.Details["reason"] != "trialing" || !strings.Contains(errBody.Error.Message, "choose a plan first") {
+		t.Fatalf("an add-on in the trial: %+v", errBody.Error)
+	}
+	if f.called("POST /v1/subscriptions/sub_1") != 0 || f.called("GET /v1/subscriptions/sub_1") != reads {
+		t.Fatalf("Stripe was asked about the subscription for an add-on in the trial: %v", f.calls)
+	}
+
+	// Paying: the listed add-on is added; a draft, a plan's product and an unknown id are not found.
+	sub["status"] = "active"
+	tell("evt_paid")
+	for _, id := range []string{"draft_pack", "starter", "nope"} {
+		e.pay("POST", "/v1/billing/addons/"+id, nil, 404, nil)
+	}
+	if n := f.called("POST /v1/subscriptions/sub_1"); n != 0 {
+		t.Fatalf("an add-on that isn't on sale reached Stripe %d times", n)
+	}
+	e.pay("POST", "/v1/billing/addons/webhooks_pack", nil, 204, nil)
+	if n := f.called("POST /v1/subscriptions/sub_1"); n != 1 {
+		t.Fatalf("the add-on was sent to Stripe %d times, want 1", n)
+	}
+
+	// Three of it at Stripe: three times its two webhooks.
+	webhooks := func() int64 {
+		t.Helper()
+		var u app.Usage
+		e.do(nil, "GET", "/v1/workspace/usage", e.key, nil, 200, &u)
+		return u.Plan.Limits.Webhooks
+	}
+	base := webhooks()
+	items := sub["items"].(map[string]any)
+	items["data"] = append(items["data"].([]any), map[string]any{"id": "si_addon", "quantity": 3,
+		"price": map[string]any{"id": "price_addon", "product": "prod_wh", "lookup_key": app.AddonLookupKey("webhooks_pack", "month"),
+			"recurring": map[string]any{"interval": "month"}}})
+	f.set("GET /v1/entitlements/features", func() (int, any) {
+		return 200, map[string]any{"data": []any{map[string]any{"id": "feat_wh", "name": "Webhooks pack", "lookup_key": "webhooks_extra_2",
+			"metadata": map[string]string{"staqly_limit_webhooks": "+2"}}}}
+	})
+	f.set("GET /v1/entitlements/active_entitlements", func() (int, any) {
+		return 200, map[string]any{"data": []any{map[string]any{"id": "ent_1", "feature": "feat_wh", "lookup_key": "webhooks_extra_2"}}}
+	})
+	f.set("GET /v1/products/prod_wh/features", func() (int, any) {
+		return 200, map[string]any{"data": []any{map[string]any{"id": "pf_1", "entitlement_feature": map[string]any{"id": "feat_wh", "lookup_key": "webhooks_extra_2"}}}}
+	})
+	tell("evt_three")
+	e.svc.RunDueJobsOnce(ctx)
+	if got := webhooks(); got != base+6 {
+		t.Fatalf("three of an add-on that adds 2 webhooks: limit %d, want %d", got, base+6)
+	}
+}
+
+// Paying and managing the subscription are a signed-in person's, like members and invitations: an API key, with
+// every scope, gets 403 (was: any admin key could spend the card on file). Reading billing stays open to keys.
+func TestBillingIsManagedByPeople(t *testing.T) {
+	e := newEnv(t)
+	f := withStripe(t, e)
+	f.set("GET /v1/products", func() (int, any) { return 200, map[string]any{"data": []any{}} })
+	key := e.keyWith(app.AllScopes...)
+	for _, c := range []struct {
+		method, path string
+		body         any
+	}{
+		{"POST", "/v1/billing/checkout", map[string]string{"plan": "pro"}},
+		{"POST", "/v1/billing/portal", nil},
+		{"POST", "/v1/billing/start-paid-plan", nil},
+		{"POST", "/v1/billing/addons/webhooks_pack", nil},
+		{"DELETE", "/v1/billing/addons/webhooks_pack", nil},
+		{"POST", "/v1/billing/credits/checkout", map[string]any{"posts": 200}},
+	} {
+		var errBody struct{ Error app.Error }
+		e.do(nil, c.method, c.path, key, c.body, 403, &errBody)
+		if !strings.Contains(errBody.Error.Message, "signed-in person") {
+			t.Fatalf("%s %s with a key: %+v", c.method, c.path, errBody.Error)
+		}
+	}
+	if len(f.calls) != 0 {
+		t.Fatalf("a key's billing request reached Stripe: %v", f.calls)
+	}
+	for _, path := range []string{"/v1/billing", "/v1/billing/addons", "/v1/billing/x-posts"} {
+		e.do(nil, "GET", path, key, nil, 200, nil)
+	}
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "pro"}, 200, nil) // the signed-in owner
+}
+
+// Was a bug (found on the Stripe sandbox): extra X posts bought during the trial expired with it, a week later at
+// most. They last a month from the purchase, as long as on a monthly plan.
+func TestCreditsBoughtInTheTrialLastAMonth(t *testing.T) {
+	e := newEnv(t)
+	f := withStripe(t, e)
+	ws := workspaceID(e)
+	sub := subObject("sub_1", ws, "trialing", "starter", "month")
+	trialEnd := time.Now().Add(app.TrialDays * 24 * time.Hour)
+	sub["trial_end"] = trialEnd.Unix()
+	sub["items"].(map[string]any)["data"].([]any)[0].(map[string]any)["current_period_end"] = trialEnd.Unix()
+	f.set("GET /v1/subscriptions/sub_1", func() (int, any) { return 200, sub })
+	if code := e.stripeEvent("evt_trial", "customer.subscription.created", sub, testWhsec); code != 200 {
+		t.Fatalf("trial event: %d", code)
+	}
+	session := map[string]any{"id": "cs_x", "mode": "payment", "payment_status": "paid", "client_reference_id": ws,
+		"metadata": map[string]string{"workspace_id": ws, "staqly_kind": "credits", "staqly_provider": "x", "staqly_posts": "200"}}
+	if code := e.stripeEvent("evt_buy", "checkout.session.completed", session, testWhsec); code != 200 {
+		t.Fatalf("buy: %d", code)
+	}
+	var x app.XPosts
+	e.do(nil, "GET", "/v1/billing/x-posts", e.key, nil, 200, &x)
+	if x.CreditsLeft != 200 || x.CreditsExpireAt == nil {
+		t.Fatalf("bought posts: %+v", x)
+	}
+	if end, _ := time.Parse(time.RFC3339, *x.CreditsExpireAt); end.Before(time.Now().AddDate(0, 1, 0).Add(-time.Minute)) {
+		t.Fatalf("posts bought in the trial expire %s, with the trial (%s); want a month from now", end, trialEnd)
+	}
+}
+
+// The plan's paid period is its own item's: an add-on item on another period (left yearly by an older interval
+// change) doesn't hold plan_expires_at at the year's end after the plan went back to monthly.
+func TestPlanExpiresWithThePlansItem(t *testing.T) {
+	e := newEnv(t)
+	withStripe(t, e)
+	ws := workspaceID(e)
+	admin := e.keyWith(app.ScopeAdmin)
+	const day = 24 * time.Hour
+	monthEnd := time.Now().Add(20 * day).Truncate(time.Second)
+	sub := subObject("sub_1", ws, "active", "starter", "month")
+	items := sub["items"].(map[string]any)
+	items["data"].([]any)[0].(map[string]any)["current_period_end"] = monthEnd.Unix()
+	items["data"] = append(items["data"].([]any), map[string]any{"id": "si_addon", "quantity": 1, "current_period_end": time.Now().Add(300 * day).Unix(),
+		"price": map[string]any{"id": "price_addon", "lookup_key": app.AddonLookupKey("webhooks_pack", "year"), "recurring": map[string]any{"interval": "year"}}})
+	if code := e.stripeEvent("evt_1", "customer.subscription.updated", sub, testWhsec); code != 200 {
+		t.Fatalf("event: %d", code)
+	}
+	b := e.billing(admin)
+	if end, _ := time.Parse(time.RFC3339, deref(b.PlanExpiresAt)); !end.Equal(monthEnd.Add(3 * day)) {
+		t.Fatalf("a monthly plan with a yearly add-on is paid until %s, want the plan's month plus the grace, %s", end, monthEnd.Add(3*day))
 	}
 }
