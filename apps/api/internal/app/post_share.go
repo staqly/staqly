@@ -805,8 +805,39 @@ func (s *Service) checkTarget(ctx context.Context, postID, channelID string) err
 	if !numbers {
 		return s.W.SetTargetMetrics(ctx, db.SetTargetMetricsParams{MetricsAt: nullStr(s.now()), PostID: postID, ChannelID: channelID})
 	}
-	return s.W.SetTargetMetrics(ctx, db.SetTargetMetricsParams{Metrics: mustJSON(withoutOwnParts(m, ch.Provider, t.Replies)),
-		MetricsAt: nullStr(s.now()), PostID: postID, ChannelID: channelID})
+	return s.storeTargetMetrics(ctx, responsesActor(row.WorkspaceID), postID, channelID, mustJSON(withoutOwnParts(m, ch.Provider, t.Replies)))
+}
+
+// responsesActor: who reads a post's comments and numbers in the background.
+func responsesActor(workspaceID string) Principal {
+	return Principal{WorkspaceID: workspaceID, Kind: PrincipalSystem, ID: "responses", Name: "Responses"}
+}
+
+// storeTargetMetrics stores numbers read or reported outside a page's request and, when they differ from the stored
+// ones, emits post.metrics_updated, so a post open on screen shows them without a reload.
+func (s *Service) storeTargetMetrics(ctx context.Context, p Principal, postID, channelID, metrics string) error {
+	return s.tx(ctx, func(q *db.Queries) error {
+		t, err := q.GetTarget(ctx, db.GetTargetParams{PostID: postID, ChannelID: channelID})
+		if isNoRows(err) {
+			return nil // the post or the target went meanwhile
+		}
+		if err != nil {
+			return err
+		}
+		if err := q.SetTargetMetrics(ctx, db.SetTargetMetricsParams{Metrics: metrics, MetricsAt: nullStr(s.now()), PostID: postID, ChannelID: channelID}); err != nil {
+			return err
+		}
+		if t.Metrics == metrics {
+			return nil
+		}
+		post, err := q.GetPostByID(ctx, postID)
+		if err != nil {
+			return err
+		}
+		_, err = s.emitRef(ctx, q, p, "post.metrics_updated", Ref{Collection: post.CollectionID, Post: postID, Channel: channelID},
+			map[string]any{"channel_id": channelID})
+		return err
+	})
 }
 
 // numbersReader reads a target: its numbers, or, on a platform that gives none (Dribbble), only whether the post
@@ -879,7 +910,7 @@ func (s *Service) ReportTargetMetrics(ctx context.Context, p Principal, postID, 
 		}
 	}
 	now := s.now()
-	if err := s.Q.SetTargetMetrics(ctx, db.SetTargetMetricsParams{Metrics: mustJSON(m), MetricsAt: nullStr(now), PostID: postID, ChannelID: channelID}); err != nil {
+	if err := s.storeTargetMetrics(ctx, p, postID, channelID, mustJSON(m)); err != nil {
 		return TargetMetrics{}, err
 	}
 	return TargetMetrics{ChannelID: channelID, ChannelName: ch.Name, Provider: ch.Provider, Status: t.Status, ExternalURL: t.ExternalUrl,

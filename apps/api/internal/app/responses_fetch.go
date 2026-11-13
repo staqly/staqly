@@ -106,10 +106,10 @@ func (s *Service) readResponses(ctx context.Context, postID, channelID string) e
 	if err != nil {
 		return err
 	}
-	have := map[string]bool{}
+	have := map[string]db.PostResponse{}
 	for _, r := range known {
 		if r.ChannelID == channelID {
-			have[r.ID] = true
+			have[r.ID] = r
 		}
 	}
 	own, now, fresh := ownResponseIDs(target), s.now(), 0
@@ -123,16 +123,27 @@ func (s *Service) readResponses(ctx context.Context, postID, channelID string) e
 		}
 	}
 	err = s.tx(wctx, func(q *db.Queries) error {
+		changed := 0 // new comments, or ones whose text or likes moved: the comments on screen are out of date
 		for _, r := range got {
 			if r.Own || r.ID == "" || own[r.ID] {
 				continue
 			}
-			if !have[r.ID] {
+			old, seen := have[r.ID]
+			if !seen {
 				fresh++
+			}
+			if !seen || old.Text != r.Text || old.Likes.Valid != (r.Likes != nil) || old.Likes.Int64 != derefInt(r.Likes) {
+				changed++
 			}
 			if err := q.UpsertResponse(wctx, db.UpsertResponseParams{WorkspaceID: post.WorkspaceID, PostID: postID, ChannelID: channelID, ID: r.ID,
 				ParentID: r.ParentID, Author: r.Author, AuthorHandle: r.AuthorHandle, Text: r.Text, Url: r.URL, Likes: sql.NullInt64{Int64: derefInt(r.Likes), Valid: r.Likes != nil},
 				CreatedAt: formatTime(r.CreatedAt), FetchedAt: now}); err != nil {
+				return err
+			}
+		}
+		if changed > 0 {
+			if _, err := s.emitRef(wctx, q, responsesActor(post.WorkspaceID), "post.responses_updated",
+				Ref{Collection: post.CollectionID, Post: postID, Channel: channelID}, map[string]any{"channel_id": channelID, "changed": changed}); err != nil {
 				return err
 			}
 		}

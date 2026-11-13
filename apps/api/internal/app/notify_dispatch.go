@@ -69,7 +69,7 @@ func channelMatches(eventsJSON, colsJSON, typ, collectionID string) bool {
 	var pats []string
 	_ = json.Unmarshal([]byte(eventsJSON), &pats)
 	for _, p := range pats {
-		if eventMatches(p, typ) {
+		if eventMatches(p, typ) && (!quietEvents[typ] || p == typ) {
 			return true
 		}
 	}

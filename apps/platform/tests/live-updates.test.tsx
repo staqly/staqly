@@ -3,14 +3,41 @@ import { act, render, waitFor } from '@testing-library/react'
 import { toast } from 'sonner'
 import { describe, expect, it, vi } from 'vitest'
 
+import { insertMedia, mediaKeys, useLiveMedia } from '@/components/media/media-cache'
 import { LiveUpdates } from '@/components/shell/live-updates'
-import { api, type Post, type StashEvent } from '@/lib/api'
+import { api, type Media, type MediaLibraryItem, type MediaPage, type Post, type StashEvent } from '@/lib/api'
 import { awaitOutcome, progressOf } from '@/lib/publish-outcome'
 import { undoToast } from '@/lib/publish-undo'
 import { announceWorkspace, qk } from '@/lib/queries'
 
 const event = (seq: number, type = 'webhook.test') =>
   ({ id: `evt_${seq}`, seq, type, post_id: null, actor: { type: 'api_key' } }) as StashEvent
+
+const file = (id: string, over: Partial<MediaLibraryItem> = {}): MediaLibraryItem => ({
+  id,
+  mime_type: 'image/png',
+  size_bytes: 1,
+  original_name: `${id}.png`,
+  url: '',
+  sha256: id,
+  created_at: '2026-11-01T10:00:00Z',
+  alt_text: '',
+  width: 1,
+  height: 1,
+  duration_ms: 0,
+  folder_id: '',
+  tags: [],
+  uses: 0,
+  ...over,
+})
+
+const page = (data: MediaLibraryItem[]) => ({ pages: [{ data } as MediaPage], pageParams: [0] })
+
+function MediaView() {
+  useLiveMedia()
+
+  return null
+}
 
 describe('live updates', () => {
   it('refreshes potentially missed entities when a burst fills the recent-events window', async () => {
@@ -80,6 +107,126 @@ describe('live updates', () => {
     unmount()
     qc.clear()
     fetchEvents.mockRestore()
+  })
+
+  it.each([
+    ['workspace.credits_added', qk.xPosts],
+    ['workspace.credits_added', qk.usage],
+    ['workspace.plan_changed', qk.billing],
+    ['workspace.plan_changed', qk.usage],
+    ['workspace.entitlements_changed', qk.addons],
+    ['workspace.entitlements_changed', qk.usage],
+    ['member.updated', qk.session],
+    ['member.removed', qk.members],
+    ['invitation.accepted', qk.members],
+    ['invitation.accepted', qk.invitations],
+  ])('reloads after %s from elsewhere: %j', async (type, key) => {
+    const qc = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } })
+    const initial = [event(1)]
+
+    qc.setQueryData(key, { cached: true })
+    qc.setQueryData(qk.channels, [])
+    qc.setQueryData(qk.recentEvents, initial)
+    const fetchEvents = vi.spyOn(api, 'events').mockResolvedValue({ data: initial })
+    const { unmount } = render(
+      <QueryClientProvider client={qc}>
+        <LiveUpdates />
+      </QueryClientProvider>,
+    )
+
+    await act(async () => {
+      qc.setQueryData(qk.recentEvents, [{ ...event(2, type), actor: { type: 'system' } } as StashEvent, ...initial])
+    })
+    await waitFor(() => expect(qc.getQueryState(key)?.isInvalidated).toBe(true))
+    expect(qc.getQueryState(qk.channels)?.isInvalidated).toBe(false)
+    unmount()
+    qc.clear()
+    fetchEvents.mockRestore()
+  })
+
+  it.each([
+    ['post.responses_updated', qk.postResponses],
+    ['post.metrics_updated', qk.postMetrics],
+    ['post.feedback_added', qk.postFeedback],
+  ])('reloads the post %s names, and no other post', async (type, key) => {
+    const qc = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } })
+    const initial = [event(1)]
+
+    qc.setQueryData(key('pst_read'), { cached: true })
+    qc.setQueryData(key('pst_other'), { cached: true })
+    qc.setQueryData(qk.recentEvents, initial)
+    const fetchEvents = vi.spyOn(api, 'events').mockResolvedValue({ data: initial })
+    const { unmount } = render(
+      <QueryClientProvider client={qc}>
+        <LiveUpdates />
+      </QueryClientProvider>,
+    )
+
+    await act(async () => {
+      qc.setQueryData(qk.recentEvents, [
+        { ...event(2, type), post_id: 'pst_read', actor: { type: 'system' } } as StashEvent,
+        ...initial,
+      ])
+    })
+    await waitFor(() => expect(qc.getQueryState(key('pst_read'))?.isInvalidated).toBe(true))
+    expect(qc.getQueryState(key('pst_other'))?.isInvalidated).toBe(false)
+    unmount()
+    qc.clear()
+    fetchEvents.mockRestore()
+  })
+
+  it("media views write an agent's changes into the open library without reloading it, and skips this tab's own", async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } })
+    const initial = [event(1)]
+    const library = mediaKeys.library({})
+
+    qc.setQueryData(library, page([file('med_old', { uses: 3 }), file('med_gone')]))
+    qc.setQueryData(qk.recentEvents, initial)
+    const fetchEvents = vi.spyOn(api, 'events').mockResolvedValue({ data: initial })
+    const media = vi.spyOn(api, 'media').mockImplementation(
+      async (id) =>
+        file(id, {
+          original_name: 'renamed.png',
+          ...(id === 'med_new' && { created_at: '2026-11-02T10:00:00Z' }),
+        }) as Media,
+    )
+    const { unmount } = render(
+      <QueryClientProvider client={qc}>
+        <MediaView />
+      </QueryClientProvider>,
+    )
+    const ev = (seq: number, type: string, ids: string[]) =>
+      ({ ...event(seq, type), data: { media_ids: ids } }) as StashEvent
+
+    await act(async () => {
+      qc.setQueryData(qk.recentEvents, [
+        ev(4, 'media.deleted', ['med_gone']),
+        ev(3, 'media.updated', ['med_old']),
+        ev(2, 'media.created', ['med_new']),
+        ...initial,
+      ])
+    })
+    await waitFor(() =>
+      expect(
+        qc.getQueryData<{ pages: MediaPage[] }>(library)?.pages[0].data.map((m) => [m.id, m.original_name, m.uses]),
+      ).toEqual([
+        ['med_new', 'renamed.png', 0],
+        ['med_old', 'renamed.png', 3],
+      ]),
+    )
+    expect(qc.getQueryState(library)?.isInvalidated).toBe(false)
+    expect(media).toHaveBeenCalledTimes(2)
+
+    // This tab's own upload: already in its cache, nothing to read.
+    insertMedia(qc, [file('med_mine', { created_at: '2026-11-03T10:00:00Z' })])
+    await act(async () => {
+      qc.setQueryData(qk.recentEvents, [ev(5, 'media.created', ['med_mine']), ...initial])
+    })
+    expect(media).toHaveBeenCalledTimes(2)
+    unmount()
+    qc.clear()
+    fetchEvents.mockRestore()
+    media.mockRestore()
   })
 
   it("reloads a post's comments when the AI's reading of them arrives, and no other post's", async () => {

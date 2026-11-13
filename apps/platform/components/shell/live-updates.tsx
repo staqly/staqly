@@ -149,24 +149,45 @@ export function LiveUpdates() {
       void qc.invalidateQueries({ queryKey: qk.alerts })
     }
 
+    // A payment, plan switch or add-on (Stripe's webhook, another tab): the plan, its limits and the lock banner.
+    if (missed || others.some((e) => e.type.startsWith('workspace.'))) {
+      void qc.invalidateQueries({ queryKey: qk.billing })
+      void qc.invalidateQueries({ queryKey: qk.usage })
+    }
+
+    // A role changed or a person removed: the session's scopes decide which controls show.
+    if (missed || others.some((e) => e.type.startsWith('member.') || e.type.startsWith('invitation.'))) {
+      void qc.invalidateQueries({ queryKey: qk.members })
+      void qc.invalidateQueries({ queryKey: qk.invitations })
+      void qc.invalidateQueries({ queryKey: qk.session })
+    }
+
     if (missed) {
       void qc.invalidateQueries({ queryKey: ['post'] })
       void qc.invalidateQueries({ queryKey: ['post-responses'] })
+      void qc.invalidateQueries({ queryKey: ['post-metrics'] })
+      void qc.invalidateQueries({ queryKey: ['post-feedback'] })
     } else {
       for (const id of new Set(others.map((e) => e.post_id).filter(Boolean))) {
         void qc.invalidateQueries({ queryKey: ['post', id] })
       }
     }
 
-    // The AI's reading of a post's comments arrives on its own a couple of minutes after them: the comments open on
-    // screen take it in (and any comment read since) without a refresh.
-    for (const id of new Set(
-      fresh
-        .filter((e) => e.type === 'post.responses_analyzed')
-        .map((e) => e.post_id)
-        .filter(Boolean),
-    )) {
-      void qc.invalidateQueries({ queryKey: qk.postResponses(id!) })
+    // What staqly reads in the background (comments, the AI's reading of them, the numbers) and reviewers' feedback on a
+    // shared preview: the post open on screen takes it in without a refresh.
+    const postsWith = (...types: string[]) =>
+      new Set(fresh.flatMap((e) => (e.post_id && types.includes(e.type) ? [e.post_id] : [])))
+
+    for (const id of postsWith('post.responses_analyzed', 'post.responses_updated')) {
+      void qc.invalidateQueries({ queryKey: qk.postResponses(id) })
+    }
+
+    for (const id of postsWith('post.metrics_updated')) {
+      void qc.invalidateQueries({ queryKey: qk.postMetrics(id) })
+    }
+
+    for (const id of postsWith('post.feedback_added')) {
+      void qc.invalidateQueries({ queryKey: qk.postFeedback(id) })
     }
   }, [events.data, qc])
 

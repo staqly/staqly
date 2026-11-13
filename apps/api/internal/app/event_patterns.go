@@ -15,6 +15,8 @@ var knownEventTypes = map[string]bool{
 	"post.published": true, "post.failed": true, "post.purged": true, "post.repeat_stopped": true,
 	"post.unpublished": true, "post.target_removed": true, "post.target_remove_failed": true,
 	"post.preview_shared": true, "post.responses_analyzed": true, "post.feedback_added": true,
+	"post.responses_updated": true, "post.metrics_updated": true,
+	"media.created": true, "media.updated": true, "media.deleted": true,
 	"channel.connected": true, "channel.updated": true, "channel.needs_reconnect": true, "channel.expiring": true, "channel.disconnected": true,
 	"channel_link.created": true, "channel_link.revoked": true,
 	"schedule.created": true, "schedule.updated": true, "schedule.deleted": true,
@@ -22,7 +24,7 @@ var knownEventTypes = map[string]bool{
 	"collection.created": true, "collection.updated": true, "collection.deleted": true, "collection.archived": true,
 	"webhook.created": true, "webhook.updated": true, "webhook.deleted": true, "webhook.test": true,
 	"alert.created": true, "alert.updated": true, "alert.deleted": true,
-	"workspace.created": true, "workspace.updated": true, "workspace.plan_changed": true, "workspace.credits_added": true, "workspace.account_attached": true, "workspace.trial_review": true,
+	"workspace.created": true, "workspace.updated": true, "workspace.plan_changed": true, "workspace.credits_added": true, "workspace.entitlements_changed": true, "workspace.account_attached": true, "workspace.trial_review": true,
 	"workspace.export_requested": true, "workspace.exported": true,
 	"member.updated": true, "member.removed": true,
 	"invitation.created": true, "invitation.resent": true, "invitation.revoked": true, "invitation.accepted": true,
@@ -32,6 +34,12 @@ var knownEventTypes = map[string]bool{
 	"recovery_key.rotated": true, "access_token.rotated": true, "device_link.created": true, "device.connected": true,
 	"sign_in_method.added": true, "sign_in_method.changed": true, "sign_in_method.removed": true,
 }
+
+// quietEvents keep open pages current (comments and numbers read from the platforms, media library changes):
+// frequent and no news to a person. An alert channel gets one only when it names the type itself, never through
+// "*" or a glob. Personal notifications never include them (PersonalEvents).
+var quietEvents = map[string]bool{"post.responses_updated": true, "post.metrics_updated": true,
+	"media.created": true, "media.updated": true, "media.deleted": true, "workspace.entitlements_changed": true}
 
 // eventFamilies are the prefixes before the first dot of every known type.
 var eventFamilies = func() map[string]bool {

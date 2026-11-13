@@ -31,7 +31,8 @@ function useAgents() {
   return useQuery({
     queryKey: ['agents'],
     queryFn: async () => (await api.agents()).data ?? [],
-    refetchInterval: LIVE_INTERVAL_MS * 5,
+    // Every 3 s while the list is empty (someone is waiting for their first agent to connect), 15 s once one has.
+    refetchInterval: (q) => (q.state.data?.length === 0 ? LIVE_INTERVAL_MS : LIVE_INTERVAL_MS * 5),
   })
 }
 

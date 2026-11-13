@@ -176,7 +176,7 @@ function MetricTiles({ t }: { t: TargetMetrics & { metrics: NonNullable<TargetMe
  */
 export function PostStats({ post, active }: { post: Post; active: boolean }) {
   const qc = useQueryClient()
-  const key = ['post-metrics', post.id] as const
+  const key = qk.postMetrics(post.id)
   const targets = post.targets ?? []
   const out = targets.some((t) => t.status === 'published')
   const metrics = useQuery({ queryKey: key, queryFn: () => api.postMetrics(post.id), enabled: active && out })

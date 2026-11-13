@@ -108,7 +108,7 @@ func (s *Service) analyzeResponses(ctx context.Context, workspaceID, postID stri
 		}
 	}
 
-	sys := Principal{WorkspaceID: workspaceID, Kind: PrincipalSystem, ID: "responses", Name: "Responses"}
+	sys := responsesActor(workspaceID)
 	msg, err := s.assistantStepOp(ctx, sys, AICommentInsights, []AssistantMessage{{Role: "user", Content: b.String()}}, insightSystem, nil, func(string) {})
 	status, emsg := "ok", ""
 	var ans insightAnswer

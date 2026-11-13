@@ -202,8 +202,7 @@ func (s *Service) storeStoryInsights(ctx context.Context, payload any) error {
 			if r.Provider != "instagram" && r.Provider != "instagram_standalone" {
 				continue
 			}
-			if err := s.W.SetTargetMetrics(ctx, db.SetTargetMetricsParams{Metrics: mustJSON(m), MetricsAt: nullStr(s.now()),
-				PostID: r.PostID, ChannelID: r.ChannelID}); err != nil {
+			if err := s.storeTargetMetrics(ctx, responsesActor(r.WorkspaceID), r.PostID, r.ChannelID, mustJSON(m)); err != nil {
 				return err
 			}
 		}

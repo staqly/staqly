@@ -90,6 +90,13 @@ func TestMetaWebhookKeepsStoryInsights(t *testing.T) {
 	if *m.Impressions != 120 || *m.Reach != 90 || *m.Replies != 2 || *m.TapsForward != 30 || *m.TapsBack != 4 || *m.Exits != 7 || got[0].Error != "" {
 		t.Fatalf("story numbers %+v (error %q)", m, got[0].Error)
 	}
+	// The post open on screen hears of them once; the same numbers again are no news.
+	if _, err := s.HandleMetaWebhook(ctx, []byte(body), metaSign("meta-secret", body)); err != nil {
+		t.Fatal(err)
+	}
+	if ev := eventsOfType(t, s, p, "post.metrics_updated"); len(ev) != 1 || ev[0].item != post.ID {
+		t.Fatalf("post.metrics_updated %+v", ev)
+	}
 }
 
 // fakeMetaPermissions is a Meta platform whose token check finds the comments permission gone.

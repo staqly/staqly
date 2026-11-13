@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { EmptyState, ErrorState } from '@/components/common/error-state'
 import { stackCarousels, useCarousels } from '@/components/media/carousels'
-import { mediaKeys } from '@/components/media/media-cache'
+import { mediaKeys, useLiveMedia } from '@/components/media/media-cache'
 import { MediaGrid } from '@/components/media/media-grid'
 import { Button } from '@/components/ui/button'
 import {
@@ -74,6 +74,8 @@ function LibraryPicker({
   const [search, setSearch] = useState('')
   const [q, setQ] = useState('')
   const [picked, setPicked] = useState<MediaLibraryItem[]>([])
+
+  useLiveMedia()
 
   useEffect(() => {
     const t = setTimeout(() => setQ(search.trim()), 250)

@@ -299,9 +299,12 @@ func (s *Service) uploadMedia(ctx context.Context, p Principal, filename string,
 				return limitErr(plan, LimitStorage, plan.Limits.StorageBytes, used)
 			}
 		}
-		return q.CreateMedia(ctx, db.CreateMediaParams{ID: row.ID, WorkspaceID: row.WorkspaceID, StorageName: storage,
+		if err := q.CreateMedia(ctx, db.CreateMediaParams{ID: row.ID, WorkspaceID: row.WorkspaceID, StorageName: storage,
 			OriginalName: row.OriginalName, MimeType: mime, SizeBytes: n, Sha256: row.Sha256, CreatedAt: row.CreatedAt,
-			Width: width, Height: height})
+			Width: width, Height: height}); err != nil {
+			return err
+		}
+		return s.emitMedia(ctx, q, p, "media.created", map[string]any{"media_ids": []string{row.ID}})
 	}); err != nil {
 		s.removeStoredFile(ctx, mediaKey(p.WorkspaceID, storage))
 		return Media{}, err
@@ -341,8 +344,14 @@ func (s *Service) DiscardUpload(ctx context.Context, p Principal, id string) err
 	if err != nil {
 		return notFound("media")
 	}
-	n, err := s.W.DeleteUnreferencedMedia(ctx, db.DeleteUnreferencedMediaParams{WorkspaceID: p.WorkspaceID, ID: id})
-	if err != nil || n == 0 {
+	var n int64
+	if err := s.tx(ctx, func(q *db.Queries) error {
+		var err error
+		if n, err = q.DeleteUnreferencedMedia(ctx, db.DeleteUnreferencedMediaParams{WorkspaceID: p.WorkspaceID, ID: id}); err != nil || n == 0 {
+			return err
+		}
+		return s.emitMedia(ctx, q, p, "media.deleted", map[string]any{"media_ids": []string{id}})
+	}); err != nil || n == 0 {
 		return err
 	}
 	if err := s.removeMediaFiles(ctx, m.WorkspaceID, m.StorageName); err != nil {
@@ -384,12 +393,22 @@ func (s *Service) deleteMediaRow(ctx context.Context, p Principal, id string) (s
 		if _, err := q.DeleteMedia(ctx, db.DeleteMediaParams{WorkspaceID: p.WorkspaceID, ID: id}); err != nil {
 			return err
 		}
-		return s.stripMediaFromPosts(ctx, q, p.WorkspaceID, id)
+		if err := s.stripMediaFromPosts(ctx, q, p.WorkspaceID, id); err != nil {
+			return err
+		}
+		return s.emitMedia(ctx, q, p, "media.deleted", map[string]any{"media_ids": []string{id}})
 	})
 	if err != nil {
 		return "", err
 	}
 	return m.StorageName, nil
+}
+
+// emitMedia records a change of the media library (media.created, media.updated, media.deleted; data: media_ids,
+// or folder_id for a folder), so libraries open elsewhere take it in. Runs in the caller's transaction.
+func (s *Service) emitMedia(ctx context.Context, q *db.Queries, p Principal, typ string, data map[string]any) error {
+	_, err := s.emitRef(ctx, q, p, typ, Ref{}, data)
+	return err
 }
 
 // stripMediaFromPosts takes a deleted file out of every post: its files and the parts of its thread (a part
@@ -604,7 +623,7 @@ func (s *Service) UpdateMedia(ctx context.Context, p Principal, id string, in Me
 			m.Tags = mustJSON(tags)
 		}
 		m.OriginalName, m.AltText, m.Width, m.Height, m.DurationMs = name, alt, w, h, d
-		return nil
+		return s.emitMedia(ctx, q, p, "media.updated", map[string]any{"media_ids": []string{id}})
 	})
 	if err != nil {
 		return Media{}, err

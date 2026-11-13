@@ -39,7 +39,7 @@ import { safeHttpUrl } from '@/lib/safe'
 import { postHref } from './post-href'
 
 // Not under ['posts']: those keys hold post lists, which the post cache helpers rewrite.
-const commentsKey = (id: string) => ['post-feedback', id] as const
+const commentsKey = qk.postFeedback
 const NO_COMMENTS: PostComment[] = []
 
 /** Open on the platform: one published channel opens straight away, several get a short menu. */

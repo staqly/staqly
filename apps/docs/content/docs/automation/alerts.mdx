@@ -208,7 +208,7 @@ implicitly.
 
 | Field | Description |
 |---|---|
-| `events` | Glob patterns. Default: `post.published`, `post.failed` and `channel.needs_reconnect`. Add others such as `post.scheduled`, `post.publish_requested` (your automation is asked), `schedule.posts_requested`, `schedule.failed` or `post.*`. Patterns follow the same rules as [webhook events](/automation/webhooks); unknown ones are refused with `422`. |
+| `events` | Glob patterns. Default: `post.published`, `post.failed` and `channel.needs_reconnect`. Add others such as `post.scheduled`, `post.publish_requested` (your automation is asked), `schedule.posts_requested`, `schedule.failed` or `post.*`. Patterns follow the same rules as [webhook events](/automation/webhooks); unknown ones are refused with `422`. `"*"` and globs skip the frequent background events (comments and numbers read, media library changes): name one exactly to get it ([Events](/api/events#audit-events)). |
 | `collection_ids` | Only these collections; empty = all. |
 | `digest_window_seconds` | Collect everything within the window into one message (e.g. `300` = at most one message per 5 minutes; 0 to 86,400). |
 | `config` | Type-specific settings; see the sections for each type above. |

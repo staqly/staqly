@@ -35,8 +35,10 @@ func (s *Service) TrashMedia(ctx context.Context, p Principal, id string) error 
 			return conflict(fmt.Sprintf("%s is used by %d scheduled %s; remove it from %s first", m.OriginalName, n,
 				plural(n, "post", "posts"), plural(n, "that post", "those posts")))
 		}
-		_, err := q.TrashMedia(ctx, db.TrashMediaParams{DeletedAt: nullStr(s.now()), WorkspaceID: p.WorkspaceID, ID: id})
-		return err
+		if _, err := q.TrashMedia(ctx, db.TrashMediaParams{DeletedAt: nullStr(s.now()), WorkspaceID: p.WorkspaceID, ID: id}); err != nil {
+			return err
+		}
+		return s.emitMedia(ctx, q, p, "media.deleted", map[string]any{"media_ids": []string{id}})
 	})
 }
 
@@ -74,7 +76,7 @@ func (s *Service) RestoreMedia(ctx context.Context, p Principal, id string) (Med
 		if m.PurgeStartedAt.Valid {
 			return conflict("this file is already being permanently deleted")
 		}
-		return nil
+		return s.emitMedia(ctx, q, p, "media.updated", map[string]any{"media_ids": []string{id}})
 	})
 	if err != nil {
 		return Media{}, err
@@ -105,7 +107,10 @@ func (s *Service) KeepMedia(ctx context.Context, p Principal, id string) ([]stri
 		for {
 			twin, err := q.OldestTwin(ctx, db.OldestTwinParams{WorkspaceID: p.WorkspaceID, Sha256: keep.Sha256, ID: keep.ID})
 			if isNoRows(err) {
-				return s.dedupePostMedia(ctx, q, p.WorkspaceID, keep.ID, now)
+				if err := s.dedupePostMedia(ctx, q, p.WorkspaceID, keep.ID, now); err != nil || len(trashed) == 0 {
+					return err
+				}
+				return s.emitMedia(ctx, q, p, "media.deleted", map[string]any{"media_ids": trashed})
 			} else if err != nil {
 				return err
 			}
