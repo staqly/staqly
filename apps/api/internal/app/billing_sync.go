@@ -49,6 +49,20 @@ func (s *Service) syncSubscription(ctx context.Context, customer string) error {
 	return s.guardCard(ctx, sub)
 }
 
+// runSyncBilling is the sync_billing job: the workspace's subscription as Stripe has it, applied at a moment
+// staqly knows the plan on record stops being true (the end date of a plan the operator set: SetPlan). Without
+// it a paying workspace was read-only from that date until the next reconcile round, up to billingSyncEvery.
+func (s *Service) runSyncBilling(ctx context.Context, workspaceID string) error {
+	w, err := s.Q.GetWorkspaceBilling(ctx, workspaceID)
+	if isNoRows(err) || err == nil && (!s.BillingEnabled() || w.StripeCustomerID.String == "") {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return s.syncSubscription(ctx, w.StripeCustomerID.String)
+}
+
 // SyncBilling asks Stripe for the workspace's subscription now (the dashboard calls it when it comes back from
 // Checkout), then answers like GetBilling.
 func (s *Service) SyncBilling(ctx context.Context, p Principal) (Billing, error) {

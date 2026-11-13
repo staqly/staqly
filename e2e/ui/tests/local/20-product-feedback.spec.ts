@@ -11,9 +11,10 @@ test('feedback opens from the user menu, retains a failed report and submits ten
 
   await expect(dialog).toBeVisible()
   await expect.poll(async () => (await dialog.boundingBox())!.width).toBeGreaterThanOrEqual(650)
-  expect(
-    (await dialog.getByRole('textbox', { name: 'Description', exact: true }).boundingBox())!.height,
-  ).toBeGreaterThanOrEqual(220)
+  // Polled like the width: read once during the dialog's zoom-in, the 224 px box measured 219.
+  await expect
+    .poll(async () => (await dialog.getByRole('textbox', { name: 'Description', exact: true }).boundingBox())!.height)
+    .toBeGreaterThanOrEqual(220)
   expect(await axe(page)).toEqual([])
   await dialog.getByRole('textbox', { name: 'Description', exact: true }).fill('The schedule did not show my post')
   await dialog.getByLabel('Screenshots (optional)').setInputFiles(

@@ -95,3 +95,12 @@ func TestStripeFailureLogHasNoQueryOrMessage(t *testing.T) {
 		}
 	}
 }
+
+// Was a bug: a storage limit in megabytes read "0.0 GB of storage".
+func TestDescribeLimitStorageUnit(t *testing.T) {
+	for max, want := range map[int64]string{5 << 20: "5 MB of storage", 3 * gb / 2: "1.5 GB of storage", 100 * gb: "100.0 GB of storage"} {
+		if got := describeLimit(LimitStorage, max); got != want {
+			t.Errorf("%d bytes: %q, want %q", max, got, want)
+		}
+	}
+}

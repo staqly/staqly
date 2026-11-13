@@ -117,9 +117,15 @@ func TestAdminPromoCreateAndDeactivate(t *testing.T) {
 		case r.URL.Path == "/v1/coupons":
 			_, _ = w.Write([]byte(`{"id":"cp_1"}`))
 		case strings.HasSuffix(r.URL.Path, "/promo_1"):
-			_, _ = w.Write([]byte(`{"id":"promo_1","code":"SAVE","active":false,"coupon":{"id":"cp_1"}}`))
+			_, _ = w.Write([]byte(`{"id":"promo_1","code":"SAVE","active":false,"promotion":{"type":"coupon","coupon":{"id":"cp_1","percent_off":10}}}`))
 		default:
-			_, _ = w.Write([]byte(`{"id":"promo_1","code":"SAVE10","active":true,"max_redemptions":5,"coupon":{"id":"cp_1","percent_off":10,"duration":"repeating","duration_in_months":3}}`))
+			// As Stripe API 2026-09-30 answers (the sandbox, 2026-11-13): `coupon` is an unknown parameter.
+			if r.Form.Get("coupon") != "" {
+				w.WriteHeader(400)
+				_, _ = w.Write([]byte(`{"error":{"code":"parameter_unknown","param":"coupon","type":"invalid_request_error"}}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"id":"promo_1","code":"SAVE10","active":true,"max_redemptions":5,"promotion":{"type":"coupon","coupon":{"id":"cp_1","amount_off":null,"percent_off":10,"duration":"repeating","duration_in_months":3}}}`))
 		}
 	})
 	ctx := context.Background()
@@ -129,7 +135,7 @@ func TestAdminPromoCreateAndDeactivate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.ID != "promo_1" || got.Coupon.PercentOff != 10 {
+	if got.ID != "promo_1" || got.Coupon.ID != "cp_1" || got.Coupon.PercentOff != 10 || got.Coupon.DurationInMonths != 3 {
 		t.Errorf("got %+v", got)
 	}
 	c := f.forms["POST /v1/coupons"]
@@ -137,11 +143,11 @@ func TestAdminPromoCreateAndDeactivate(t *testing.T) {
 		t.Errorf("coupon form %v", c)
 	}
 	pc := f.forms["POST /v1/promotion_codes"]
-	if pc.Get("coupon") != "cp_1" || pc.Get("code") != "SAVE10" || pc.Get("max_redemptions") != "5" || pc.Get("expires_at") == "" {
+	if pc.Get("promotion[type]") != "coupon" || pc.Get("promotion[coupon]") != "cp_1" || pc.Get("expand[]") != "promotion.coupon" || pc.Get("code") != "SAVE10" || pc.Get("max_redemptions") != "5" || pc.Get("expires_at") == "" {
 		t.Errorf("promo form %v", pc)
 	}
 	d, err := s.AdminDeactivatePromotionCode(ctx, Admin{Email: "a@b.c"}, "promo_1")
-	if err != nil || d.Active {
+	if err != nil || d.Active || d.Coupon.PercentOff != 10 {
 		t.Fatalf("%v %+v", err, d)
 	}
 	if f.forms["POST /v1/promotion_codes/promo_1"].Get("active") != "false" {
@@ -149,13 +155,29 @@ func TestAdminPromoCreateAndDeactivate(t *testing.T) {
 	}
 }
 
+// Was a bug: with Stripe API 2025-09 and later every code was listed with an empty coupon: the code's coupon moved
+// to promotion.coupon, an id unless expanded. The three shapes: expanded, an id, and the old `coupon` object.
 func TestAdminPromoList(t *testing.T) {
+	var expand string
 	s, _, _ := adminStripeTest(t, func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"has_more":false,"data":[{"id":"promo_1","code":"X","active":true,"expires_at":1700000000,"coupon":{"id":"c","amount_off":500,"currency":"usd","duration":"once"}}]}`))
+		expand = r.URL.Query().Get("expand[]")
+		_, _ = w.Write([]byte(`{"has_more":false,"data":[
+			{"id":"promo_1","code":"X","active":true,"expires_at":1700000000,"promotion":{"type":"coupon","coupon":{"id":"c","amount_off":500,"currency":"usd","duration":"once","duration_in_months":null,"percent_off":null}}},
+			{"id":"promo_2","code":"Y","active":true,"promotion":{"type":"coupon","coupon":"c2"}},
+			{"id":"promo_3","code":"Z","active":true,"coupon":{"id":"c3","percent_off":20,"duration":"forever"}}]}`))
 	})
 	pg, err := s.AdminListPromotionCodes(context.Background(), "", 10)
-	if err != nil || len(pg.Items) != 1 || pg.Items[0].Coupon.AmountOff != 500 || pg.Items[0].ExpiresAt == "" || pg.NextCursor != "" {
-		t.Fatalf("%v %+v", err, pg)
+	if err != nil || len(pg.Items) != 3 || pg.Items[0].ExpiresAt == "" || pg.NextCursor != "" || expand != "data.promotion.coupon" {
+		t.Fatalf("%v %+v (expand %q)", err, pg, expand)
+	}
+	if c := pg.Items[0].Coupon; c.ID != "c" || c.AmountOff != 500 || c.Currency != "usd" || c.Duration != "once" {
+		t.Errorf("expanded coupon: %+v", c)
+	}
+	if c := pg.Items[1].Coupon; c.ID != "c2" {
+		t.Errorf("coupon as an id: %+v", c)
+	}
+	if c := pg.Items[2].Coupon; c.ID != "c3" || c.PercentOff != 20 {
+		t.Errorf("coupon before API 2025-09: %+v", c)
 	}
 }
 
