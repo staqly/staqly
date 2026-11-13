@@ -64,7 +64,7 @@ DELETE FROM post_targets WHERE channel_id = @channel_id AND status <> 'published
 SELECT COUNT(*) FROM channels WHERE workspace_id = ? AND deleted_at IS NULL;
 
 -- name: ExportAllChannels :many
-SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, settings, last_error, created_at, updated_at
+SELECT id, workspace_id, provider, name, handle, avatar_url, profile_url, status, settings, last_error, created_at, updated_at, group_id
 FROM channels WHERE workspace_id = ? AND deleted_at IS NULL ORDER BY created_at, id;
 
 -- name: GetProviderApp :one

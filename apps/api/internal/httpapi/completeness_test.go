@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
@@ -69,16 +70,16 @@ var exportPlan = map[string]string{
 	"webhooks":               "webhooks.json",
 	"channels":               "channels.json",
 	"schedules":              "schedules.json",
+	"post_comments":          "post_comments.ndjson",
+	"media_folders":          "media_folders.ndjson",
+	"channel_groups":         "channel_groups.ndjson",
 
-	// Left out, known: what a person made that an export does not carry today (reported, not decided here).
-	"post_comments":         "left out: review comments on posts are not exported",
-	"media_folders":         "left out: the library's folders are not exported (files are, flat)",
-	"media_projects":        "left out: designs and video projects of the editors are not exported",
-	"channel_groups":        "left out: channel groups are not exported",
-	"channel_links":         "left out: links between channels are not exported",
-	"notification_channels": "left out: alert destinations are not exported (they hold sealed secrets)",
-	"assistant_chats":       "left out: assistant conversations are not exported",
-	"agents":                "left out: connected agents are not exported",
+	// Left out by the owner's decision (2026-11-13).
+	"media_projects":        "left out: the editors' working files, in their own format; what they produce is media",
+	"channel_links":         "left out: invitation links to connect a channel are access, not content",
+	"notification_channels": "left out: alert destinations hold sealed secrets (webhook URLs, bot tokens)",
+	"assistant_chats":       "left out: conversations with the assistant are scratch work, not the workspace's content",
+	"agents":                "left out: connected agents are access (they act with keys), not content",
 	"preview_links":         "left out: share links are access, not content",
 
 	// Left out by design: secrets, people, billing and bookkeeping.
@@ -118,7 +119,18 @@ func TestWorkspaceExportCoversEveryTable(t *testing.T) {
 	declaredFor(t, "the workspace export", workspaceTables(t, e.svc.DB), exportPlan)
 
 	c := e.collection("Everything")
-	e.post(c.ID, map[string]any{"content": "one"})
+	post := e.post(c.ID, map[string]any{"content": "one"})
+	var comment app.PostComment
+	e.do(nil, "POST", "/v1/posts/"+post.ID+"/comments", e.key, map[string]any{"body": "Shorter, please"}, 201, &comment)
+	var folder app.MediaFolder
+	e.do(nil, "POST", "/v1/media-folders", e.key, map[string]any{"name": "Logos"}, 201, &folder)
+	var m app.Media
+	e.upload("/v1/media", e.key, nil, "logo.png", pngBytes, 201, &m)
+	e.do(nil, "POST", "/v1/media/bulk", e.key, map[string]any{"ids": []string{m.ID}, "folder_id": folder.ID}, 200, nil)
+	var group app.ChannelGroup
+	e.do(nil, "POST", "/v1/channel-groups", e.admin, map[string]any{"name": "Client A", "color": "#22c55e"}, 201, &group)
+	var ch app.Channel
+	e.do(nil, "POST", "/v1/channels", e.admin, map[string]any{"provider": "custom", "name": "Bot", "group_id": group.ID}, 201, &ch)
 	var job app.WorkspaceExport
 	e.do(e.browser, "POST", "/v1/workspace/export", "", nil, 202, &job, "X-CSRF-Token", e.csrf)
 	e.svc.ProcessExports(context.Background())
@@ -137,9 +149,67 @@ func TestWorkspaceExportCoversEveryTable(t *testing.T) {
 		}
 	}
 	for name := range files {
-		if name != "README.txt" && !strings.Contains(readme, name) {
+		if name != "README.txt" && !strings.HasPrefix(name, "media/") && !strings.Contains(readme, name) {
 			t.Errorf("the archive has %s, its README does not mention it", name)
 		}
+	}
+
+	// What the new files carry: the comment on its post, the folder and the file in it, the group and its channel.
+	lines := func(name string) []map[string]any {
+		t.Helper()
+		var out []map[string]any
+		for _, l := range strings.Split(strings.TrimSpace(string(files[name])), "\n") {
+			if l == "" {
+				continue
+			}
+			var v map[string]any
+			if err := json.Unmarshal([]byte(l), &v); err != nil {
+				t.Fatalf("%s: %v in %q", name, err, l)
+			}
+			out = append(out, v)
+		}
+		return out
+	}
+	if got := lines("post_comments.ndjson"); len(got) != 1 || got[0]["id"] != comment.ID || got[0]["post_id"] != post.ID || got[0]["body"] != "Shorter, please" {
+		t.Errorf("post_comments.ndjson: %v, want the one comment on its post", got)
+	}
+	if got := lines("media_folders.ndjson"); len(got) != 1 || got[0]["id"] != folder.ID || got[0]["name"] != "Logos" || got[0]["parent_id"] != "" {
+		t.Errorf("media_folders.ndjson: %v, want the Logos folder at the top level", got)
+	}
+	inFolder := false
+	for _, l := range lines("media.ndjson") {
+		inFolder = inFolder || (l["id"] == m.ID && l["folder_id"] == folder.ID)
+	}
+	if !inFolder {
+		t.Errorf("media.ndjson does not put %s in folder %s: %s", m.ID, folder.ID, files["media.ndjson"])
+	}
+	groups := map[string]map[string]any{}
+	for _, g := range lines("channel_groups.ndjson") {
+		groups[g["id"].(string)] = g
+	}
+	if g := groups[group.ID]; g == nil || g["name"] != "Client A" || g["color"] != "#22c55e" {
+		t.Errorf("channel_groups.ndjson: %v, want Client A with its color", groups)
+	}
+	var chans []map[string]any
+	if err := json.Unmarshal(files["channels.json"], &chans); err != nil {
+		t.Fatal(err)
+	}
+	grouped := false
+	for _, c := range chans {
+		grouped = grouped || (c["id"] == ch.ID && c["group_id"] == group.ID)
+		if _, ok := c["credentials"]; ok {
+			t.Errorf("channels.json carries credentials: %v", c)
+		}
+	}
+	if !grouped {
+		t.Errorf("channels.json does not put %s in group %s: %s", ch.ID, group.ID, files["channels.json"])
+	}
+	var meta struct{ Counts map[string]int }
+	if err := json.Unmarshal(files["workspace.json"], &meta); err != nil {
+		t.Fatal(err)
+	}
+	if meta.Counts["post_comments"] != 1 || meta.Counts["media_folders"] != 1 || meta.Counts["channel_groups"] != len(groups) {
+		t.Errorf("workspace.json counts %v", meta.Counts)
 	}
 }
 
