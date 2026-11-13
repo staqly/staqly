@@ -293,7 +293,25 @@ func (s *Service) runSyncEntitlements(ctx context.Context, workspaceID string) e
 	if err != nil {
 		return err
 	}
-	return s.W.SetWorkspaceEntitlements(ctx, db.SetWorkspaceEntitlementsParams{Entitlements: string(raw), UpdatedAt: s.now(), ID: workspaceID})
+	return s.tx(ctx, func(q *db.Queries) error {
+		cur, err := q.GetWorkspacePlan(ctx, workspaceID)
+		if err != nil {
+			return err
+		}
+		if err := q.SetWorkspaceEntitlements(ctx, db.SetWorkspaceEntitlementsParams{Entitlements: string(raw), UpdatedAt: s.now(), ID: workspaceID}); err != nil {
+			return err
+		}
+		if cur.Entitlements == string(raw) {
+			return nil
+		}
+		keys := make([]string, 0, len(ents))
+		for _, e := range ents {
+			keys = append(keys, e.LookupKey)
+		}
+		actor := Principal{WorkspaceID: workspaceID, Kind: PrincipalSystem, ID: "stripe", Name: "Stripe"}
+		_, err = s.emit(ctx, q, actor, "workspace.entitlements_changed", "", "", map[string]any{"features": keys})
+		return err
+	})
 }
 
 // ---- add-ons ----

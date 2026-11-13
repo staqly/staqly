@@ -58,9 +58,8 @@ export function AddonsSection({
   const [removing, setRemoving] = useState<Addon | null>(null)
   const done = (msg: string) => {
     toast.success(msg, { description: 'Your limits update in a few seconds.' })
+    // The features arrive with Stripe's next event; LiveUpdates reads the plan again on workspace.entitlements_changed.
     void qc.invalidateQueries({ queryKey: qk.addons })
-    // The features arrive with Stripe's next event: read the plan again shortly.
-    setTimeout(() => void qc.invalidateQueries({ queryKey: qk.usage }), 4000)
   }
   const add = useMutation({
     mutationFn: (a: Addon) => api.addAddon(a.id),

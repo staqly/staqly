@@ -76,8 +76,14 @@ func (s *Service) ReplaceMedia(ctx context.Context, p Principal, id, filename st
 			UpdatedAt: now, WorkspaceID: p.WorkspaceID}); err != nil {
 			return err
 		}
-		_, err := q.TrashMedia(ctx, db.TrashMediaParams{DeletedAt: nullStr(now), WorkspaceID: p.WorkspaceID, ID: id})
-		return err
+		if _, err := q.TrashMedia(ctx, db.TrashMediaParams{DeletedAt: nullStr(now), WorkspaceID: p.WorkspaceID, ID: id}); err != nil {
+			return err
+		}
+		// The edited file took the original's name, folder and tags; the original went to Deleted.
+		if err := s.emitMedia(ctx, q, p, "media.updated", map[string]any{"media_ids": []string{edited.ID}}); err != nil {
+			return err
+		}
+		return s.emitMedia(ctx, q, p, "media.deleted", map[string]any{"media_ids": []string{id}})
 	})
 	if err != nil {
 		_ = s.DiscardUpload(ctx, p, edited.ID)

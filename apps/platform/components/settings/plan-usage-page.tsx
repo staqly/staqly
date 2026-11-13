@@ -329,8 +329,8 @@ function useCheckoutReturn() {
     const credits = params.get('credits')
 
     if (credits === 'success') {
+      // They show once Stripe's webhook adds them: LiveUpdates reloads billing on workspace.credits_added.
       toast.success('Payment received', { description: 'Your extra X posts show here in a moment.' })
-      setTimeout(() => void qc.invalidateQueries({ queryKey: qk.xPosts }), 3000)
     }
 
     if (result === 'success' || result === 'switched') {

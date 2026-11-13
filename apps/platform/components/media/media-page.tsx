@@ -43,6 +43,7 @@ import {
   removeMedia,
   restoreInCache,
   shareMediaPages,
+  useLiveMedia,
 } from '@/components/media/media-cache'
 import {
   folderAndBelow,
@@ -234,6 +235,8 @@ function folderChain(folders: { id: string; name: string; parent_id: string }[],
 
 export function MediaPage() {
   const qc = useQueryClient()
+
+  useLiveMedia()
   const { canWrite } = useRole()
   const [search, setSearch] = useState('')
   const [q, setQ] = useState('')

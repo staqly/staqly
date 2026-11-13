@@ -117,6 +117,8 @@ objects carry them in `data` (`data.channel`, `data.schedule`, `data.webhook`).
 | `post.target_removed` | One target was removed from its platform, by unpublishing or, with `deleted_outside: true`, by someone deleting it there (found when staqly read its numbers) | `channel_id`, `channel` (as above), `deleted_outside` |
 | `post.target_remove_failed` | Removing a target failed | `channel_id`, `channel` (as above), `error` |
 | `post.responses_analyzed` | The AI read the [audience comments](/dashboard/posts#audience-comments) of a post (actor: staqly) | `channels`, `positive`, `neutral`, `negative` |
+| `post.responses_updated` | A read of a channel's comments found new ones or changed ones (text or likes); once per read, none when nothing changed (actor: staqly) | `channel_id`, `changed` (how many) |
+| `post.metrics_updated` | A target's numbers changed: read from the platform, sent by Meta, or [reported by your automation](/channels/your-own-automation); none when they stayed the same | `channel_id` |
 | `post.deleted` | A post was deleted (its history is kept) | — |
 | `post.preview_shared` | A [preview link](/dashboard/share-a-preview) was made | `preview_id`, `expires_at` |
 | `post.feedback_added` | Someone commented on a preview (actor: their name) | `comment_id`, `author_name`, `body` (first 280 characters), `quote`; `channel_id` when it is about one channel |
@@ -157,6 +159,10 @@ publishing history.
 | `workspace.plan_changed` | The [plan](/plans) changed: a Stripe subscription, or set by the operator | `from`, `to`, `expires_at`, `reason` (`stripe:<status>`, `operator`, `operator_comp`) |
 | `workspace.trial_review` | The free trial reused an earlier unpaid trial's accounts or card (cloud, see [Plans](/plans#the-starter-trial)): paused for review, ended for its card, or cleared by staqly support | `state` (`paused`, `ended`, `cleared`), `reason` (`channels`, `card`), `charged` (ended), `by` (cleared) |
 | `workspace.credits_added` | A bought bundle of extra posts to X was paid for (Stripe Checkout) | `provider` (`x`), `posts`, `expires_at` (the end of the billing period) |
+| `workspace.entitlements_changed` | What the subscription grants changed (an [add-on](/plans) added or removed, a feature set at Stripe) | `features` (the lookup keys now active) |
+| `media.created` | A file was added to the [media library](/dashboard/media) (uploaded, made with AI, a stock photo, an edit saved) | `media_ids` |
+| `media.updated` | Files were renamed, moved, tagged or restored from Deleted, or a library folder was created, changed or deleted | `media_ids`; for a folder `folder_id` (on delete also `parent_id`, `folder_deleted`) |
+| `media.deleted` | Files went to Deleted or were deleted for good | `media_ids` |
 | `workspace.account_attached` | A workspace without people got its first owner: they accepted an owner invitation (e.g. one the operator handed over) | `account_id`, `owner_user_id`, `sessions_revoked`, `api_keys_adopted`, `connect_links_expired` |
 | `member.updated` | A member's role changed (cloud) | `user_id`, `role`, `previous_role` |
 | `member.removed` | A member was removed, or left (cloud) | `user_id`, `role`, `left` |
@@ -202,6 +208,11 @@ only for callers who can list the resource itself.
 
 A viewer, or a key with only `events:read`, sees post, collection, channel, schedule and workspace events.
 Webhook deliveries are not filtered this way: creating a webhook already needs `webhooks:manage`.
+
+`post.responses_updated`, `post.metrics_updated`, `workspace.entitlements_changed` and the `media.*` events
+keep open pages current and come often. Webhooks get them like any other event, but an **alert** gets
+one only when it names the type itself (`"post.metrics_updated"`), never through `"*"` or a glob, and
+they never become personal notifications.
 
 Webhooks and alerts get audit events only when a pattern names their family
 (`"session.*"`, `"api_key.revoked"`), never through `"*"` or another glob, and only an admin may

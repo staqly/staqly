@@ -1,8 +1,9 @@
-import { type InfiniteData, type QueryClient, replaceEqualDeep } from '@tanstack/react-query'
+import { type InfiniteData, type QueryClient, replaceEqualDeep, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useRef } from 'react'
 
-import type { Media, MediaLibraryItem, MediaPage, MediaQuery } from '@/lib/api'
+import { api, type Media, type MediaLibraryItem, type MediaPage, type MediaQuery, type StashEvent } from '@/lib/api'
 import { mediaKind } from '@/lib/media'
-import { qk } from '@/lib/queries'
+import { createRecentIds, qk, useRecentEvents } from '@/lib/queries'
 
 /**
  * The media library's cache. Mutations write their answer into the cached lists (the library's paged lists and
@@ -18,6 +19,35 @@ export const mediaKeys = {
 }
 
 type Library = InfiniteData<MediaPage, number>
+
+/**
+ * Files and folders this tab wrote into the cache itself: their media.* events have nothing new for it.
+ * shortcut: media has no version, so a change made elsewhere to the same file within the TTL is missed until the
+ * next focus refetch; put a version into media events if that matters.
+ */
+const appliedHere = createRecentIds(15_000)
+// True while applying changes made elsewhere: those writes are not this tab's.
+let applyingForeign = false
+
+function markHere(ids: Iterable<string>) {
+  if (applyingForeign) {
+    return
+  }
+
+  for (const id of ids) {
+    appliedHere.add(id)
+  }
+}
+
+function asForeign(apply: () => void) {
+  applyingForeign = true
+
+  try {
+    apply()
+  } finally {
+    applyingForeign = false
+  }
+}
 
 /**
  * Structural sharing by id (like `sharePages` for posts): a file added or removed locally shifts every later
@@ -164,6 +194,8 @@ export function refreshMediaCounts(qc: QueryClient) {
 export function insertMedia(qc: QueryClient, items: MediaLibraryItem[]) {
   const stale: (readonly unknown[])[] = []
 
+  markHere(items.map((m) => m.id))
+
   for (const { key, query, data } of libraries(qc)) {
     let next = data
 
@@ -202,9 +234,12 @@ export function insertMedia(qc: QueryClient, items: MediaLibraryItem[]) {
       continue
     }
 
-    const ids = new Set(fresh.map((m) => m.id))
+    const byId = new Map(fresh.map((m) => [m.id, m]))
+    const kept = data.data.map((m) => byId.get(m.id) ?? m)
+    const known = new Set(data.data.map((m) => m.id))
 
-    qc.setQueryData<MediaPage>(key, { ...data, data: [...fresh, ...data.data.filter((m) => !ids.has(m.id))] })
+    // A file already listed keeps its place; new ones go first.
+    qc.setQueryData<MediaPage>(key, { ...data, data: [...fresh.filter((m) => !known.has(m.id)), ...kept] })
   }
 
   refetchLists(qc, stale)
@@ -213,6 +248,8 @@ export function insertMedia(qc: QueryClient, items: MediaLibraryItem[]) {
 /** Files gone from lists (deleted, purged, restored out of Deleted): from the lists `where` picks (default all). */
 export function removeMedia(qc: QueryClient, ids: string[], where: (query: MediaQuery) => boolean = () => true) {
   const gone = new Set(ids)
+
+  markHere(ids)
 
   for (const { key, query, data } of libraries(qc)) {
     if (!where(query) || !data.pages.some((p) => p.data.some((m) => gone.has(m.id)))) {
@@ -244,6 +281,8 @@ export function removeMedia(qc: QueryClient, ids: string[], where: (query: Media
  */
 export function patchMedia(qc: QueryClient, ids: string[], patch: (m: MediaLibraryItem) => MediaLibraryItem) {
   const want = new Set(ids)
+
+  markHere(ids)
 
   for (const { key, query, data } of libraries(qc)) {
     if (!data.pages.some((p) => p.data.some((m) => want.has(m.id)))) {
@@ -311,6 +350,7 @@ export function trashInCache(qc: QueryClient, ids: string[]) {
 
 /** A folder deleted: its files move up to its parent (its own list goes), and the parent's lists reload. */
 export function folderGoneInCache(qc: QueryClient, folder: { id: string; parent_id: string }) {
+  markHere([folder.id])
   const ids = libraries(qc).flatMap(({ data }) =>
     data.pages.flatMap((p) => p.data.filter((m) => m.folder_id === folder.id).map((m) => m.id)),
   )
@@ -322,4 +362,123 @@ export function folderGoneInCache(qc: QueryClient, folder: { id: string; parent_
   })
   invalidateLists(qc, (query) => query.folder === (folder.parent_id || 'root'))
   void qc.invalidateQueries({ queryKey: mediaKeys.folders, exact: true })
+}
+
+/** Files created or changed elsewhere: patched where cached (keeping their use counts), added to the lists they now fit. */
+export function upsertMedia(qc: QueryClient, items: Media[]) {
+  const known = findMedia(
+    qc,
+    items.map((m) => m.id),
+  )
+  const full = items.map((m) => ({ ...m, uses: known.get(m.id)?.uses ?? 0 }))
+  const byId = new Map(full.map((m) => [m.id, m]))
+
+  patchMedia(qc, [...byId.keys()], (m) => ({ ...byId.get(m.id)!, uses: m.uses }))
+  insertMedia(qc, full)
+  refreshMediaCounts(qc)
+}
+
+/**
+ * Keeps the media views current with what agents and other tabs change: reads the shell's recent-events poll (no
+ * request of its own) and applies new media.* events. Mounted by the views that show media, so other pages don't
+ * carry this module. shortcut: two views open at once (the library and the composer's picker) each read a changed
+ * file; the writes are the same, so only the request repeats.
+ */
+export function useLiveMedia() {
+  const qc = useQueryClient()
+  const events = useRecentEvents().data
+  const seen = useRef<number | undefined>(undefined)
+
+  useEffect(() => {
+    if (!events) {
+      return
+    }
+
+    const previous = seen.current
+
+    seen.current = events[0]?.seq ?? 0
+
+    if (previous === undefined) {
+      return
+    }
+
+    const media = events.filter((e) => e.seq > previous && e.type.startsWith('media.'))
+
+    if (media.length) {
+      void applyMediaEvents(qc, media)
+    }
+  }, [events, qc])
+}
+
+/** More files than this in one burst reload the lists instead of being read one by one. */
+const MAX_FETCH = 20
+
+/**
+ * media.* events this tab didn't cause (an agent over MCP, another tab): files read one by one and written into the
+ * cached lists, files gone taken out, folder changes refetch the folder tree. Nothing when no media view is cached.
+ */
+export async function applyMediaEvents(qc: QueryClient, events: StashEvent[]) {
+  if (!qc.getQueryCache().findAll({ queryKey: ['media'] }).length) {
+    return
+  }
+
+  const changed = new Set<string>()
+  const gone = new Set<string>()
+  let folders = false
+
+  for (const e of events) {
+    const d = (e.data ?? {}) as {
+      media_ids?: string[]
+      folder_id?: string
+      parent_id?: string
+      folder_deleted?: boolean
+    }
+    const ids = d.media_ids ?? []
+
+    if (d.folder_id) {
+      if (appliedHere.has(d.folder_id)) {
+        continue
+      }
+
+      folders = true
+
+      if (d.folder_deleted) {
+        asForeign(() => folderGoneInCache(qc, { id: d.folder_id!, parent_id: d.parent_id ?? '' }))
+      }
+    }
+
+    for (const id of ids.filter((x) => !appliedHere.has(x))) {
+      if (e.type === 'media.deleted') {
+        gone.add(id)
+        changed.delete(id)
+      } else {
+        changed.add(id)
+      }
+    }
+  }
+
+  if (gone.size) {
+    asForeign(() => trashInCache(qc, [...gone]))
+  }
+
+  if (changed.size > MAX_FETCH) {
+    invalidateLists(qc, () => true)
+    void qc.invalidateQueries({ queryKey: mediaKeys.pickers })
+    refreshMediaCounts(qc)
+
+    return
+  }
+
+  if (changed.size) {
+    const read = await Promise.all([...changed].map((id) => api.media(id).catch(() => null)))
+
+    asForeign(() =>
+      upsertMedia(
+        qc,
+        read.filter((m): m is Media => m !== null),
+      ),
+    )
+  } else if (folders) {
+    void qc.invalidateQueries({ queryKey: mediaKeys.folders, exact: true })
+  }
 }

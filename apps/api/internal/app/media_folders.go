@@ -243,7 +243,7 @@ func (s *Service) CreateMediaFolder(ctx context.Context, p Principal, in MediaFo
 			return err
 		}
 		out = toMediaFolder(f, 0)
-		return nil
+		return s.emitMedia(ctx, q, p, "media.updated", map[string]any{"folder_id": f.ID})
 	})
 	return out, err
 }
@@ -281,7 +281,7 @@ func (s *Service) UpdateMediaFolder(ctx context.Context, p Principal, id string,
 		}
 		f.Name, f.ParentID = name, parent
 		out = toMediaFolder(f, 0)
-		return nil
+		return s.emitMedia(ctx, q, p, "media.updated", map[string]any{"folder_id": f.ID})
 	})
 	return out, err
 }
@@ -306,8 +306,10 @@ func (s *Service) DeleteMediaFolder(ctx context.Context, p Principal, id string)
 			FromFolder: id}); err != nil {
 			return err
 		}
-		_, err = q.DeleteMediaFolder(ctx, db.DeleteMediaFolderParams{WorkspaceID: p.WorkspaceID, ID: id})
-		return err
+		if _, err := q.DeleteMediaFolder(ctx, db.DeleteMediaFolderParams{WorkspaceID: p.WorkspaceID, ID: id}); err != nil {
+			return err
+		}
+		return s.emitMedia(ctx, q, p, "media.updated", map[string]any{"folder_id": id, "parent_id": f.ParentID, "folder_deleted": true})
 	})
 }
 
@@ -391,7 +393,10 @@ func (s *Service) BulkUpdateMedia(ctx context.Context, p Principal, in MediaBulk
 			}
 			out.Updated = append(out.Updated, id)
 		}
-		return nil
+		if len(out.Updated) == 0 {
+			return nil
+		}
+		return s.emitMedia(ctx, q, p, "media.updated", map[string]any{"media_ids": out.Updated})
 	})
 	return out, err
 }
