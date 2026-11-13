@@ -8,6 +8,7 @@ import {
   Folder,
   FolderInput,
   FolderPlus,
+  KeyRound,
   Pencil,
   PlugZap,
   Plus,
@@ -57,7 +58,7 @@ import { useLazyDialog } from '@/hooks/use-lazy-dialog'
 import { useScrollFade } from '@/hooks/use-scroll-fade'
 import { api, errorMessage, type Channel, type ChannelGroup, type Provider } from '@/lib/api'
 import { setDragChip } from '@/lib/drag-chip'
-import { formatDateTime, pluralize, timeAgo } from '@/lib/format'
+import { formatDateTime, monthDayFormat, parseDate, pluralize, timeAgo } from '@/lib/format'
 import { LINKS_HELP, LINKS_LABELS, type LinksMode } from '@/lib/links'
 import { namedErrorToast, namedToast, toastApiError } from '@/lib/notify'
 import { ProviderIcon } from '@/lib/providers'
@@ -65,6 +66,7 @@ import { qk, refetchPostListsFromStart, useChannelGroups, useChannels, useProvid
 import { safeHttpUrl } from '@/lib/safe'
 import { TONES } from '@/lib/tones'
 import { cn } from '@/lib/utils'
+import { clearOAuthReturn, setOAuthReturn } from '@/lib/welcome'
 
 import { ChannelAvatar } from './channel-avatars'
 import { ConnectLinkButton } from './connect-link-dialog'
@@ -329,6 +331,16 @@ function ChannelErrorNote({ id, message }: { id: string; message: string }) {
 
 const broken = (c: Channel) => c.status === 'needs_reconnect'
 
+/**
+ * The day a working channel's sign-in runs out, once that is two weeks away or less: the platform ends it and
+ * staqly can't renew it by itself (`renew_by`: LinkedIn without refresh tokens), so the row asks for a renewal.
+ */
+function renewDue(c: Channel): Date | null {
+  const by = c.status === 'connected' ? parseDate(c.renew_by) : null
+
+  return by && by.getTime() - Date.now() <= 14 * 86_400_000 ? by : null
+}
+
 /** What a row can ask the page for; one stable object for every row. */
 interface RowActions {
   settings: (c: Channel) => void
@@ -337,6 +349,8 @@ interface RowActions {
   move: (c: Channel, group: ChannelGroup) => void
   remove: (c: Channel) => void
   reconnect: (c: Channel) => void
+  /** Straight to the platform's sign-in and back: no drawer in between. */
+  renew: (c: Channel) => void
 }
 
 /**
@@ -364,6 +378,8 @@ const ChannelRow = memo(function ChannelRow({
   const profile = channel.profile_url ? safeHttpUrl(channel.profile_url) : null
   const noteId = useId()
   const noteShown = channel.status === 'needs_reconnect' && !!channel.last_error
+  const renewBy = renewDue(channel)
+  const platformName = provider?.name ?? 'the platform'
 
   return (
     // Name and platform on the left (two lines), the post activity in its own column, then the menu. Phones put the
@@ -415,6 +431,15 @@ const ChannelRow = memo(function ChannelRow({
           )}
         </span>
         {noteShown && <ChannelErrorNote id={noteId} message={channel.last_error} />}
+        {renewBy && (
+          <span
+            data-testid="channel-renew-by"
+            title={`${platformName} ends this sign-in then, and posts after that wait. Renew takes one click while you are signed in to ${platformName}.`}
+            className={cn('mt-0.5 block text-xs', TONES.warning.text)}
+          >
+            Renew by {monthDayFormat().format(renewBy)}
+          </span>
+        )}
       </span>
       <div className="max-sm:col-start-2 max-sm:row-start-2">
         <ChannelActivityLine activity={channel.activity} />
@@ -423,6 +448,11 @@ const ChannelRow = memo(function ChannelRow({
         {channel.status === 'needs_reconnect' && (
           <Button size="sm" onClick={() => on.reconnect(channel)}>
             <PlugZap /> Reconnect
+          </Button>
+        )}
+        {renewBy && (
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => on.renew(channel)}>
+            <KeyRound /> Renew
           </Button>
         )}
         <DropdownMenu>
@@ -446,6 +476,11 @@ const ChannelRow = memo(function ChannelRow({
             {channel.status === 'needs_reconnect' && (
               <DropdownMenuItem onSelect={() => on.reconnect(channel)}>
                 <PlugZap /> Reconnect
+              </DropdownMenuItem>
+            )}
+            {channel.status === 'connected' && channel.renew_by && (
+              <DropdownMenuItem onSelect={() => on.renew(channel)} disabled={busy}>
+                <KeyRound /> Renew sign-in
               </DropdownMenuItem>
             )}
             {channel.status !== 'needs_reconnect' &&
@@ -846,6 +881,25 @@ export function ChannelsPage() {
     },
     onError: (e) => toastApiError(e),
   })
+  const {
+    mutate: renewChannel,
+    isPending: renewing,
+    variables: renewed,
+  } = useMutation({
+    // The same sign-in as connecting: the platform sends the browser back and the same account renews this channel.
+    mutationFn: (c: Channel) => api.oauthStart(c.provider),
+    onSuccess: ({ url }) => {
+      // Back to the group the person was looking at; Default is where the callback lands anyway.
+      if (groupParam) {
+        setOAuthReturn(`/channels?group=${encodeURIComponent(groupParam)}`)
+      } else {
+        clearOAuthReturn()
+      }
+
+      window.location.assign(url)
+    },
+    onError: (e) => toastApiError(e),
+  })
   const del = useMutation({
     mutationFn: (c: Channel) => api.deleteChannel(c.id),
     onSuccess: (_, c) => {
@@ -859,12 +913,12 @@ export function ChannelsPage() {
     onError: (e) => toastApiError(e),
   })
   // The row whose action runs (its menu items wait); the other rows keep their props.
-  const busyId = testing ? tested?.id : toggling ? toggled?.id : moving ? moved?.id : undefined
+  const busyId = testing ? tested?.id : toggling ? toggled?.id : moving ? moved?.id : renewing ? renewed?.id : undefined
   // One stable object for every row: it reads the latest mutations from a ref, so rows never re-render for it.
-  const latest = useRef({ moveChannel, testChannel, toggleChannel, setOpen: add.setOpen })
+  const latest = useRef({ moveChannel, testChannel, toggleChannel, renewChannel, setOpen: add.setOpen })
 
   useEffect(() => {
-    latest.current = { moveChannel, testChannel, toggleChannel, setOpen: add.setOpen }
+    latest.current = { moveChannel, testChannel, toggleChannel, renewChannel, setOpen: add.setOpen }
   })
 
   const [rowActions] = useState<RowActions>(() => ({
@@ -873,6 +927,7 @@ export function ChannelsPage() {
     toggle: (c) => latest.current.toggleChannel(c),
     move: (c, group) => latest.current.moveChannel({ id: c.id, group }),
     remove: setRemoving,
+    renew: (c) => latest.current.renewChannel(c),
     reconnect: (c) => {
       setReconnect(c)
       latest.current.setOpen(true)

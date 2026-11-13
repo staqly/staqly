@@ -47,7 +47,14 @@ export function OAuthCallback() {
 
     if (back) {
       clearOAuthReturn()
-      router.replace(err ? `${back}&error=${encodeURIComponent(err)}` : back)
+      // Channels itself (a renewal started under a group filter) shows the error with its own parameters.
+      router.replace(
+        !err
+          ? back
+          : back.startsWith('/channels?')
+            ? `${back}&${new URLSearchParams({ connect_error: err, provider })}`
+            : `${back}&error=${encodeURIComponent(err)}`,
+      )
 
       return
     }

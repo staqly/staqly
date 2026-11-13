@@ -14,6 +14,7 @@ const EVENTS: Record<string, string> = {
   'post.failed': 'posts that failed to publish',
   'post.feedback_added': 'feedback on previews',
   'channel.needs_reconnect': 'channels that need reconnecting',
+  'channel.expiring': 'channel sign-ins that run out soon',
   'schedule.posts_requested': 'schedules out of posts',
   'invitation.accepted': 'people joining',
 }

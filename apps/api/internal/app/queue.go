@@ -560,6 +560,7 @@ func (s *Service) RunJobs(ctx context.Context) {
 		s.logger(ctx).Error("job queue did not start", "err", err)
 		return
 	}
+	s.advanceRenewalNotices(ctx)
 	sweep := time.NewTicker(time.Minute)
 	defer sweep.Stop()
 	for {

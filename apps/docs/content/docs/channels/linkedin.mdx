@@ -69,12 +69,35 @@ existing channel.
 </Step>
 </Steps>
 
-## Reconnecting every 60 days
+## Renewing the sign-in every 60 days
 
-LinkedIn's sign-in lasts **60 days**, and LinkedIn renews it automatically only for apps in its
-partner programs. So after 60 days the channel turns **Needs reconnect** (an
-[alert](/automation/alerts) can tell you): open the row's menu and reconnect it, which takes a click
-while you are signed in to LinkedIn. Until then, posts to it fail with the reason.
+LinkedIn's sign-in lasts **60 days**. LinkedIn lets an app renew it by itself only with *refresh
+tokens*, which it gives to apps approved for its Marketing Developer Platform (see below); the two
+self-serve products above come without them. So someone signs in again within 60 days, and staqly
+makes that one click:
+
+- In the last 14 days the channel's row on **Channels** says **Renew by** with the date and has a
+  **Renew** button; **Renew sign-in** is in the row's menu all the time. It goes to LinkedIn and
+  comes straight back: while you are signed in to linkedin.com and the sign-in has not run out yet,
+  LinkedIn skips its permission page. The channel then has 60 more days.
+- 14 days ahead staqly emits [`channel.expiring`](/api/events) once. The bell shows it; in the cloud
+  owners and admins also get an email (**Settings → Notifications**), and an
+  [alert](/automation/alerts) or a webhook with that event tells you anywhere else. Over the API the
+  date is the channel's `renew_by`.
+- The composer warns when a post is scheduled for after that date.
+- If nobody renews it, the channel turns **Needs reconnect** when the sign-in runs out (the
+  `channel.needs_reconnect` event, one of an alert's defaults) and its posts fail with the reason
+  until someone reconnects it.
+
+### Renewing without a person: refresh tokens
+
+LinkedIn gives [refresh tokens](https://learn.microsoft.com/linkedin/shared/authentication/programmatic-refresh-tokens)
+(valid 365 days) to apps it approved for a Marketing Developer Platform product, such as the
+**Community Management API** that [LinkedIn Page](/channels/linkedin_page) needs. There is no
+setting for it in staqly: when LinkedIn returns a refresh token at sign-in, staqly stores it and
+renews the 60-day sign-in by itself a day before it ends, so a person signs in once a year instead.
+A channel that renews itself has no **Renew by** date. After the server's LinkedIn app gets such a
+product, renew each channel once to pick the refresh token up.
 
 ## Limits
 

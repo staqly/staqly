@@ -25,7 +25,7 @@ import (
 // separate and unchanged.
 
 // PersonalEvents are the events a person can get, in the order the settings list them.
-var PersonalEvents = []string{"post.published", "post.failed", "post.feedback_added", "channel.needs_reconnect",
+var PersonalEvents = []string{"post.published", "post.failed", "post.feedback_added", "channel.needs_reconnect", "channel.expiring",
 	"schedule.posts_requested", "invitation.accepted"}
 
 // Who an event is for: posts go to their author (and to everyone who chose every post); the rest to the
@@ -419,6 +419,8 @@ func digestTitle(typ string, n int) string {
 		return fmt.Sprintf("%d new comments from reviewers", n)
 	case "channel.needs_reconnect":
 		return fmt.Sprintf("%d channels need reconnecting", n)
+	case "channel.expiring":
+		return fmt.Sprintf("%d channels need their sign-in renewed", n)
 	case "schedule.posts_requested":
 		return fmt.Sprintf("%d schedules are out of posts", n)
 	case "invitation.accepted":
@@ -504,6 +506,18 @@ func (s *Service) personalEmail(ctx context.Context, ev db.Event, u db.User) (st
 		d.Paragraphs = []string{"Staqly can't publish to this channel until someone signs in to it again. Posts for it wait meanwhile."}
 		d.Error = truncateRunes(str(data, "error"), 300)
 		d.Button = &emailLink{Text: "Reconnect the channel", URL: s.webURL() + "/channels"}
+	case "channel.expiring":
+		ch, _ := data["channel"].(map[string]any)
+		name, platform, by := firstNonEmpty(str(ch, "name"), "A channel"), providerName(str(ch, "provider")), "soon"
+		if t, err := time.Parse(timeFormat, str(ch, "renew_by")); err == nil {
+			by = "on " + t.Format("2 January")
+		}
+		d.Title = name + ": renew the sign-in, it runs out " + by
+		d.Channel = &emailChannel{Name: name, AvatarURL: str(ch, "avatar_url"),
+			Detail: strings.Join(slices.DeleteFunc([]string{platform, str(ch, "handle")}, func(v string) bool { return v == "" }), " · ")}
+		d.Paragraphs = []string{platform + " ends this channel's sign-in " + by + " and gives staqly no way to renew it by itself. " +
+			"Renew it before then: one click while you are signed in to " + platform + ". After that date its posts wait until someone signs in again."}
+		d.Button = &emailLink{Text: "Renew the sign-in", URL: s.webURL() + "/channels"}
 	case "schedule.posts_requested":
 		sch, _ := data["schedule"].(map[string]any)
 		d.Title = firstNonEmpty(str(sch, "name"), "A schedule") + " is out of posts"

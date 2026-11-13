@@ -56,6 +56,9 @@ func (LinkedInPage) AuthURL(app App, redirect, state string, _ map[string]string
 	return linkedinOAuth + "/authorization?" + q.Encode(), nil
 }
 
+// RunsOut: as LinkedIn's, for an app whose tier gives no refresh tokens.
+func (LinkedInPage) RunsOut(c Credentials) (time.Time, bool) { return LinkedIn{}.RunsOut(c) }
+
 // The keys are checked the same way as LinkedIn's (an app token request).
 func (LinkedInPage) CheckApp(ctx context.Context, app App, redirect string) (bool, error) {
 	return LinkedIn{}.CheckApp(ctx, app, redirect)

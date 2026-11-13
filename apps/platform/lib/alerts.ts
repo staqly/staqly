@@ -29,6 +29,7 @@ export const CHANNEL_EVENTS: { value: string; hint: string; group: string }[] = 
   { value: 'schedule.posts_requested', hint: 'A schedule asked for new posts', group: 'Schedules' },
   { value: 'schedule.failed', hint: 'A schedule run failed', group: 'Schedules' },
   { value: 'channel.needs_reconnect', hint: 'A channel lost its sign-in', group: 'Channels' },
+  { value: 'channel.expiring', hint: 'A sign-in runs out in two weeks and needs renewing', group: 'Channels' },
 ]
 
 export const DIGEST_PRESETS = [0, 60, 300, 900, 3600, 86400]
