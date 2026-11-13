@@ -174,9 +174,11 @@ export function Providers({ children }: { children: ReactNode }) {
         <Analytics />
         <TooltipProvider delayDuration={300}>
           {children}
-          {/* At the top: at the bottom right a toast lay on a drawer's footer buttons (Save, Publish now) and
-              stayed there while the pointer rested on them, so the same button could not be clicked again. */}
-          <Toaster position="top-center" closeButton mobileOffset={{ top: 'calc(env(safe-area-inset-top) + 16px)' }} />
+          <Toaster
+            position="bottom-right"
+            closeButton
+            mobileOffset={{ bottom: 'calc(env(safe-area-inset-bottom) + 76px)' }}
+          />
         </TooltipProvider>
       </QueryClientProvider>
     </ThemeProvider>

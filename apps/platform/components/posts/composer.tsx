@@ -865,6 +865,23 @@ function chipLabel(d: Date) {
   return `${dateFormats.shortDay().format(d)}, ${formatTime(d)}`
 }
 
+/** A picked channel whose sign-in the platform ends (renew_by) before the post's time: it would wait for a reconnect. */
+function RenewFirst({ channel }: { channel: Channel }) {
+  return (
+    <Callout tone="warning" size="xs" data-testid="channel-renew-first">
+      The sign-in of {channel.name} runs out {dateFormats.monthDay().format(new Date(channel.renew_by!))}, before this
+      post goes out.{' '}
+      <Link href="/channels" className="underline underline-offset-2 hover:no-underline">
+        Renew it on Channels
+      </Link>{' '}
+      by then, or the post will wait.
+    </Callout>
+  )
+}
+
+const renewsBefore = (channels: Channel[], at: Date | null) =>
+  at ? channels.filter((c) => c.renew_by && new Date(c.renew_by) < at) : NO_CHANNELS
+
 /**
  * The calendar half of the footer's split button: a popover with the day, the time, quick picks and Repeat;
  * Schedule applies them (and sends the post when it can go). Focus returns to the button on close.
@@ -874,12 +891,15 @@ function ScheduleMenu({
   repeat,
   disabled,
   streams,
+  picked,
   onApply,
   onApplyLive,
 }: {
   value: Date | null
   repeat: string
   disabled?: boolean
+  /** The post's channels: Schedule saves and closes in one step, so a sign-in that runs out first is said here. */
+  picked: Channel[]
   /** Channels whose platform says when a stream starts (live_trigger): the post can wait for one instead. */
   streams: Channel[]
   onApply: (at: Date, repeat: string) => void
@@ -963,6 +983,11 @@ function ScheduleMenu({
           </Select>
           <span className="text-xs text-muted-foreground">Times are in {tz}.</span>
         </div>
+        {renewsBefore(picked, at).map((c) => (
+          <div key={c.id} className="w-0 min-w-full border-t px-3 py-2">
+            <RenewFirst channel={c} />
+          </div>
+        ))}
         <div className="flex items-center justify-between gap-3 border-t px-3 py-2">
           <p
             className={cn('min-w-0 truncate text-sm', past && 'text-destructive')}
@@ -1283,6 +1308,7 @@ function ComposerFooter({
   publishAt,
   waitsFor,
   streams,
+  picked,
   repeatEvery,
   error,
   onClearSchedule,
@@ -1302,6 +1328,7 @@ function ComposerFooter({
   /** What the post waits for instead of a time ("When Kick goes live"), or null. */
   waitsFor: string | null
   streams: Channel[]
+  picked: Channel[]
   repeatEvery: string
   error?: string
   onClearSchedule: () => void
@@ -1325,7 +1352,10 @@ function ComposerFooter({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2 border-t p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+    <div
+      data-slot="sheet-footer"
+      className="flex flex-wrap items-center gap-2 border-t p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+    >
       {locked ? (
         <p className="ml-auto text-sm text-muted-foreground">
           {post?.status === 'publishing'
@@ -1435,6 +1465,7 @@ function ComposerFooter({
               repeat={repeatEvery}
               disabled={busy}
               streams={streams}
+              picked={picked}
               onApply={onApplySchedule}
               onApplyLive={onApplyLive}
             />
@@ -2251,20 +2282,7 @@ function ComposerBody({
                 />
                 <FieldError>{errors.targets}</FieldError>
                 {/* A sign-in the platform ends before this post's time (renew_by): it would wait for a reconnect. */}
-                {!locked &&
-                  publishAt &&
-                  picked
-                    .filter((c) => c.renew_by && new Date(c.renew_by) < publishAt)
-                    .map((c) => (
-                      <Callout key={c.id} tone="warning" size="xs" data-testid="channel-renew-first">
-                        The sign-in of {c.name} runs out {dateFormats.monthDay().format(new Date(c.renew_by!))}, before
-                        this post goes out.{' '}
-                        <Link href="/channels" className="underline underline-offset-2 hover:no-underline">
-                          Renew it on Channels
-                        </Link>{' '}
-                        by then, or the post will wait.
-                      </Callout>
-                    ))}
+                {!locked && renewsBefore(picked, publishAt).map((c) => <RenewFirst key={c.id} channel={c} />)}
                 {/* Posts to X are metered: say so before publishing when this period's are used up. */}
                 {!locked && xOut && picked.some((c) => c.provider === 'x') && (
                   <Callout tone="danger" size="xs" data-testid="x-posts-exhausted">
@@ -2450,6 +2468,7 @@ function ComposerBody({
         publishAt={publishOn ? null : publishAt}
         waitsFor={waitsFor}
         streams={streams}
+        picked={picked}
         repeatEvery={repeatEvery}
         error={errors.publish_at ?? errors.publish_on}
         onClearSchedule={() => {

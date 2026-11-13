@@ -2,10 +2,48 @@
 
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from 'lucide-react'
 import { useTheme } from 'next-themes'
-import { Toaster as Sonner, type ToasterProps } from 'sonner'
+import { useLayoutEffect } from 'react'
+import { Toaster as Sonner, type ToasterProps, useSonner } from 'sonner'
+
+const SHEET_FOOTER = '[data-slot="sheet-footer"]'
+
+function liftToasts() {
+  const footers = document.querySelectorAll<HTMLElement>(SHEET_FOOTER)
+  const height = footers[footers.length - 1]?.offsetHeight ?? 0
+
+  document.documentElement.style.setProperty('--toast-lift', `${height}px`)
+}
+
+/**
+ * Toasts sit above the footer of the open drawer (--toast-lift, used in globals.css): at the bottom right a toast
+ * lay on Save / Publish now and stayed there while the pointer rested on the button, so it could not be clicked
+ * again. Measured only while a toast shows: when it appears, and when a drawer opens, closes or resizes meanwhile.
+ */
+function useToastLift() {
+  const showing = useSonner().toasts.length > 0
+
+  useLayoutEffect(() => {
+    if (!showing) {
+      return
+    }
+
+    liftToasts()
+    const changes = new MutationObserver(liftToasts)
+
+    changes.observe(document.body, { childList: true, subtree: true })
+    window.addEventListener('resize', liftToasts)
+
+    return () => {
+      changes.disconnect()
+      window.removeEventListener('resize', liftToasts)
+    }
+  }, [showing])
+}
 
 const Toaster = ({ ...props }: ToasterProps) => {
   const { theme = 'system' } = useTheme()
+
+  useToastLift()
 
   return (
     <Sonner

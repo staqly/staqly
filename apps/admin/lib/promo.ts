@@ -1,3 +1,5 @@
+import { formatMoney } from './format'
+
 export type PromoForm = {
   code: string
   kind: 'percent' | 'amount'
@@ -121,4 +123,30 @@ export function serverPromoErrors(fields: Record<string, string>, kind: PromoFor
   }
 
   return e
+}
+
+/** A promotion code's coupon as the admin API lists it. */
+export type PromoCoupon = {
+  percent_off: number // 0 when the coupon is an amount
+  amount_off: number // minor units, 0 when a percentage
+  currency: string
+  duration: 'once' | 'repeating' | 'forever'
+  duration_in_months: number
+  deleted?: boolean // deleted in Stripe since the code was made: nothing else is known of it
+}
+
+export function couponDiscount(c: PromoCoupon) {
+  if (c.deleted) {
+    return 'Coupon deleted'
+  }
+
+  return c.percent_off ? `${c.percent_off}% off` : `${formatMoney(c.amount_off, c.currency || 'usd')} off`
+}
+
+export function couponDuration(c: PromoCoupon) {
+  if (c.deleted) {
+    return '—'
+  }
+
+  return c.duration === 'repeating' ? `${c.duration_in_months} months` : c.duration
 }

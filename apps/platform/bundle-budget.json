@@ -4,9 +4,9 @@
   "routes": {
     "/posts": 415,
     "/posts/_": 417,
-    "/channels": 398,
+    "/channels": 399,
     "/channels/callback/_": 405,
-    "/analytics": 386,
+    "/analytics": 387,
     "/media": 380,
     "/activity": 375,
     "/schedule": 375,

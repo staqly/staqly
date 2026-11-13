@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
-import { emptyPromo, promoPayload, serverPromoErrors, validatePromo, type PromoForm } from './promo'
+import {
+  couponDiscount,
+  couponDuration,
+  emptyPromo,
+  promoPayload,
+  serverPromoErrors,
+  validatePromo,
+  type PromoForm,
+} from './promo'
 
 const now = new Date('2026-11-01T12:00:00')
 const ok: PromoForm = { ...emptyPromo, code: ' spring-20 ', percent: '20' }
@@ -78,5 +86,19 @@ describe('serverPromoErrors', () => {
     expect(serverPromoErrors({ percent_off: 'one' }, 'percent')).toEqual({ percent: 'one' })
     expect(serverPromoErrors({ percent_off: 'one' }, 'amount')).toEqual({ amount: 'one' })
     expect(serverPromoErrors({ unknown: 'x' }, 'percent')).toEqual({})
+  })
+})
+
+describe('a coupon in the list', () => {
+  const coupon = { percent_off: 0, amount_off: 0, currency: '', duration: 'once' as const, duration_in_months: 0 }
+
+  it('says what it takes off and for how long', () => {
+    expect(couponDiscount({ ...coupon, percent_off: 20 })).toBe('20% off')
+    expect(couponDuration({ ...coupon, duration: 'repeating', duration_in_months: 3 })).toBe('3 months')
+  })
+
+  it('one deleted in Stripe says so, not "$0.00 off"', () => {
+    expect(couponDiscount({ ...coupon, deleted: true })).toBe('Coupon deleted')
+    expect(couponDuration({ ...coupon, deleted: true })).toBe('—')
   })
 })

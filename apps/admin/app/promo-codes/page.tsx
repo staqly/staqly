@@ -1,6 +1,6 @@
 'use client'
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { PlusIcon } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -32,33 +32,22 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { AdminApiError, adminApi, errorText } from '@/lib/api'
-import { formatDate, formatMoney } from '@/lib/format'
+import { formatDate } from '@/lib/format'
+import { couponDiscount, couponDuration, type PromoCoupon } from '@/lib/promo'
 
 type Promo = {
   id: string
   code: string
   active: boolean
-  coupon: {
-    percent_off: number // 0 when the coupon is an amount
-    amount_off: number // minor units, 0 when a percentage
-    currency: string
-    duration: 'once' | 'repeating' | 'forever'
-    duration_in_months: number
-  }
+  coupon: PromoCoupon
   times_redeemed: number
   max_redemptions: number // 0 = unlimited
   expires_at: string // '' = never
 }
 
+type Page = { items: Promo[]; next_cursor: string }
+
 const KEY = ['admin-promo-codes']
-
-function discount(c: Promo['coupon']) {
-  return c.percent_off ? `${c.percent_off}% off` : `${formatMoney(c.amount_off, c.currency || 'usd')} off`
-}
-
-function duration(c: Promo['coupon']) {
-  return c.duration === 'repeating' ? `${c.duration_in_months} months` : c.duration
-}
 
 function Deactivate({ p }: { p: Promo }) {
   const qc = useQueryClient()
@@ -138,10 +127,14 @@ function NewCode() {
 }
 
 export default function PromoCodesPage() {
-  const q = useQuery({
+  const q = useInfiniteQuery({
     queryKey: KEY,
-    queryFn: () => adminApi.get<{ items: Promo[] }>('/v1/admin/promotion-codes'),
+    initialPageParam: '',
+    queryFn: ({ pageParam }) =>
+      adminApi.get<Page>(`/v1/admin/promotion-codes?${new URLSearchParams({ cursor: pageParam })}`),
+    getNextPageParam: (last) => last.next_cursor || undefined,
   })
+  const items = q.data?.pages.flatMap((p) => p.items) ?? []
   const off = q.error instanceof AdminApiError && q.error.code === 'billing_disabled'
 
   return (
@@ -157,48 +150,55 @@ export default function PromoCodesPage() {
       ) : !q.data ? (
         <Skeleton className="h-48 w-full" />
       ) : (
-        <Card className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Code</TableHead>
-                <TableHead>Discount</TableHead>
-                <TableHead>Duration</TableHead>
-                <TableHead>Redeemed</TableHead>
-                <TableHead>Expires</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>
-                  <span className="sr-only">Actions</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {q.data.items.length === 0 && (
+        <>
+          <Card className="p-0">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={7} className="text-muted-foreground">
-                    No promo codes yet.
-                  </TableCell>
+                  <TableHead>Code</TableHead>
+                  <TableHead>Discount</TableHead>
+                  <TableHead>Duration</TableHead>
+                  <TableHead>Redeemed</TableHead>
+                  <TableHead>Expires</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>
+                    <span className="sr-only">Actions</span>
+                  </TableHead>
                 </TableRow>
-              )}
-              {q.data.items.map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell className="font-mono">{p.code}</TableCell>
-                  <TableCell>{discount(p.coupon)}</TableCell>
-                  <TableCell>{duration(p.coupon)}</TableCell>
-                  <TableCell className="tabular">
-                    {p.times_redeemed}
-                    {p.max_redemptions ? ` / ${p.max_redemptions}` : ''}
-                  </TableCell>
-                  <TableCell>{p.expires_at ? formatDate(p.expires_at) : '—'}</TableCell>
-                  <TableCell>
-                    <Badge variant={p.active ? 'default' : 'secondary'}>{p.active ? 'Active' : 'Inactive'}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right">{p.active && <Deactivate p={p} />}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
+              </TableHeader>
+              <TableBody>
+                {items.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-muted-foreground">
+                      No promo codes yet.
+                    </TableCell>
+                  </TableRow>
+                )}
+                {items.map((p) => (
+                  <TableRow key={p.id}>
+                    <TableCell className="font-mono">{p.code}</TableCell>
+                    <TableCell>{couponDiscount(p.coupon)}</TableCell>
+                    <TableCell>{couponDuration(p.coupon)}</TableCell>
+                    <TableCell className="tabular">
+                      {p.times_redeemed}
+                      {p.max_redemptions ? ` / ${p.max_redemptions}` : ''}
+                    </TableCell>
+                    <TableCell>{p.expires_at ? formatDate(p.expires_at) : '—'}</TableCell>
+                    <TableCell>
+                      <Badge variant={p.active ? 'default' : 'secondary'}>{p.active ? 'Active' : 'Inactive'}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right">{p.active && <Deactivate p={p} />}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+          {q.hasNextPage && (
+            <Button variant="outline" onClick={() => q.fetchNextPage()} disabled={q.isFetchingNextPage}>
+              {q.isFetchingNextPage ? 'Loading…' : 'Load more'}
+            </Button>
+          )}
+        </>
       )}
     </Shell>
   )

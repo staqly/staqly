@@ -355,6 +355,33 @@ describe('composer', () => {
     expect(screen.getByTestId('publish-now')).toBeInTheDocument()
   })
 
+  it("says in the schedule picker that a picked channel's sign-in runs out before the picked time", async () => {
+    // Schedule saves, schedules and closes in one step: the warning in the form alone was never seen.
+    mockApi({
+      ...routes,
+      'GET /v1/channels': {
+        data: [
+          channel({ renew_by: new Date(Date.now() + 30 * 60_000).toISOString() }),
+          channel({ id: 'ch_2', name: 'Brand on Bluesky', provider: 'bluesky' }),
+        ],
+      },
+    })
+    const user = userEvent.setup()
+
+    renderWithProviders(<Composer open onOpenChange={() => {}} collectionId="col_1" />, { mode: 'local' })
+    await pickChannels(user, 'ch_1', 'ch_2')
+    await user.click(await screen.findByRole('button', { name: 'Schedule for later' }))
+    const picker = await screen.findByRole('dialog', { name: 'Pick a date and time' })
+
+    await user.click(within(picker).getByRole('button', { name: 'In 1 hour' }))
+    const warning = await within(picker).findByTestId('channel-renew-first')
+
+    expect(warning).toHaveTextContent(/^The sign-in of .+ runs out .+, before this post goes out\./)
+    expect(within(picker).getAllByTestId('channel-renew-first')).toHaveLength(1)
+    // It doesn't stop the scheduling.
+    expect(within(picker).getByRole('button', { name: 'Schedule' })).toBeEnabled()
+  })
+
   it('counts characters per picked channel and publishes now with the picked channels', async () => {
     const api = mockApi({
       ...routes,

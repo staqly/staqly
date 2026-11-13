@@ -45,6 +45,8 @@ type AdminPromoCoupon struct {
 	Currency         string  `json:"currency"`
 	Duration         string  `json:"duration"`
 	DurationInMonths int     `json:"duration_in_months"`
+	// Deleted in Stripe since the code was made ({id, deleted: true}): nothing else is known of it.
+	Deleted bool `json:"deleted,omitempty"`
 }
 
 type AdminPromo struct {

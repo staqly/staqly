@@ -503,8 +503,10 @@ func (s *Service) AddAddon(ctx context.Context, p Principal, id string) error {
 		PendingUpdate *stripePendingUpdate `json:"pending_update"`
 		LatestInvoice json.RawMessage      `json:"latest_invoice"`
 	}
+	// The two refusals handled below, a lost race and a replaced price, are no errors of this server.
+	handled := stripeHandles(ctx, func(_ int, param string) bool { return param == "plan" || strings.HasSuffix(param, "[price]") })
 	add := func(price string) error {
-		return s.stripe(ctx, "POST", "/v1/subscriptions/"+url.PathEscape(sub.ID), url.Values{
+		return s.stripe(handled, "POST", "/v1/subscriptions/"+url.PathEscape(sub.ID), url.Values{
 			"items[0][price]":    {price},
 			"items[0][quantity]": {"1"},
 			"proration_behavior": {"always_invoice"},
@@ -569,7 +571,8 @@ func (s *Service) RemoveAddon(ctx context.Context, p Principal, id string) error
 	if sub.Status == "past_due" && s.voidInvoicesOf(ctx, sub.ID, item) {
 		proration = "none"
 	}
-	if err := s.stripe(ctx, "DELETE", "/v1/subscription_items/"+url.PathEscape(item)+"?proration_behavior="+proration, nil, nil); err != nil {
+	gone := stripeHandles(ctx, func(status int, _ string) bool { return status == 404 }) // the item, removed meanwhile
+	if err := s.stripe(gone, "DELETE", "/v1/subscription_items/"+url.PathEscape(item)+"?proration_behavior="+proration, nil, nil); err != nil {
 		// Another request removed it since the subscription was read above. Stripe says so with a 404 that has
 		// neither a code nor a parameter ("Invalid subscription_item id"), so the subscription is asked instead.
 		if now, rerr := s.liveSubscriptionOf(ctx, p.WorkspaceID); rerr == nil {

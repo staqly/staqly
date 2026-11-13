@@ -396,11 +396,32 @@
   }
 }
 
-/* Toasts with two buttons are wider (the toaster sits top centre, 480 px wide: 30 px more on each side), so their
-   title isn't squeezed into three lines beside Discard and Restore. Phones keep Sonner's full-width toasts. */
+/* Toasts stay clear of the open drawer's footer buttons (--toast-lift: its height, components/ui/sonner.tsx); on
+   phones they sit above the tab bar (the toaster's mobile offset) or that footer, whichever is higher. */
+body [data-sonner-toaster][data-y-position='bottom'] {
+  bottom: calc(var(--offset-bottom) + var(--toast-lift, 0px));
+}
+
+@media (max-width: 600px) {
+  body [data-sonner-toaster][data-y-position='bottom'] {
+    bottom: max(var(--mobile-offset-bottom), calc(var(--toast-lift, 0px) + 12px));
+  }
+}
+
+/* Sonner's light error red (#e60000 on #fff0f0) is 4.35:1, under AA for text; the danger tone's red is 5.8:1.
+   (Dark is 9.5:1 as it comes.) */
+body [data-sonner-toaster][data-sonner-theme='light'] {
+  --error-text: var(--color-red-700);
+}
+
+/* Toasts with buttons grow to the left (the toaster sits bottom right), so their title isn't squeezed into three
+   lines beside Undo or Discard and Restore. Phones keep Sonner's full-width toasts. */
 @media (min-width: 601px) {
+  [data-sonner-toast]:has([data-button]) {
+    width: 480px;
+  }
+
   [data-sonner-toast]:has([data-cancel]) {
-    left: -30px;
     width: 540px;
   }
 }

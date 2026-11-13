@@ -1,8 +1,10 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -164,10 +166,11 @@ func TestAdminPromoList(t *testing.T) {
 		_, _ = w.Write([]byte(`{"has_more":false,"data":[
 			{"id":"promo_1","code":"X","active":true,"expires_at":1700000000,"promotion":{"type":"coupon","coupon":{"id":"c","amount_off":500,"currency":"usd","duration":"once","duration_in_months":null,"percent_off":null}}},
 			{"id":"promo_2","code":"Y","active":true,"promotion":{"type":"coupon","coupon":"c2"}},
-			{"id":"promo_3","code":"Z","active":true,"coupon":{"id":"c3","percent_off":20,"duration":"forever"}}]}`))
+			{"id":"promo_3","code":"Z","active":true,"coupon":{"id":"c3","percent_off":20,"duration":"forever"}},
+			{"id":"promo_4","code":"GONE","active":true,"promotion":{"type":"coupon","coupon":{"id":"c4","object":"coupon","deleted":true}}}]}`))
 	})
 	pg, err := s.AdminListPromotionCodes(context.Background(), "", 10)
-	if err != nil || len(pg.Items) != 3 || pg.Items[0].ExpiresAt == "" || pg.NextCursor != "" || expand != "data.promotion.coupon" {
+	if err != nil || len(pg.Items) != 4 || pg.Items[0].ExpiresAt == "" || pg.NextCursor != "" || expand != "data.promotion.coupon" {
 		t.Fatalf("%v %+v (expand %q)", err, pg, expand)
 	}
 	if c := pg.Items[0].Coupon; c.ID != "c" || c.AmountOff != 500 || c.Currency != "usd" || c.Duration != "once" {
@@ -176,8 +179,11 @@ func TestAdminPromoList(t *testing.T) {
 	if c := pg.Items[1].Coupon; c.ID != "c2" {
 		t.Errorf("coupon as an id: %+v", c)
 	}
-	if c := pg.Items[2].Coupon; c.ID != "c3" || c.PercentOff != 20 {
+	if c := pg.Items[2].Coupon; c.ID != "c3" || c.PercentOff != 20 || c.Deleted {
 		t.Errorf("coupon before API 2025-09: %+v", c)
+	}
+	if c := pg.Items[3].Coupon; c.ID != "c4" || !c.Deleted {
+		t.Errorf("a coupon deleted in Stripe: %+v", c)
 	}
 }
 
@@ -205,5 +211,26 @@ func TestAdminPromoCreateFailureDeletesCoupon(t *testing.T) {
 	var n int
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM admin_audit`).Scan(&n); err != nil || n != 0 {
 		t.Fatalf("audit rows %d %v", n, err)
+	}
+}
+
+// Was noise: a refusal the caller turns into a 409 or 404 (a lost add-on race) was logged as an error like one
+// nobody handles. With stripeHandles it is a warning; anything else Stripe refuses stays an error.
+func TestHandledStripeRefusalIsAWarning(t *testing.T) {
+	s, _, _ := adminStripeTest(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(400)
+		_, _ = w.Write([]byte(`{"error":{"param":"` + r.URL.Query().Get("param") + `","type":"invalid_request_error"}}`))
+	})
+	var logs bytes.Buffer
+	s.Log = slog.New(slog.NewTextHandler(&logs, nil))
+	ctx := stripeHandles(context.Background(), func(_ int, param string) bool { return param == "plan" })
+	for param, level := range map[string]string{"plan": "level=WARN", "customer": "level=ERROR"} {
+		logs.Reset()
+		if err := s.stripe(ctx, "GET", "/v1/x?param="+param, nil, nil); err == nil {
+			t.Fatal("setup: the request was not refused")
+		}
+		if !strings.Contains(logs.String(), level) {
+			t.Errorf("a refusal of %q is logged as %q, want %s", param, logs.String(), level)
+		}
 	}
 }
