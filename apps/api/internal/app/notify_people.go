@@ -262,10 +262,14 @@ func (s *Service) recipients(ctx context.Context, ev db.Event) ([]db.User, error
 
 // personalDigestWindow: events of one kind for one person less than this apart make one email, sent by the
 // first of them once none has come for this long (plus personalDigestSlack for transactions still committing).
-// Every personal email waits this long.
+// Every personal email waits this long, and at most until the end of the personalDigestMaxWait slice of the clock
+// the first event fell in: events that keep coming (a failure every 30 seconds) must not hold back the first email.
 const (
 	personalDigestWindow = time.Minute
 	personalDigestSlack  = 10 * time.Second
+	// ponytail: slices of the clock, not the first event + 10 minutes (that would need the whole run of events
+	// before it to know which one leads), so a quick burst across a slice's end goes out as two emails.
+	personalDigestMaxWait = 10 * time.Minute
 	// shortcut: a burst over personalDigestMax events of one kind in a workspace loses the oldest ones from its
 	// email; page through ListEvents if a workspace ever sends that many at once.
 	personalDigestMax = 500
@@ -341,8 +345,8 @@ func (s *Service) runNotifyPerson(ctx context.Context, eventID, userID string) e
 }
 
 // personalBurst: the events of ev's kind that the person gets, in the burst ev leads (ev first); none when an
-// earlier one leads it, so that email lists ev. Events less than personalDigestWindow apart are one burst. A
-// non-zero wait: the burst may still grow, run again then.
+// earlier one leads it, so that email lists ev. Events less than personalDigestWindow apart and in the same
+// personalDigestMaxWait slice of the clock are one burst. A non-zero wait: the burst may still grow, run again then.
 func (s *Service) personalBurst(ctx context.Context, ev db.Event, userID string) ([]db.Event, time.Time, error) {
 	at := func(e db.Event) time.Time { t, _ := time.Parse(timeFormat, e.CreatedAt); return t }
 	rows, err := s.Q.ListEvents(ctx, db.ListEventsParams{WorkspaceID: ev.WorkspaceID, Type: ev.Type,
@@ -357,21 +361,27 @@ func (s *Service) personalBurst(ctx context.Context, ev db.Event, userID string)
 	}
 	burst := []db.Event{ev}
 	last := at(ev)
+	start := last.Truncate(personalDigestMaxWait)
+	end := start.Add(personalDigestMaxWait)
 	for _, e := range rows {
 		switch {
 		case e.Seq == ev.Seq:
 		case e.Seq < ev.Seq:
-			if gets(e) {
+			if !at(e).Before(start) && gets(e) { // one before the slice was in an email that went out at its end
 				return nil, time.Time{}, nil
 			}
-		case at(e).Sub(last) <= personalDigestWindow: // <=: a later one exactly a window after counts itself as led (FromTs is inclusive)
+		case at(e).Sub(last) <= personalDigestWindow && at(e).Before(end): // <=: a later one exactly a window after counts itself as led (FromTs is inclusive)
 			if gets(e) {
 				burst, last = append(burst, e), at(e)
 			}
 		}
 	}
-	if quiet := last.Add(personalDigestWindow + personalDigestSlack); s.Now().Before(quiet) {
-		return nil, quiet, nil
+	send := last.Add(personalDigestWindow + personalDigestSlack)
+	if capped := end.Add(personalDigestSlack); capped.Before(send) {
+		send = capped
+	}
+	if s.Now().Before(send) {
+		return nil, send, nil
 	}
 	return burst, time.Time{}, nil
 }

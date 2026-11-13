@@ -97,7 +97,7 @@ Publishing, schedule runs and sign-in refreshes are [jobs](/concepts#jobs).
 | Wait between tries | about 1, 5 and 15 minutes (up to 20% later, so retries spread out) |
 | One run of a job | publishing a target or a comment 10 min, a schedule run 3 min, a sign-in refresh 2 min |
 | A job left running by a server that stopped | queued again after 15 minutes |
-| Jobs at once | `JOB_CONCURRENCY` (default 4, at most 64); one workspace gets at most half while another waits |
+| Jobs at once | `JOB_CONCURRENCY` (default 4, at most 64); one workspace gets at most half while another waits. AI runs have their own slots on top (half as many, at least 2) |
 | Finished jobs kept | 7 days (done, failed and cancelled) |
 
 ## Webhooks and alerts

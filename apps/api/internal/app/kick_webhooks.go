@@ -152,7 +152,7 @@ func (s *Service) kickReply(ctx context.Context, q *db.Queries, channels []db.Ch
 				Url: ch.ProfileUrl, Likes: sql.NullInt64{}, CreatedAt: formatTime(created), FetchedAt: s.now()}); err != nil {
 				return n, err
 			}
-			if err := s.enqueue(ctx, q, t.WorkspaceID, "analyze_responses", "analyze_responses:"+t.PostID,
+			if err := s.debounce(ctx, q, t.WorkspaceID, "analyze_responses", "analyze_responses:"+t.PostID,
 				map[string]any{"post_id": t.PostID}, s.Now().Add(responsesAnalyzeWait), 3); err != nil {
 				return n, err
 			}

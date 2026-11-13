@@ -279,7 +279,8 @@ Statuses are `queued`, `running`, `done`, `failed` and `cancelled`. One live job
 subject (`publish_post:<post id>`): queueing the same key again replaces a queued job; a running
 one finishes its run and then runs again at the new time (never two runs at once). Up to
 `JOB_CONCURRENCY` jobs run at once (default 4), at most half of them for one workspace while
-another workspace's job waits. Done, failed and cancelled jobs are kept for 7 days. See them in **Settings → System → Queue** or with `GET /v1/jobs`; retry a
+another workspace's job waits. AI image and video runs have slots of their own (half as many, at least 2), so
+they never hold up publishing. Done, failed and cancelled jobs are kept for 7 days. See them in **Settings → System → Queue** or with `GET /v1/jobs`; retry a
 failed one, cancel a queued one (not one a worker has started). Cancelling settles what the job stood for:
 a channel fails, a scheduled post goes back to draft, a recurring schedule skips that run and queues its
 next one, a one-time schedule turns off. Retrying and cancelling need `posts:publish`; cancelling a

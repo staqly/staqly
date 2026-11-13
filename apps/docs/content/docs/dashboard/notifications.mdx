@@ -40,7 +40,8 @@ post** in the dashboard. *Publishing failed on X* shows each channel's error.
 
 Emails wait a minute and come in bursts as one: events of one kind less than a minute apart make
 one email per person, such as *3 channels need reconnecting* or *2 posts were published*, with a
-row per channel or post. Every email ends
+row per channel or post. Events that keep coming (a channel failing every 30 seconds) don't hold the email back:
+it goes out within about 10 minutes, and the later events make the next one. Every email ends
 with **Change notification preferences** and **Unsubscribe from these emails**: the link turns
 off that one kind of email at once, without signing in. Mail clients that offer a one-click
 unsubscribe button use the same link (`List-Unsubscribe`).

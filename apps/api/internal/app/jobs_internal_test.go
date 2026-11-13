@@ -280,23 +280,95 @@ func TestJobsFairShare(t *testing.T) {
 		return ""
 	}
 	ctx := context.Background()
-	if !s.fairStart(ctx, "ws_busy") {
+	if !s.fairStart(ctx, river.QueueDefault, "ws_busy") {
 		t.Fatal("first slot")
 	}
-	if !s.fairStart(ctx, "ws_busy") {
+	if !s.fairStart(ctx, river.QueueDefault, "ws_busy") {
 		t.Fatal("nobody else waits: it may take the other slot")
 	}
-	s.fairEnd("ws_busy")
+	s.fairEnd(river.QueueDefault, "ws_busy")
 	if err := s.tx(ctx, func(q *db.Queries) error {
 		return s.enqueue(ctx, q, "ws_quiet", "test_fast", "quiet:1", map[string]any{}, s.Now(), 3)
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if s.fairStart(ctx, "ws_busy") {
+	if s.fairStart(ctx, river.QueueDefault, "ws_busy") {
 		t.Fatal("over its share while another workspace waits")
 	}
-	if !s.fairStart(ctx, "ws_quiet") {
+	if !s.fairStart(ctx, river.QueueDefault, "ws_quiet") {
 		t.Fatal("the waiting workspace runs")
+	}
+}
+
+// AI runs have a queue of their own: with every slot of the default queue's size taken by AI runs polling their
+// provider, a due post still publishes.
+func TestJobsAIRunsLeaveSlotsForPosts(t *testing.T) {
+	s, _ := queueTest(t)
+	s.Getenv = func(k string) string {
+		if k == "JOB_CONCURRENCY" {
+			return "2"
+		}
+		return ""
+	}
+	jobQueues["test_slow"] = jobQueueAI // stands in for ai_run
+	t.Cleanup(func() { delete(jobQueues, "test_slow") })
+	release := make(chan struct{})
+	var slow atomic.Int32
+	var published atomic.Bool
+	testJobKinds["test_slow"] = func(ctx context.Context, _ jobArgs) error {
+		slow.Add(1)
+		select {
+		case <-release:
+		case <-ctx.Done():
+		}
+		return nil
+	}
+	testJobKinds["test_fast"] = func(context.Context, jobArgs) error { published.Store(true); return nil }
+	for i := range s.jobConcurrency() {
+		enqueueAt(t, s, "test_slow", fmt.Sprintf("ai_run:%d", i), s.Now(), nil)
+	}
+	enqueueAt(t, s, "test_fast", "publish_target:pst_1:ch_1", s.Now(), nil)
+	done := make(chan struct{})
+	go func() { s.RunDueJobsOnce(context.Background()); close(done) }()
+	defer func() { close(release); <-done }()
+	waitFor(t, "the AI runs", func() bool { return slow.Load() == int32(s.jobConcurrency()) })
+	waitFor(t, "the post, while the AI runs go on", published.Load)
+	if slow.Load() != int32(s.jobConcurrency()) {
+		t.Fatalf("AI runs: %d", slow.Load())
+	}
+}
+
+// A debounced key keeps its first run time while events keep coming; a plain enqueue still moves it (latest wins).
+func TestJobsDebounceKeepsTheFirstRunTime(t *testing.T) {
+	s, _ := queueTest(t)
+	ctx := context.Background()
+	base := time.Now().UTC().Truncate(time.Millisecond)
+	now := base
+	s.Now = func() time.Time { return now }
+	for range 3 {
+		if err := s.debounce(ctx, s.W, "ws_test", "test_fast", "deb:1", nil, now.Add(time.Minute), 3); err != nil {
+			t.Fatal(err)
+		}
+		enqueueAt(t, s, "test_fast", "move:1", now.Add(time.Minute), nil)
+		now = now.Add(30 * time.Second)
+	}
+	if js := jobsByKey(t, s, "deb:1"); len(js) != 1 || js[0].ScheduledAt.Sub(base.Add(time.Minute)).Abs() > time.Millisecond {
+		t.Fatalf("debounced: want first event + 1 min (%s), got %+v", base.Add(time.Minute), js)
+	}
+	if js := jobsByKey(t, s, "move:1"); len(js) != 1 || js[0].ScheduledAt.Sub(base.Add(2*time.Minute)).Abs() > time.Millisecond {
+		t.Fatalf("plain enqueue: want last event + 1 min (%s), got %+v", base.Add(2*time.Minute), js)
+	}
+	// A key whose job is running waits in its requeue, which keeps its first run time too.
+	first := base.Add(time.Minute)
+	if err := s.Q.UpsertJobRequeue(ctx, db.UpsertJobRequeueParams{Key: "deb:2", WorkspaceID: "ws_test", Kind: "test_fast",
+		Payload: "{}", RunAt: formatTime(first), MaxAttempts: 3, CreatedAt: s.now()}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.debounce(ctx, s.W, "ws_test", "test_fast", "deb:2", nil, first.Add(time.Minute), 3); err != nil {
+		t.Fatal(err)
+	}
+	if r, err := s.Q.GetJobRequeue(ctx, "deb:2"); err != nil || r.RunAt != formatTime(first) {
+		t.Fatalf("requeue: %+v %v", r, err)
 	}
 }
 
@@ -523,15 +595,18 @@ func TestOthersWaitingBehindALongBacklog(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if s.othersWaiting(ctx, "ws_busy") {
+	if s.othersWaiting(ctx, river.QueueDefault, "ws_busy") {
 		t.Fatal("nobody else waits yet")
 	}
 	enqueueAt(t, s, "test_fast", "other:1", s.Now(), nil) // workspace ws_test
-	if !s.othersWaiting(ctx, "ws_busy") {
+	if !s.othersWaiting(ctx, river.QueueDefault, "ws_busy") {
 		t.Fatal("another workspace's job waits behind 60 of ws_busy's and is not seen")
 	}
-	if s.othersWaiting(ctx, "ws_test") != true {
+	if s.othersWaiting(ctx, river.QueueDefault, "ws_test") != true {
 		t.Fatal("ws_busy's jobs wait while ws_test runs")
+	}
+	if s.othersWaiting(ctx, jobQueueAI, "ws_busy") {
+		t.Fatal("a job waiting in the default queue holds back AI runs")
 	}
 }
 

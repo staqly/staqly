@@ -83,7 +83,10 @@ request and credential save, and so do Stripe subscription refreshes (`lockBilli
   `job_requeues` row that the run turns into a new job when it ends (no second run at
   once). `cancelJobs` drops a key's queued job and a pending requeue. Workers run up to
   `JOB_CONCURRENCY` jobs (default 4, at most half per workspace while others wait:
-  `fairStart` snoozes); each kind has a run budget (`jobRunTimeout`, the worker's
+  `fairStart` snoozes, per River queue); `ai_run` has a queue of its own (`jobQueues`, half as many
+  workers, at least 2) so polling AI runs never hold the slots a due post needs. Debounced work
+  (reads after webhooks, the analysis after reads) uses `debounce`: an already queued job due no
+  later stays, so the work runs at first event + delay instead of "latest wins"; each kind has a run budget (`jobRunTimeout`, the worker's
   Timeout); retries follow `backoffFor` (1, 5, 15 min) up to `max_attempts`, the last
   failure calls `jobFailed` (`sync_seats` and `sync_entitlements` instead try again every hour for a week:
   nothing else would put Stripe right before the next subscription event). River rescues a job still running after 15 min (a dead

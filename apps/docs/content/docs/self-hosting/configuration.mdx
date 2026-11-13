@@ -110,7 +110,7 @@ a custom pool needs at least two.
 | `S3_SIGN_ENDPOINT` | `S3_ENDPOINT` | The address platforms reach the bucket at, when staqly reaches it at another one (staqly on an internal network, platforms through a proxy or tunnel). Signed links point here. |
 | `S3_CREATE_BUCKET` | `false` | Create a missing bucket on start. Otherwise a missing bucket stops the server with a clear message. |
 | `MAX_UPLOAD_MB` | `100` | Maximum upload size. |
-| `JOB_CONCURRENCY` | `4` | Background [jobs](/concepts#jobs) (publishing, schedule runs, sign-in refreshes) run at once, at most `64`; one workspace gets at most half while another waits. |
+| `JOB_CONCURRENCY` | `4` | Background [jobs](/concepts#jobs) (publishing, schedule runs, sign-in refreshes) run at once, at most `64`; one workspace gets at most half while another waits. AI image and video runs have their own slots on top: half as many, at least `2`. |
 | `PROCESSING_TIMEOUT` | `1h` | Server default for how long a target on [your own automation](/channels/your-own-automation) may wait for a reported result before it fails with *No result reported in time* (`post.target_failed`). A Go duration such as `30m` or `6h`; `0` turns it off. A collection can set its own value (**Fail publishing if nothing is reported within** in its settings, `processing_timeout_seconds` on `PATCH /v1/collections/{id}`, 1 minute to 24 hours), which wins over this default. |
 
 ## Channels and secrets
