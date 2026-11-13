@@ -15,7 +15,7 @@ const (
 	responsesWindow      = 7 * 24 * time.Hour // the worker reads targets published this recently
 	responsesEvery       = 30 * time.Minute
 	checkEvery           = 6 * time.Hour   // a recent target's numbers are read in the background this often
-	responsesAnalyzeWait = 2 * time.Minute // debounce: more reads inside it move the analysis out again
+	responsesAnalyzeWait = 2 * time.Minute // debounce: reads inside it join the queued analysis
 )
 
 // ownResponseIDs: the ids that are the account's own posts (the target and its thread parts), so they never count
@@ -139,7 +139,7 @@ func (s *Service) readResponses(ctx context.Context, postID, channelID string) e
 		if fresh == 0 {
 			return nil
 		}
-		return s.enqueue(wctx, q, post.WorkspaceID, "analyze_responses", "analyze_responses:"+postID, map[string]any{"post_id": postID}, s.Now().Add(responsesAnalyzeWait), 3)
+		return s.debounce(wctx, q, post.WorkspaceID, "analyze_responses", "analyze_responses:"+postID, map[string]any{"post_id": postID}, s.Now().Add(responsesAnalyzeWait), 3)
 	})
 	return err
 }

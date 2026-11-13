@@ -58,6 +58,13 @@ var (
 	testJobKindNames = []string{"test_slow", "test_fast", "test_fail", "test_budget", "test_count"}
 )
 
+// jobQueues puts kinds in a River queue of their own (the rest go in river.QueueDefault): an ai_run stays in its
+// worker polling the AI provider for up to its 10-minute budget, so a few of them must never hold every slot a due
+// post needs. A variable so tests can put a test kind there.
+var jobQueues = map[string]string{"ai_run": jobQueueAI}
+
+const jobQueueAI = "ai"
+
 // River's job states, in the four groups the API shows.
 var (
 	queuedJobStates = []rivertype.JobState{rivertype.JobStateAvailable, rivertype.JobStatePending,
@@ -141,6 +148,15 @@ func (s *Service) jobConcurrency() int {
 	return 4
 }
 
+// queueWorkers is how many jobs of a queue run at once: JOB_CONCURRENCY for the default queue, about half of it
+// (at least two) for AI runs, on top.
+func (s *Service) queueWorkers(queue string) int {
+	if queue == jobQueueAI {
+		return max(2, s.jobConcurrency()/2)
+	}
+	return s.jobConcurrency()
+}
+
 func (s *Service) riverDriver() riverdriver.Driver[*sql.Tx] {
 	if s.pg {
 		return riverdatabasesql.New(s.DB)
@@ -156,7 +172,8 @@ func (s *Service) newRiverClient(fast bool) (*river.Client[*sql.Tx], error) {
 		river.AddWorkerArgs(workers, jobArgs{kind: k}, &jobWorker{s: s, kind: k})
 	}
 	cfg := &river.Config{
-		Queues:                      map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: s.jobConcurrency()}},
+		Queues: map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: s.queueWorkers(river.QueueDefault)},
+			jobQueueAI: {MaxWorkers: s.queueWorkers(jobQueueAI)}},
 		Workers:                     workers,
 		RetryPolicy:                 jobRetryPolicy{s},
 		MaxAttempts:                 jobMaxAttempts,
@@ -230,7 +247,7 @@ func (s *Service) enqueue(ctx context.Context, q *db.Queries, workspaceID, kind,
 	if err := s.dropQueuedJobs(ctx, tx, kind, key); err != nil {
 		return err
 	}
-	opts := &river.InsertOpts{MaxAttempts: int(maxAttempts), UniqueOpts: river.UniqueOpts{ByArgs: true, ByState: liveJobStates}}
+	opts := &river.InsertOpts{MaxAttempts: int(maxAttempts), Queue: jobQueues[kind], UniqueOpts: river.UniqueOpts{ByArgs: true, ByState: liveJobStates}}
 	if runAt.After(s.Now()) {
 		opts.ScheduledAt = riverTime(runAt)
 	}
@@ -245,6 +262,35 @@ func (s *Service) enqueue(ctx context.Context, q *db.Queries, workspaceID, kind,
 	// The latest request wins: an older requeue of the key must not come back (the sweep) over this job.
 	_, err = q.DeleteJobRequeue(ctx, key)
 	return err
+}
+
+// debounce is enqueue for work that a stream of events asks for again and again (reads after webhooks, the
+// analysis after reads): a queued job or pending requeue of the key due no later than runAt stays as it is, so
+// the work runs at the first event + its delay instead of being put off as long as events keep coming.
+func (s *Service) debounce(ctx context.Context, q *db.Queries, workspaceID, kind, key string, payload any, runAt time.Time, maxAttempts int64) error {
+	tx := s.sqlTx(q)
+	if tx == nil {
+		return s.tx(ctx, func(q *db.Queries) error {
+			return s.debounce(ctx, q, workspaceID, kind, key, payload, runAt, maxAttempts)
+		})
+	}
+	res, err := s.river.JobListTx(ctx, tx, river.NewJobListParams().Kinds(kind).States(queuedJobStates...).
+		Where(s.jobArgsWhere("key"), river.NamedArgs{"key": key}).First(1))
+	if err != nil {
+		return fmt.Errorf("find queued %s: %w", key, err)
+	}
+	// A millisecond of slack: River's SQLite driver stores times rounded to the millisecond.
+	if len(res.Jobs) > 0 && !res.Jobs[0].ScheduledAt.After(riverTime(runAt).Add(time.Millisecond)) {
+		return nil
+	}
+	r, err := q.GetJobRequeue(ctx, key)
+	if err == nil && r.RunAt <= formatTime(runAt) {
+		return nil
+	}
+	if err != nil && !isNoRows(err) {
+		return err
+	}
+	return s.enqueue(ctx, q, workspaceID, kind, key, payload, runAt, maxAttempts)
 }
 
 // QueueJob queues a job outside any other write (tools and tests).
@@ -289,45 +335,47 @@ func (s *Service) dropQueuedJobs(ctx context.Context, tx *sql.Tx, kind, key stri
 	return nil
 }
 
-// fairShare counts the jobs this process runs per workspace.
+// fairShare counts the jobs this process runs per queue and workspace.
 type fairShare struct {
 	mu    sync.Mutex
 	perWS map[string]int
 }
 
-// fairStart: a workspace already running half the slots steps aside (snoozes) while another workspace's
-// job waits; with nobody else waiting it may use them all. ponytail: per process, like before; River Pro
-// has global concurrency limits if several servers ever need one fair share.
-func (s *Service) fairStart(ctx context.Context, workspaceID string) bool {
-	share := max(1, s.jobConcurrency()/2)
+// fairStart: a workspace already running half a queue's slots steps aside (snoozes) while another workspace's
+// job waits in that queue; with nobody else waiting it may use them all. ponytail: per process, like before; River
+// Pro has global concurrency limits if several servers ever need one fair share.
+func (s *Service) fairStart(ctx context.Context, queue, workspaceID string) bool {
+	share := max(1, s.queueWorkers(queue)/2)
+	k := queue + "|" + workspaceID
 	s.fair.mu.Lock()
-	n := s.fair.perWS[workspaceID]
+	n := s.fair.perWS[k]
 	s.fair.mu.Unlock()
-	if n >= share && s.othersWaiting(ctx, workspaceID) {
+	if n >= share && s.othersWaiting(ctx, queue, workspaceID) {
 		return false
 	}
 	s.fair.mu.Lock()
-	s.fair.perWS[workspaceID]++
+	s.fair.perWS[k]++
 	s.fair.mu.Unlock()
 	return true
 }
 
-func (s *Service) fairEnd(workspaceID string) {
+func (s *Service) fairEnd(queue, workspaceID string) {
+	k := queue + "|" + workspaceID
 	s.fair.mu.Lock()
-	if s.fair.perWS[workspaceID]--; s.fair.perWS[workspaceID] <= 0 {
-		delete(s.fair.perWS, workspaceID)
+	if s.fair.perWS[k]--; s.fair.perWS[k] <= 0 {
+		delete(s.fair.perWS, k)
 	}
 	s.fair.mu.Unlock()
 }
 
 // othersWaiting asks the database, not a page of the queue: a workspace with a long backlog fills any first page
 // with its own jobs.
-func (s *Service) othersWaiting(ctx context.Context, workspaceID string) bool {
+func (s *Service) othersWaiting(ctx context.Context, queue, workspaceID string) bool {
 	where := "json_extract(args, '$.workspace_id') <> @workspace_id"
 	if s.pg {
 		where = "args->>'workspace_id' <> @workspace_id"
 	}
-	res, err := s.river.JobList(ctx, river.NewJobListParams().States(rivertype.JobStateAvailable).
+	res, err := s.river.JobList(ctx, river.NewJobListParams().Queues(queue).States(rivertype.JobStateAvailable).
 		Where(where, river.NamedArgs{"workspace_id": workspaceID}).First(1))
 	return err == nil && len(res.Jobs) > 0
 }
@@ -336,10 +384,10 @@ func (s *Service) othersWaiting(ctx context.Context, workspaceID string) bool {
 // meanwhile, then what a last failed attempt settles.
 func (s *Service) workJob(ctx context.Context, j *river.Job[jobArgs]) error {
 	a := j.Args
-	if !s.fairStart(ctx, a.WorkspaceID) {
+	if !s.fairStart(ctx, j.Queue, a.WorkspaceID) {
 		return river.JobSnooze(jobFairSnooze)
 	}
-	defer s.fairEnd(a.WorkspaceID)
+	defer s.fairEnd(j.Queue, a.WorkspaceID)
 	ctx = context.WithValue(logctx.With(ctx, "workspace_id", a.WorkspaceID, "job_id", jobPublicID(j.ID), "job_kind", j.Kind), jobCtxKey{}, j.JobRow)
 	err := s.execJob(ctx, j.Kind, a)
 	if err == nil && ctx.Err() != nil {

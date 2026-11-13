@@ -32,7 +32,7 @@ func TestPersonalNotifications(t *testing.T) {
 		return ""
 	}
 	ctx := context.Background()
-	clock := &testClock{t: time.Now().UTC()}
+	clock := &testClock{t: time.Now().UTC().Truncate(10 * time.Minute)} // a burst never spans a 10-minute slice
 	e.svc.Now = clock.now
 
 	// Defaults: every event on, my posts only.
@@ -205,6 +205,33 @@ func TestPersonalNotifications(t *testing.T) {
 	select {
 	case m := <-inbox:
 		t.Fatalf("second email for a burst: %s", decodeQP(m.Data))
+	case <-time.After(300 * time.Millisecond):
+	}
+
+	// A post every 30 seconds for 12 minutes (an outage): the first email goes out at the end of its 10-minute slice
+	// while posts keep coming, the rest make the next one.
+	clock.add(clock.now().Truncate(10 * time.Minute).Add(10*time.Minute + 5*time.Second).Sub(clock.now()))
+	for i := range 24 {
+		publishOnly("Busy post " + itoa(i))
+		clock.add(30 * time.Second)
+	}
+	expect := func(want string) {
+		t.Helper()
+		select {
+		case m := <-inbox:
+			if body := decodeQP(m.Data); !strings.Contains(body, want) {
+				t.Fatalf("want %q:\n%s", want, body)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("no email %q", want)
+		}
+	}
+	expect("20 posts were published")
+	notify()
+	expect("4 posts were published")
+	select {
+	case m := <-inbox:
+		t.Fatalf("extra email: %s", decodeQP(m.Data))
 	case <-time.After(300 * time.Millisecond):
 	}
 }

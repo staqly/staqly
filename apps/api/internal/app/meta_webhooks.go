@@ -29,9 +29,8 @@ import (
 const metaWebhookDelay = 10 * time.Second
 
 // metaWebhookNumbersDelay: the same event (a comment, or on Facebook a reaction) also changes the post's numbers,
-// read by a check_target this long after the last event. Each event moves the queued check out again, so a burst of
-// reactions costs one read. ponytail: a post that keeps getting reactions faster than this waits for the quiet, or
-// for the 6-hour sweep and Refresh; give the check a deadline if people miss live numbers on busy posts.
+// read by a check_target this long after the first event of a burst (debounce): later events join the queued check,
+// so a burst of reactions costs one read and a busy post still gets its numbers every minute or so.
 const metaWebhookNumbersDelay = time.Minute
 
 // MetaWebhookEnabled: the operator set a verify token; without one the endpoint answers 404.
@@ -144,7 +143,7 @@ func (s *Service) HandleMetaWebhook(ctx context.Context, body []byte, signature 
 			if err := s.queueReadAt(ctx, r, s.Now().Add(metaWebhookDelay)); err != nil {
 				return queued, err
 			}
-			if err := s.enqueue(ctx, s.W, r.WorkspaceID, "check_target", "check_target:"+r.PostID+":"+r.ChannelID,
+			if err := s.debounce(ctx, s.W, r.WorkspaceID, "check_target", "check_target:"+r.PostID+":"+r.ChannelID,
 				map[string]any{"post_id": r.PostID, "channel_id": r.ChannelID}, s.Now().Add(metaWebhookNumbersDelay), 3); err != nil {
 				return queued, err
 			}
@@ -155,7 +154,7 @@ func (s *Service) HandleMetaWebhook(ctx context.Context, body []byte, signature 
 }
 
 func (s *Service) queueReadAt(ctx context.Context, r db.PublishedTargetsByExternalIDRow, at time.Time) error {
-	return s.enqueue(ctx, s.W, r.WorkspaceID, "read_responses", "read_responses:"+r.PostID+":"+r.ChannelID,
+	return s.debounce(ctx, s.W, r.WorkspaceID, "read_responses", "read_responses:"+r.PostID+":"+r.ChannelID,
 		map[string]any{"post_id": r.PostID, "channel_id": r.ChannelID}, at, 3)
 }
 
