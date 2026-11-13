@@ -259,7 +259,13 @@ func TestSendThatIsNeverRecordedFailsWithItsLink(t *testing.T) {
 	settleRetry = nil
 	t.Cleanup(func() { settleRetry = old })
 	s, p, post, b, chans := publishOnTwoChannels(t, "scriptst3", "scriptst4", func(s *Service) {
-		refuseWrites(t, s, `UPDATE ON post_targets WHEN NEW.status = 'published' AND NEW.channel_id IN (SELECT id FROM channels WHERE provider = 'scriptst4')`)
+		// Only the second channel's result is refused. Its id goes into the condition as text: PostgreSQL takes no
+		// subquery there, and the test runs on both databases.
+		var second string
+		if err := s.DB.QueryRow(`SELECT id FROM channels WHERE provider = 'scriptst4'`).Scan(&second); err != nil {
+			t.Fatal(err)
+		}
+		refuseWrites(t, s, `UPDATE ON post_targets WHEN NEW.status = 'published' AND NEW.channel_id = '`+second+`'`)
 	})
 	ctx := context.Background()
 	later := time.Now()

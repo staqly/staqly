@@ -902,6 +902,10 @@ workspace.json      Workspace details, export format version and record counts.
 collections.ndjson  One collection per line (including archived ones).
 posts.ndjson        One post per line with its targets (channel, status, link) and
                     "media_files", the paths of its files below.
+responses.ndjson    Comments and replies read from the platforms, one per line.
+response_insights.ndjson
+                    What the analysis made of a post's responses (sentiment
+                    counts, summary, themes, questions), one per post and channel.
 events.ndjson       The activity log, oldest first (one event per line).
 media.ndjson        Every uploaded file with its id, type, size, SHA-256 and
                     "file" (path inside this archive).

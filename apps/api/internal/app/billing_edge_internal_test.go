@@ -32,9 +32,10 @@ func TestSuspendedWorkspaceDoesNotPublish(t *testing.T) {
 		t.Fatal(err)
 	}
 	row, _ := s.Q.GetPostByID(ctx, post.ID)
-	t.Logf("post status after the scheduled run in a suspended workspace: %s", row.Status)
-	if row.Status != "scheduled" && row.Status != "failed" {
-		t.Errorf("suspended workspace publishing: post is %q", row.Status)
+	// Failed, not left scheduled: nothing would ever run it again, and post.failed is what tells people.
+	if row.Status != "failed" || len(eventsOfType(t, s, p, "post.failed")) != 1 || len(eventsOfType(t, s, p, "post.publish_requested")) != 0 {
+		t.Errorf("after the scheduled run in a suspended workspace the post is %q with %d post.failed and %d post.publish_requested events; want failed, 1 and 0",
+			row.Status, len(eventsOfType(t, s, p, "post.failed")), len(eventsOfType(t, s, p, "post.publish_requested")))
 	}
 }
 

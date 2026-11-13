@@ -716,7 +716,9 @@ func TestDeleteWorkspace(t *testing.T) {
 	e.do(nil, "GET", "/v1/collections", e.key, nil, 401, nil)
 	for _, table := range []string{"collections", "posts", "channels", "schedules", "jobs", "events", "media", "webhooks", "webhook_deliveries", "api_keys", "sessions", "workspace_exports"} {
 		var m int
-		e.svc.DB.QueryRow("SELECT COUNT(*) FROM " + table + " WHERE workspace_id NOT IN (SELECT id FROM workspaces)").Scan(&m)
+		if err := e.svc.DB.QueryRow("SELECT COUNT(*) FROM " + table + " WHERE workspace_id NOT IN (SELECT id FROM workspaces)").Scan(&m); err != nil {
+			t.Fatalf("%s: %v", table, err)
+		}
 		if m != 0 {
 			t.Fatalf("%s: %d orphaned rows", table, m)
 		}

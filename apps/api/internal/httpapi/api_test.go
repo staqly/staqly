@@ -1021,13 +1021,18 @@ func TestMCPClientEndToEnd(t *testing.T) {
 }
 
 func TestBackupIsConsistent(t *testing.T) {
-	if storetest.Postgres() {
-		t.Skip("SQLite backup (VACUUM INTO); on PostgreSQL store.Backup refuses and points at pg_dump")
-	}
 	e := newEnv(t)
 	c := e.collection("Backup")
 	e.post(c.ID, map[string]any{"content": "keep me"})
 	dest := t.TempDir() + "/backup.db"
+	if storetest.Postgres() {
+		// The SQLite backup (VACUUM INTO) is not for PostgreSQL: it refuses, names pg_dump and writes nothing.
+		err := store.Backup(context.Background(), e.svc.DB, dest)
+		if _, statErr := os.Stat(dest); err == nil || !strings.Contains(err.Error(), "pg_dump") || !os.IsNotExist(statErr) {
+			t.Fatalf("backup on PostgreSQL: %v (file: %v), want a refusal that names pg_dump and no file", err, statErr)
+		}
+		return
+	}
 	if err := store.Backup(context.Background(), e.svc.DB, dest); err != nil {
 		t.Fatal(err)
 	}
