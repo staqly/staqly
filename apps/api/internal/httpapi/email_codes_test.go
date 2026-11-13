@@ -173,7 +173,11 @@ func TestEmailCodeLimits(t *testing.T) {
 		wrong = "111111"
 	}
 	for i := 0; i < 5; i++ {
-		e.verifyCode("nobody@example.com", wrong, nil, 0, nil)
+		want := 401
+		if i == 4 {
+			want = 410 // the fifth wrong try is the last
+		}
+		e.verifyCode("nobody@example.com", wrong, nil, want, nil)
 	}
 	var dead apiErr
 	e.verifyCode("nobody@example.com", code, nil, 410, &dead)

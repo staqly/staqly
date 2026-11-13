@@ -151,6 +151,12 @@ func newAccountsEnv(t *testing.T, setupToken string) *acctEnv {
 // newAccountsEnvOn: the same server on a database the test prepared (e.g. one filled by import-sqlite).
 func newAccountsEnvOn(t *testing.T, setupToken string, database *sql.DB) *acctEnv {
 	t.Helper()
+	return newAccountsEnvCfg(t, setupToken, database, httpapi.Config{})
+}
+
+// newAccountsEnvCfg: the same with the router's own settings (TrustProxy, RelayToken); MCP and the spec are filled in.
+func newAccountsEnvCfg(t *testing.T, setupToken string, database *sql.DB, cfg httpapi.Config) *acctEnv {
+	t.Helper()
 	dir := t.TempDir()
 	t.Cleanup(func() { database.Close() })
 	g := newFakeGoogle(t)
@@ -163,7 +169,8 @@ func newAccountsEnvOn(t *testing.T, setupToken string, database *sql.DB) *acctEn
 		Google:  &app.GoogleConfig{ClientID: testClientID, ClientSecret: "secret", Issuer: g.srv.URL},
 		Webhook: app.WebhookConfig{AllowLoopback: true, RetryBase: 20 * time.Millisecond, RetryMax: 50 * time.Millisecond, PollInterval: 10 * time.Millisecond}})
 	svc.Getenv = func(k string) string { return map[string]string{"RATE_LIMIT_DISABLED": "true"}[k] }
-	h := httpapi.New(svc, log, httpapi.Config{MCP: mcpserver.HTTPHandler(svc, "test"), OpenAPISpec: []byte("openapi: 3.1.0")})
+	cfg.MCP, cfg.AssistantTools, cfg.OpenAPISpec = mcpserver.HTTPHandler(svc, "test"), mcpserver.AssistantTools(svc, "test"), []byte("openapi: 3.1.0")
+	h := httpapi.New(svc, log, cfg)
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 	svc.Cfg.Google.RedirectURL = srv.URL + "/v1/auth/google/callback"
@@ -812,9 +819,6 @@ func TestRoleMatrix(t *testing.T) {
 			want := a.ok
 			if rank[role] < rank[a.min] {
 				want = 403
-				if a.name == "read account" {
-					want = 404 // only owners have an account
-				}
 			}
 			t.Run(a.name+"/"+role, func(t *testing.T) {
 				e.t = t
