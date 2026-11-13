@@ -123,8 +123,8 @@ export function eur(n: number) {
   return Number.isInteger(n) ? `€${n}` : `€${n.toFixed(2)}`
 }
 
-/** Prices are for businesses, without VAT (added at checkout where it applies). */
-export const VAT_NOTE = 'excl. VAT'
+/** Prices include VAT (Stripe works out the VAT part from the billing address). */
+export const VAT_NOTE = 'incl. VAT'
 
 /** The price per month: billed monthly, or the yearly price spread over twelve months. */
 export function perMonth(p: SitePlan, interval: Interval) {
@@ -310,7 +310,7 @@ export const FAQ: [string, string][] = [
   ],
   [
     'Which plans have a free trial?',
-    `Starter: ${TRIAL_DAYS} days free. You add a card when you start; nothing is charged until the trial ends, and you can cancel anytime before. Plus, Pro and Business are paid from the first day. Prices are per user and exclude VAT.`,
+    `Starter: ${TRIAL_DAYS} days free. You add a card when you start; nothing is charged until the trial ends, and you can cancel anytime before. Plus, Pro and Business are paid from the first day. Prices are per user and include VAT.`,
   ],
   [
     'What happens when the trial ends?',

@@ -192,7 +192,7 @@ function PlanCard({
         {interval === 'year'
           ? `${money(after ?? plan.price_year, plan.currency)} per user, billed yearly`
           : 'Billed monthly'}
-        , excl. VAT
+        , incl. VAT
       </p>
       {after !== undefined && promotion && (
         <p className="mt-1 text-xs font-medium text-brand" data-testid={`plan-discount-${plan.id}`}>

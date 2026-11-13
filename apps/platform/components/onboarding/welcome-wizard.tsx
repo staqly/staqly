@@ -793,7 +793,7 @@ function PlanStep({
       </StepHeader>
       <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
         <IntervalToggle value={interval} onChange={setInterval} />
-        <span className="text-xs text-muted-foreground">Per user a month, excl. VAT</span>
+        <span className="text-xs text-muted-foreground">Per user a month, incl. VAT</span>
       </div>
       <div role="radiogroup" aria-label="Plan" className="mt-4 grid gap-2.5">
         {plans.isPending && <SkeletonList count={4} className="h-20 rounded-2xl" />}

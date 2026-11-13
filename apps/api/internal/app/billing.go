@@ -517,7 +517,7 @@ func (s *Service) CheckoutSession(ctx context.Context, p Principal, planID, inte
 		form.Set("subscription_data[trial_period_days]", strconv.Itoa(TrialDays))
 		form.Set("subscription_data[trial_settings][end_behavior][missing_payment_method]", "cancel")
 	}
-	// Business customers: tax by Stripe Tax on prices that exclude it, from the billing address and tax ID.
+	// Stripe Tax works out the VAT part of the VAT-inclusive prices from the billing address and tax ID.
 	form.Set("payment_method_collection", "always")
 	form.Set("automatic_tax[enabled]", "true")
 	form.Set("billing_address_collection", "required")

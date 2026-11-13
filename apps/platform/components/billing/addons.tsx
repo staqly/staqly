@@ -102,7 +102,7 @@ export function AddonsSection({
                 )}
               </span>
               <span className="text-xs text-muted-foreground">{a.description || a.features.join(' · ')}</span>
-              <span className="text-xs text-muted-foreground tabular-nums">{price(a)} · excl. VAT</span>
+              <span className="text-xs text-muted-foreground tabular-nums">{price(a)} · incl. VAT</span>
             </div>
             {canBuy &&
               (a.active ? (
@@ -135,7 +135,7 @@ export function AddonsSection({
         title={`Add ${adding?.name ?? ''}?`}
         description={
           adding
-            ? `${price(adding)}, excl. VAT. The rest of this billing period is charged now to the card on file.`
+            ? `${price(adding)}, incl. VAT. The rest of this billing period is charged now to the card on file.`
             : ''
         }
         confirmLabel="Add"

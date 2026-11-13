@@ -11,7 +11,7 @@ import { DOCS, INSTALL, arrowLink, wrap } from '@/lib/site'
 
 export const metadata: Metadata = pageMeta(
   'Pricing',
-  'Per user, excl. VAT: Starter €15, Plus €29, Pro €59, Business €99 a month, 20 % or more off yearly. Editors, analytics, MCP and REST on every plan; Starter has a 7-day trial.',
+  'Per user, incl. VAT: Starter €15, Plus €29, Pro €59, Business €99 a month, 20 % or more off yearly. Editors, analytics, MCP and REST on every plan; Starter has a 7-day trial.',
   '/pricing',
 )
 
@@ -39,7 +39,7 @@ export default function PricingPage() {
         }
       >
         <p className="mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground">
-          Create, schedule and measure your posts. Choose your workspace capacity; prices are per user, excl. VAT.
+          Create, schedule and measure your posts. Choose your workspace capacity; prices are per user, incl. VAT.
         </p>
       </PageHero>
       <section aria-labelledby="plans" className={`${wrap} py-14 sm:py-20`}>

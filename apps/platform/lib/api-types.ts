@@ -353,8 +353,8 @@ export interface paths {
          * Pay for a plan, or switch the subscription to another plan (a signed-in workspace owner)
          * @description Signed-in people only: an API key gets 403, whatever its scopes.
          *     Without a live subscription: returns a Stripe Checkout URL for the plan billed monthly or yearly;
-         *     open it in a browser to pay. Prices are per seat (the members) and exclude VAT (Stripe Tax adds it from
-         *     the billing address). Starter starts Stripe's 7-day trial with a card required (nothing is charged until
+         *     open it in a browser to pay. Prices are per seat (the members) and include VAT (Stripe Tax works out
+         *     the VAT part from the billing address). Starter starts Stripe's 7-day trial with a card required (nothing is charged until
          *     it ends; cancelled if no card is on file then), once per workspace; Plus, Pro and Business are charged at
          *     once. Stripe redirects back to `<PUBLIC_DASHBOARD_URL>/settings/plan?checkout=success` (or the welcome
          *     steps with `return_to: welcome`), and the plan changes when Stripe's webhook arrives. With billing on, a

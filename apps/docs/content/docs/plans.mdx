@@ -4,7 +4,8 @@ description: Starter, Plus, Pro and Business on Staqly Cloud, priced per user, m
 ---
 
 Plans set how much each workspace may use on [Staqly Cloud](/local-vs-cloud#staqly-cloud): channels, storage, posts
-to X and so on. Prices are in euros, **exclude VAT** (added at checkout where it applies) and are
+to X and so on. Prices are in euros, **include VAT** (Stripe works out the VAT part from your billing
+address; a business with a valid EU VAT ID under reverse charge pays the same amount) and are
 **per user**: every member of the workspace is a seat billed at the plan's price,
 whatever their role. All usage limits are shared by the workspace and do not multiply with seats. Collections and schedules have no count limit; created posts do. If you run
 **Staqly Community Edition** on your own computer or server (`staqly serve` or the Docker image),
@@ -183,7 +184,7 @@ open invoices, so a card added later is not charged for a plan that has ended.
   thread reply needs one unit (a post with a live link needs 14; X channels remove
   or defang links by default). The plan's posts reset every month. **Extra posts** come in
   one-time bundles, **Settings → Plan & usage → Buy more** (next to X): 200 for €10, 1,000 for €40 or
-  4,000 for €150, excl. VAT. They are used after the included ones and expire at the end of the
+  4,000 for €150, incl. VAT. They are used after the included ones and expire at the end of the
   billing period (bought during the free trial: a month after the purchase). When both run out, publishing to X answers **402 `x_posts_exhausted`** (and a
   post scheduled for later fails with the reason). `GET /v1/billing/x-posts` shows what's left.
 - **Posts to LinkedIn** are counted because LinkedIn limits how many posts and video uploads all
