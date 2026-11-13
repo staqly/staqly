@@ -17,7 +17,8 @@ import { useReturnFocus } from '@/hooks/use-return-focus'
  * onOpenChange, which this does not see, so a saved form never asks; a form that stays open after its save says
  * so itself (useSheetSaved) and its fields are read again. Another mutation in the app (an upload, a retry, a
  * save in another drawer) is no save of this form. State that lives in no field (a post's attachments) counts
- * through a `data-form-value` attribute.
+ * through a `data-form-value` attribute. Controls that only change what is shown (filters, view toggles) sit inside a
+ * `data-form-ignore` element and don't count.
  */
 type Guard = { el: HTMLElement | null; before?: string }
 
@@ -50,21 +51,25 @@ function SheetSaved() {
 }
 
 function formState(el: HTMLElement) {
-  return Array.from(el.querySelectorAll<HTMLElement>(FIELDS), (f) => {
-    if (f.dataset.formValue !== undefined) {
-      return f.dataset.formValue
-    }
+  const fields = Array.from(el.querySelectorAll<HTMLElement>(FIELDS)).filter((f) => !f.closest('[data-form-ignore]'))
 
-    if (f instanceof HTMLInputElement && (f.type === 'checkbox' || f.type === 'radio')) {
-      return String(f.checked)
-    }
+  return fields
+    .map((f) => {
+      if (f.dataset.formValue !== undefined) {
+        return f.dataset.formValue
+      }
 
-    if (f instanceof HTMLInputElement || f instanceof HTMLTextAreaElement || f instanceof HTMLSelectElement) {
-      return f.value
-    }
+      if (f instanceof HTMLInputElement && (f.type === 'checkbox' || f.type === 'radio')) {
+        return String(f.checked)
+      }
 
-    return `${f.getAttribute('aria-checked') ?? ''}${f.getAttribute('aria-pressed') ?? ''}${f.textContent ?? ''}`
-  }).join('\u0000')
+      if (f instanceof HTMLInputElement || f instanceof HTMLTextAreaElement || f instanceof HTMLSelectElement) {
+        return f.value
+      }
+
+      return `${f.getAttribute('aria-checked') ?? ''}${f.getAttribute('aria-pressed') ?? ''}${f.textContent ?? ''}`
+    })
+    .join('\u0000')
 }
 
 function Sheet({ onOpenChange, ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {

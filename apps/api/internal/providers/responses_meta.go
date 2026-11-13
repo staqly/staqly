@@ -73,7 +73,7 @@ func (Instagram) Responses(ctx context.Context, c Credentials, externalID string
 				return nil
 			}
 			conv := func(x igComment, parent string) Response {
-				return Response{ID: x.ID, ParentID: parent, AuthorHandle: "@" + x.Username, Text: x.Text, CreatedAt: metaTime(x.Timestamp),
+				return Response{ID: x.ID, ParentID: parent, AuthorHandle: atHandle(x.Username), Text: x.Text, CreatedAt: metaTime(x.Timestamp),
 					Likes: x.Likes, Own: x.From.ID != "" && x.From.ID == c["user_id"]}
 			}
 			out := []Response{conv(d, "")}
@@ -100,7 +100,7 @@ func (Threads) Responses(ctx context.Context, c Credentials, externalID string, 
 			if parent == externalID {
 				parent = ""
 			}
-			return []Response{{ID: d.ID, ParentID: parent, AuthorHandle: "@" + d.Username, Text: d.Text, URL: d.Permalink,
+			return []Response{{ID: d.ID, ParentID: parent, AuthorHandle: atHandle(d.Username), Text: d.Text, URL: d.Permalink,
 				CreatedAt: metaTime(d.Timestamp), Own: d.Own}}
 		})
 }
@@ -112,4 +112,13 @@ func metaTime(s string) time.Time {
 		t, _ = time.Parse(time.RFC3339, s)
 	}
 	return t
+}
+
+// atHandle is "@name", or nothing when the platform left the name out (Instagram hides commenters until the app is
+// approved for them), so no bare "@" is shown.
+func atHandle(name string) string {
+	if name == "" {
+		return ""
+	}
+	return "@" + name
 }

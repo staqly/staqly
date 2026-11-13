@@ -202,7 +202,8 @@ export function PostStats({ post, active }: { post: Post; active: boolean }) {
   const sentCount = targets.filter((t) => t.status === 'published').length
 
   return (
-    <div className="grid gap-4" data-testid="post-stats">
+    // Filters and toggles here only change the view: closing the post never asks about them.
+    <div className="grid gap-4" data-testid="post-stats" data-form-ignore>
       {post.unpublished_at && (
         <Callout tone="warning" size="xs" data-testid="stats-unpublished">
           <p className="font-medium">Unpublished {formatDateTime(post.unpublished_at)}</p>

@@ -74,6 +74,20 @@ describe('post responses', () => {
     await waitFor(() => expect(api.find('GET', '/v1/posts/pst_1/responses')).toHaveLength(2))
   })
 
+  it('a comment whose author the platform hid says so instead of a bare @', async () => {
+    const hidden = { ...res('3', 'neutral', 'Which resort?'), author: '', author_handle: '@' }
+
+    mockApi({
+      'GET /v1/posts/pst_1/responses': { ...data, channels: [{ ...data.channels[0]!, responses: [hidden] }] },
+      'GET /v1/posts/pst_1/metrics': metrics,
+    })
+    renderWithProviders(<PostStats post={published} active />)
+    const card = await screen.findByTestId('responses-ch_f')
+
+    expect(within(card).getByText('Name hidden by the platform')).toBeInTheDocument()
+    expect(within(card).queryByText('@')).not.toBeInTheDocument()
+  })
+
   it('a channel whose comments could not be read says it once', async () => {
     const why = "YouTube's daily limit is used up"
     const failed = {

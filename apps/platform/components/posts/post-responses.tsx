@@ -103,6 +103,11 @@ function useResponses(postId: string, active: boolean) {
  * "Audience comments" over the channels: the AI's reading of every channel's comments together and the sentiment
  * filter. Nothing until there are comments: each channel says so in its own section.
  */
+/** The commenter's @handle; comments stored before it was fixed may carry a bare "@" for a name the platform hid. */
+function handleOf(r: { author_handle?: string }) {
+  return r.author_handle && r.author_handle !== '@' ? r.author_handle : ''
+}
+
 export function CommentsOverview({
   postId,
   active,
@@ -215,8 +220,15 @@ export function ChannelComments({
               return (
                 <li key={r.id} className={cn('rounded-lg bg-muted/30 px-3 py-2', r.parent_id && 'ml-4')}>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span className="font-medium text-foreground">{r.author}</span>
-                    {r.author_handle && <span>{r.author_handle}</span>}
+                    {r.author || handleOf(r) ? (
+                      <>
+                        <span className="font-medium text-foreground">{r.author}</span>
+                        {handleOf(r) && <span>{handleOf(r)}</span>}
+                      </>
+                    ) : (
+                      // Instagram and Facebook leave the commenter out until the app is approved for it.
+                      <span className="italic">Name hidden by the platform</span>
+                    )}
                     <span title={formatDateTime(r.created_at)}>{timeAgo(r.created_at)}</span>
                     {r.likes != null && (
                       <span className="inline-flex items-center gap-0.5 tabular-nums">

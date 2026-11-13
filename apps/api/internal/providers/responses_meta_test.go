@@ -91,3 +91,13 @@ func TestResponsesThreadsConversation(t *testing.T) {
 		t.Fatalf("%+v %v", got, err)
 	}
 }
+
+// A commenter the platform hid (Instagram before the app is approved) has no handle, not a bare "@".
+func TestAtHandle(t *testing.T) {
+	if got := atHandle(""); got != "" {
+		t.Fatalf("empty name gave %q", got)
+	}
+	if got := atHandle("mia"); got != "@mia" {
+		t.Fatalf("got %q", got)
+	}
+}

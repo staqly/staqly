@@ -105,6 +105,34 @@ describe('sheet unsaved changes', () => {
     expect(await screen.findByRole('alertdialog', { name: 'Discard your changes?' })).toBeInTheDocument()
   })
 
+  it('a filter or view toggle inside data-form-ignore is no change (the Insights tab of a published post)', async () => {
+    const onOpenChange = vi.fn<(o: boolean) => void>()
+    const user = userEvent.setup()
+
+    function Filtered() {
+      const [only, setOnly] = useState(false)
+
+      return (
+        <Sheet open onOpenChange={onOpenChange}>
+          <SheetContent aria-describedby={undefined}>
+            <SheetTitle>Post</SheetTitle>
+            <div data-form-ignore>
+              <button type="button" aria-pressed={only} onClick={() => setOnly((o) => !o)}>
+                Negative
+              </button>
+            </div>
+          </SheetContent>
+        </Sheet>
+      )
+    }
+
+    render(<Filtered />)
+    await user.click(screen.getByRole('button', { name: 'Negative' }))
+    await user.keyboard('{Escape}')
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+    expect(screen.queryByRole('alertdialog', { name: 'Discard your changes?' })).not.toBeInTheDocument()
+  })
+
   it('closes at once when nothing changed', async () => {
     const onOpenChange = vi.fn<(o: boolean) => void>()
     const user = userEvent.setup()

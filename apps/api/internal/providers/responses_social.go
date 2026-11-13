@@ -146,7 +146,7 @@ func (Bluesky) Responses(ctx context.Context, c Credentials, externalID string, 
 			}
 			if len(rs) < maxResponses && (since.IsZero() || p.Record.CreatedAt.After(since)) {
 				likes := p.Likes
-				rs = append(rs, Response{ID: p.URI, ParentID: parent, Author: p.Author.DisplayName, AuthorHandle: "@" + p.Author.Handle,
+				rs = append(rs, Response{ID: p.URI, ParentID: parent, Author: p.Author.DisplayName, AuthorHandle: atHandle(p.Author.Handle),
 					Text: p.Record.Text, URL: blueskyApp + "/profile/" + p.Author.Handle + "/post/" + p.URI[strings.LastIndex(p.URI, "/")+1:],
 					CreatedAt: p.Record.CreatedAt, Likes: &likes, Own: p.Author.DID == sess.did})
 			}
@@ -206,7 +206,7 @@ func (Mastodon) Responses(ctx context.Context, c Credentials, externalID string,
 			parent = ""
 		}
 		likes := d.Favourites
-		out = append(out, Response{ID: d.ID, ParentID: parent, Author: d.Account.DisplayName, AuthorHandle: "@" + d.Account.Acct,
+		out = append(out, Response{ID: d.ID, ParentID: parent, Author: d.Account.DisplayName, AuthorHandle: atHandle(d.Account.Acct),
 			Text: mastodonText(d.Content), URL: d.URL, CreatedAt: d.Created, Likes: &likes, Own: me.ID != "" && d.Account.ID == me.ID})
 	}
 	return out, nil

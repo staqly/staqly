@@ -273,7 +273,7 @@ func (DevTo) Responses(ctx context.Context, c Credentials, externalID string, si
 			// A deleted comment keeps its place in the thread with no author: its replies still count.
 			if len(out) < maxResponses && d.User.Username != "" && (since.IsZero() || d.Created.After(since)) {
 				out = append(out, Response{ID: d.ID, ParentID: parent, Author: cmp.Or(d.User.Name, d.User.Username),
-					AuthorHandle: "@" + d.User.Username, Text: mastodonText(d.BodyHTML), URL: "https://dev.to/" + d.User.Username + "/comment/" + d.ID,
+					AuthorHandle: atHandle(d.User.Username), Text: mastodonText(d.BodyHTML), URL: "https://dev.to/" + d.User.Username + "/comment/" + d.ID,
 					CreatedAt: d.Created, Own: d.User.Username == c["username"]})
 			}
 			walk(d.Children, d.ID)
