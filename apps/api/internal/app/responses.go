@@ -149,7 +149,9 @@ func toResponseInsight(in db.PostResponseInsight) *ResponseInsight {
 	return ri
 }
 
-// RefreshPostResponses reads the post's responses from the platforms now and returns what is stored.
+// RefreshPostResponses reads the post's responses from the platforms now and returns what is stored, new ones
+// included (as PostMetrics with refresh reads the numbers in the request). A read that fails here for any reason but
+// the platform's refusal (which readResponses notes on the channel) is queued instead, so its retries still happen.
 func (s *Service) RefreshPostResponses(ctx context.Context, p Principal, postID string) (PostResponses, error) {
 	if err := p.require(ScopePostsWrite); err != nil {
 		return PostResponses{}, err
@@ -161,8 +163,20 @@ func (s *Service) RefreshPostResponses(ctx context.Context, p Principal, postID 
 	if len(cur.Channels) == 0 {
 		return PostResponses{}, &Error{Code: "not_published", Status: 409, Message: "this post has nothing published to read responses from"}
 	}
-	if err := s.queueResponseReads(ctx, p.WorkspaceID, postID); err != nil {
+	rows, err := s.Q.ListTargets(ctx, postID)
+	if err != nil {
 		return PostResponses{}, err
+	}
+	for _, t := range rows {
+		if t.Status != "published" || t.Removal != "" || t.ChannelStatus != "connected" {
+			continue
+		}
+		if err := s.readResponses(ctx, postID, t.ChannelID); err != nil {
+			s.logger(ctx).Info("responses: refresh read queued", "post_id", postID, "channel_id", t.ChannelID, "err", err)
+			if err := s.queueRead(ctx, p.WorkspaceID, postID, t.ChannelID); err != nil {
+				return PostResponses{}, err
+			}
+		}
 	}
 	return s.PostResponses(ctx, p, postID, "")
 }

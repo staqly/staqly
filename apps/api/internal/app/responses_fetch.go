@@ -162,22 +162,6 @@ func (s *Service) noteResponsesFailed(ctx context.Context, workspaceID, postID, 
 	return s.W.UpsertResponseInsight(ctx, row)
 }
 
-// queueResponseReads queues a read for every published, still online target of the post (the refresh button).
-func (s *Service) queueResponseReads(ctx context.Context, workspaceID, postID string) error {
-	rows, err := s.Q.ListTargets(ctx, postID)
-	if err != nil {
-		return err
-	}
-	for _, t := range rows {
-		if t.Status == "published" && t.Removal == "" && t.ChannelStatus == "connected" {
-			if err := s.queueRead(ctx, workspaceID, postID, t.ChannelID); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
 func (s *Service) queueRead(ctx context.Context, workspaceID, postID, channelID string) error {
 	return s.enqueue(ctx, s.W, workspaceID, "read_responses", "read_responses:"+postID+":"+channelID,
 		map[string]any{"post_id": postID, "channel_id": channelID}, s.Now(), 3)
