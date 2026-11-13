@@ -11,11 +11,9 @@ import {
   ChevronsUpDown,
   Clock,
   Crown,
-  CreditCard,
   Gauge,
   Images,
   LifeBuoy,
-  Lock,
   LogOut,
   Menu,
   PenSquare,
@@ -102,6 +100,12 @@ interface ShellContextValue {
 const AssistantPanel = dynamic(() => import('@/components/assistant/assistant-panel').then((m) => m.AssistantPanel), {
   ssr: false,
 })
+
+// Rare states (a failing payment, a locked workspace): their screens load when one is on.
+const PastDueNotice = dynamic(() => import('@/components/billing/past-due-notice').then((m) => m.PastDueNotice), {
+  ssr: false,
+})
+const PlanLocked = dynamic(() => import('./plan-locked').then((m) => m.PlanLocked), { ssr: false })
 
 const ShellContext = createContext<ShellContextValue>({
   openCreateCollection: () => {},
@@ -1043,6 +1047,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   })
   const sidebarOpen = override && override.wide === wide ? override.open : wide
   const full = assistantFull && assistantOpen && hasAssistant && !isMobile
+  const pastDue = usePastDue()
   const ctx = useMemo<ShellContextValue>(
     () => ({
       openCreateCollection: () => setCreateOpen(true),
@@ -1086,9 +1091,15 @@ export function AppShell({ children }: { children: ReactNode }) {
         <SidebarInset
           id="main"
           tabIndex={-1}
-          className={cn('min-w-0 pb-(--mobile-chrome-bottom) outline-none md:pb-0', full && 'hidden')}
+          className={cn(
+            'min-w-0 pb-(--mobile-chrome-bottom) outline-none md:pb-0',
+            // One line of the notice and its border on a wide screen: full-height pages and their side panels start under it.
+            pastDue && 'md:[--shell-notice:calc(2.75rem+1px)]',
+            full && 'hidden',
+          )}
         >
           {isMobile && <MobileHeader />}
+          {pastDue && <PastDueNotice />}
           <PlanGate>{children}</PlanGate>
         </SidebarInset>
         {/* Mounted once opened (its code loads then), so it can slide out when it closes. */}
@@ -1115,7 +1126,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 /**
  * Cloud with billing: a workspace opens only with a live plan (paid, or Starter's trial with a card). One that never
  * had one sends its owner to the welcome first (NoPlanGate), whose last step is the plan. One whose plan ended or whose
- * payment failed shows only that, with the way to Plan & usage (the one page that stays open), where paying unlocks it.
+ * payment failed shows only that and what opens it again: a new plan once the plan has ended (paying its old invoice
+ * opens nothing), the payment while Stripe still holds the subscription. Plan & usage stays open to those who manage
+ * the workspace, and so does Data & privacy: the API keeps the export of a locked workspace open, their data is theirs.
  */
 function PlanGate({ children }: { children: ReactNode }) {
   const { isLocal } = useMode()
@@ -1126,37 +1139,33 @@ function PlanGate({ children }: { children: ReactNode }) {
   // The account owner of a workspace that never had a plan doesn't get here: NoPlanGate sends them to the welcome.
   const locked = !isLocal && !!usage.data?.suspended
   const neverStarted = locked && !!billing.data?.enabled && !billing.data.subscription_status
-  const billingPage = pathname.startsWith('/settings/plan') || pathname.startsWith('/settings/billing')
+  const open = ['/settings/plan', '/settings/billing', '/settings/data'].some((p) => pathname.startsWith(p))
 
-  if (!locked || (billingPage && canManagePeople)) {
+  if (!locked || (open && canManagePeople)) {
     return children
   }
 
+  return <PlanLocked neverStarted={neverStarted} />
+}
+
+/**
+ * A payment failed and Stripe is still retrying: the workspace works, but it locks when the retries run out. True
+ * for those who manage it (the others cannot read billing), everywhere but Plan & usage, which says it itself. A
+ * locked workspace shows the locked screen instead.
+ */
+function usePastDue() {
+  const { isLocal } = useMode()
+  const { canManagePeople } = useRole()
+  const usage = useUsage()
+  const billing = useBilling({ enabled: !isLocal && canManagePeople })
+  const pathname = usePathname()
+
   return (
-    <div className="flex flex-1 items-center justify-center px-4 py-16" data-testid="plan-locked">
-      <div className="grid max-w-md justify-items-center gap-4 text-center">
-        <span className="flex size-12 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">
-          <Lock className="size-6" aria-hidden />
-        </span>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {neverStarted ? 'This workspace has no plan yet' : 'This workspace is locked'}
-        </h1>
-        <p className="text-sm text-pretty text-muted-foreground">
-          {neverStarted
-            ? 'It opens once the account owner chooses a plan for it.'
-            : canManagePeople
-              ? 'Its plan ended or the last payment did not go through. Pay in Plan & usage and the workspace opens again right away, with everything in it.'
-              : 'Its plan ended or the last payment did not go through. An owner or admin can pay in Plan & usage; the workspace opens again right away.'}
-        </p>
-        {canManagePeople && !neverStarted && (
-          <Button asChild>
-            <Link href="/settings/plan">
-              <CreditCard /> Go to billing
-            </Link>
-          </Button>
-        )}
-      </div>
-    </div>
+    !isLocal &&
+    canManagePeople &&
+    billing.data?.subscription_status === 'past_due' &&
+    !usage.data?.suspended &&
+    !pathname.startsWith('/settings/plan')
   )
 }
 

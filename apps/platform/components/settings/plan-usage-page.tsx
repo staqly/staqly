@@ -18,6 +18,7 @@ import { SettingsHeader } from '@/components/settings/settings-header'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api, POST_STATUSES, UNLIMITED, type WorkspaceUsage } from '@/lib/api'
 import { formatBytes } from '@/lib/format'
+import { lockReason } from '@/lib/plans'
 import { qk, useAddons, useBilling, useBillingDetails, useMode, useRole, useUsage, useXPosts } from '@/lib/queries'
 import { POST_STATUS_META } from '@/lib/status'
 import { TONES } from '@/lib/tones'
@@ -379,6 +380,13 @@ export function PlanUsagePage() {
   const canBuy = isOwner && payOnline
   const portalOpen = isOwner && payOnline && !!b?.has_customer
   const hasXPosts = !isLocal && !!xPosts.data && !xPosts.data.unlimited
+  // A locked workspace buys nothing on top (the API answers 402): what opens it comes first.
+  const payFirst = !!u?.suspended && !!b && lockReason(b) === 'payment_due'
+  const blocked = !u?.suspended
+    ? undefined
+    : payFirst
+      ? 'Not while the workspace is locked. Pay the open invoice first.'
+      : 'Not while the workspace is locked. Choose a plan first.'
 
   const summary = u ? (
     <PlanSummary
@@ -436,7 +444,7 @@ export function PlanUsagePage() {
                     used={u.usage?.[m.key] ?? 0}
                     max={limitOf(m.key)}
                     hint={bonusHint(plan, m.key) || undefined}
-                    action={p.id === 'x' && x && canBuy ? <BuyXPosts x={x} /> : undefined}
+                    action={p.id === 'x' && x && canBuy ? <BuyXPosts x={x} blocked={blocked} /> : undefined}
                   />
                 ))}
               </ul>
@@ -504,10 +512,12 @@ export function PlanUsagePage() {
         id="addons-heading"
         title="Add-ons"
         description={
-          canBuy ? 'On top of the plan, excl. VAT, charged with the subscription.' : 'The account owner buys them.'
+          !canBuy
+            ? 'The account owner buys them.'
+            : (blocked ?? 'On top of the plan, excl. VAT, charged with the subscription.')
         }
       >
-        <AddonsSection canBuy={canBuy} yearly={sub?.interval === 'year'} />
+        <AddonsSection canBuy={canBuy} yearly={sub?.interval === 'year'} blocked={blocked} />
       </Group>
     ) : null
 
@@ -527,7 +537,7 @@ export function PlanUsagePage() {
         ) : (
           <>
             <PaymentMethods details={d} onManage={portalOpen ? () => openPortal() : undefined} managing={opening} />
-            <Invoices details={d} />
+            <Invoices details={d} planEnded={!!u?.suspended && !!b && !payFirst} />
           </>
         )}
       </Group>

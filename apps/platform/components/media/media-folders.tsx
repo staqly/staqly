@@ -461,7 +461,7 @@ export function LibraryPane(props: NavProps) {
     <nav
       aria-label="Library"
       data-testid="media-pane"
-      className="hidden min-h-0 border-r bg-sidebar/40 md:sticky md:top-0 md:block md:h-svh md:w-60 md:shrink-0 md:overflow-y-auto md:overscroll-contain md:px-2 md:py-3"
+      className="hidden min-h-0 border-r bg-sidebar/40 md:sticky md:top-[var(--shell-notice,0px)] md:block md:h-[calc(100svh-var(--shell-notice,0px))] md:w-60 md:shrink-0 md:overflow-y-auto md:overscroll-contain md:px-2 md:py-3"
     >
       <LibraryNav {...props} />
     </nav>

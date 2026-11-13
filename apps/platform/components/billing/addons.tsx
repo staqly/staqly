@@ -38,7 +38,16 @@ export function bonusHint(plan: Plan | undefined, limit: string) {
  * Add-ons on top of the plan (Plan & usage, for those who manage the workspace): each with its price in the subscription's interval, Add (charged now
  * for the rest of the period) or Remove (the rest credited). Hidden when none are on sale.
  */
-export function AddonsSection({ canBuy, yearly }: { canBuy: boolean; yearly: boolean }) {
+export function AddonsSection({
+  canBuy,
+  yearly,
+  blocked,
+}: {
+  canBuy: boolean
+  yearly: boolean
+  /** Why nothing can be added or removed now (a locked workspace); the buttons are disabled and say it. */
+  blocked?: string
+}) {
   const { isLocal } = useMode()
   const addons = useAddons({ enabled: !isLocal })
   const qc = useQueryClient()
@@ -94,14 +103,22 @@ export function AddonsSection({ canBuy, yearly }: { canBuy: boolean; yearly: boo
             </div>
             {canBuy &&
               (a.active ? (
-                <Button variant="ghost" onClick={() => setRemoving(a)} disabled={remove.isPending}>
+                <Button
+                  variant="ghost"
+                  onClick={blocked ? undefined : () => setRemoving(a)}
+                  disabled={remove.isPending}
+                  aria-disabled={!!blocked || undefined}
+                  tooltip={blocked}
+                >
                   Remove
                 </Button>
               ) : (
                 <Button
                   variant="outline"
-                  onClick={() => setAdding(a)}
+                  onClick={blocked ? undefined : () => setAdding(a)}
                   disabled={add.isPending || !(yearly ? a.price_year : a.price_month)}
+                  aria-disabled={!!blocked || undefined}
+                  tooltip={blocked}
                 >
                   <Plus /> Add
                 </Button>

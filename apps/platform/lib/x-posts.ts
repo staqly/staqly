@@ -9,9 +9,16 @@ import { useMode, useXPosts } from './queries'
 // The X posts allowance without its UI: the app shell warns on every page (useXPostsWarnings), so this module
 // stays light; the billing section and the Buy more dialog live in components/billing/x-posts.tsx.
 
-/** Nov 30: a short day for "expire Nov 30" and "wait until Nov 1". */
-export function shortDay(iso?: string | null) {
-  return iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) : ''
+/** Nov 30: a short day for "expire Nov 30" and "wait until Nov 1"; with the year when it is not this one (Nov 12, 2027). */
+export function shortDay(iso?: string | null, now = Date.now()) {
+  if (!iso) {
+    return ''
+  }
+
+  const day = new Date(iso)
+  const year = day.getUTCFullYear() === new Date(now).getUTCFullYear() ? undefined : 'numeric'
+
+  return day.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year, timeZone: 'UTC' })
 }
 
 /** "37 of 250 included · 200 extra left (expire Nov 30)". */

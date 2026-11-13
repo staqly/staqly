@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { Billing, BillingDetails, WorkspaceUsage } from '@/lib/api'
 import { pluralize } from '@/lib/format'
-import { LIVE_SUBSCRIPTION, money } from '@/lib/plans'
+import { LIVE_SUBSCRIPTION, lockReason, money, type LockReason } from '@/lib/plans'
 import { TONES, type Tone } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
@@ -16,6 +16,19 @@ import { cents, daysLeft, shortDate } from './billing-format'
 import { Pill } from './payments'
 
 type State = 'unlocked' | 'start' | 'suspended' | 'past_due' | 'trial' | 'canceling' | 'active'
+
+/**
+ * What a locked workspace's people read on Plan & usage: why it is locked and what opens it again. Without billing
+ * (people who don't manage the workspace) the reason is unknown.
+ */
+export const LOCKED_MESSAGE: Record<LockReason | 'unknown', string> = {
+  payment_due:
+    'The last payment failed, so this workspace is locked. Update the payment method or pay the open invoice and it opens again, with everything in it.',
+  payment_failed:
+    'The payment for your plan failed, so the plan ended and this workspace is locked. Choose a plan to open it again, with everything in it.',
+  ended: 'Your plan has ended, so this workspace is locked. Choose a plan to open it again, with everything in it.',
+  unknown: 'This workspace is locked: its plan ended or a payment did not go through.',
+}
 
 /** Where the workspace's plan stands, from what this person may read (billing only for those who manage it). */
 function planState(usage: WorkspaceUsage, billing?: Billing, details?: BillingDetails | null): State {
@@ -67,7 +80,7 @@ function Fact({
 
 /**
  * The top of Plan & usage: the plan, where it stands (trial with the days left, active, payment failed, ending,
- * read-only), the price per user, the seats, the next payment, and the actions: change the plan (owners and admins)
+ * locked), the price per user, the seats, the next payment, and the actions: change the plan (owners and admins)
  * and Stripe's billing portal (the account owner). People who don't manage the workspace see the plan only.
  */
 export function PlanSummary({
@@ -96,6 +109,9 @@ export function PlanSummary({
   const sub = details?.subscription ?? null
   const stripeTrial = billing?.subscription_status === 'trialing'
   const subscribed = LIVE_SUBSCRIPTION.includes(billing?.subscription_status ?? '')
+  const reason = state === 'suspended' && billing ? lockReason(billing) : 'unknown'
+  // Stripe still waits for the invoice (retrying, or locked with the subscription alive): paying it is the way out.
+  const payFirst = state === 'past_due' || (state === 'suspended' && reason === 'payment_due')
 
   if (state === 'unlocked') {
     return (
@@ -123,7 +139,7 @@ export function PlanSummary({
   const pills: Record<State, [string, Tone] | null> = {
     unlocked: null,
     start: ['No plan yet', 'warning'],
-    suspended: ['Read-only', 'danger'],
+    suspended: ['Locked', 'danger'],
     past_due: ['Payment failed', 'danger'],
     trial: [`Trial · ${pluralize(days, 'day')} left`, 'info'],
     canceling: [`Ends ${ends}`, 'warning'],
@@ -133,14 +149,13 @@ export function PlanSummary({
   const message: Record<State, string> = {
     unlocked: '',
     start:
-      'Start your 7-day free trial to use this workspace: Starter is free for 7 days (card required, cancel anytime), or pick a paid plan. Until then you can read everything but not change it.',
-    suspended:
-      'Your plan has ended, so this workspace is read-only. You can still read and export everything; choose a plan to keep working.',
+      'Start your 7-day free trial to use this workspace: Starter is free for 7 days (card required, cancel anytime), or pick a paid plan. Until then the workspace stays locked.',
+    suspended: LOCKED_MESSAGE[reason],
     past_due: `The last payment failed. Update the payment method: ${plan.name} stays active until ${until}.`,
     trial: stripeTrial
       ? `Your free trial ends on ${shortDate(usage.trial_ends_at)}. Then the card on file is charged; cancel before then to pay nothing.`
-      : `Your free trial ends on ${shortDate(usage.trial_ends_at)}. Choose a plan to keep going afterwards; unpaid workspaces become read-only.`,
-    canceling: `It will not renew: the workspace becomes read-only after ${ends}.`,
+      : `Your free trial ends on ${shortDate(usage.trial_ends_at)}. Choose a plan to keep going afterwards; an unpaid workspace is locked until it has one.`,
+    canceling: `It will not renew: the workspace is locked after ${ends} until a plan is chosen.`,
     active: '',
   }
   const loud = state === 'start' || state === 'suspended' || state === 'past_due'
@@ -160,7 +175,7 @@ export function PlanSummary({
   let next: { value: string; hint: string } | null = null
 
   if (sub && sub.status !== 'canceled' && state !== 'canceling') {
-    if (state === 'past_due') {
+    if (payFirst) {
       next = { value: 'Due now', hint: 'Update the payment method to pay it' }
     } else if (nextAt && sub.amount > 0) {
       next = {
@@ -173,14 +188,18 @@ export function PlanSummary({
   const planLink = canManage && (
     <Button
       asChild
-      variant={state === 'start' || state === 'suspended' || (state === 'trial' && !subscribed) ? 'default' : 'info'}
+      variant={
+        state === 'start' || (state === 'suspended' && !payFirst) || (state === 'trial' && !subscribed)
+          ? 'default'
+          : 'info'
+      }
     >
       <Link href="/plans">
         {state === 'start' ? (
           <>
             <Sparkles /> Start free trial
           </>
-        ) : state === 'suspended' || (state === 'trial' && !subscribed) ? (
+        ) : (state === 'suspended' && !payFirst) || (state === 'trial' && !subscribed) ? (
           <>
             <Sparkles /> Choose a plan
           </>
@@ -191,7 +210,7 @@ export function PlanSummary({
     </Button>
   )
   const manage = onManage && (
-    <Button variant={state === 'past_due' ? 'default' : 'outline'} disabled={managing} onClick={onManage}>
+    <Button variant={payFirst ? 'default' : 'outline'} disabled={managing} onClick={onManage}>
       Manage billing <ExternalLink />
     </Button>
   )
@@ -229,6 +248,20 @@ export function PlanSummary({
             {message[state] && (
               <p className="text-sm text-muted-foreground" data-testid="plan-message" role={loud ? 'alert' : undefined}>
                 {message[state]}
+                {/* The API keeps the export open for a locked workspace, and so does the shell (Data & privacy). */}
+                {state === 'suspended' && canManage && (
+                  <>
+                    {' '}
+                    You can still{' '}
+                    <Link
+                      href="/settings/data"
+                      className="text-foreground underline underline-offset-2 hover:no-underline pointer-coarse:-my-3 pointer-coarse:py-3"
+                    >
+                      export your data
+                    </Link>
+                    .
+                  </>
+                )}
               </p>
             )}
           </div>

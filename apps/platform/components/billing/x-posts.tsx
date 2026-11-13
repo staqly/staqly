@@ -46,8 +46,11 @@ export function XPostsNote({ x }: { x: XPosts }) {
   )
 }
 
-/** Buy more, next to X's bar (for the account owner): opens the bundles. */
-export function BuyXPosts({ x }: { x: XPosts }) {
+/**
+ * Buy more, next to X's bar (for the account owner): opens the bundles. `blocked`: why nothing can be bought now (a
+ * locked workspace); the button is disabled and says it.
+ */
+export function BuyXPosts({ x, blocked }: { x: XPosts; blocked?: string }) {
   const [buying, setBuying] = useState(false)
 
   return (
@@ -55,7 +58,9 @@ export function BuyXPosts({ x }: { x: XPosts }) {
       <Button
         size="sm"
         variant="info"
-        onClick={() => setBuying(true)}
+        onClick={blocked ? undefined : () => setBuying(true)}
+        aria-disabled={!!blocked || undefined}
+        tooltip={blocked}
         aria-label="Buy more X posts"
         data-testid="buy-x-posts"
       >

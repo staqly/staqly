@@ -10,3 +10,21 @@ export function money(n: number, currency = 'eur') {
     maximumFractionDigits: 2,
   }).format(n)
 }
+
+/**
+ * Why a locked workspace is locked, which decides what opens it: `payment_due` (Stripe still holds the subscription
+ * and waits for its invoice: paying it restores the workspace), `payment_failed` (the retries ran out and the plan
+ * ended) or `ended`. An ended plan comes back only with a new one; paying its old invoice opens nothing.
+ */
+export type LockReason = 'payment_due' | 'payment_failed' | 'ended'
+
+export function lockReason(billing: {
+  subscription_status: string | null
+  ended_for?: 'payment_failed' | null
+}): LockReason {
+  if (billing.subscription_status === 'past_due' || billing.subscription_status === 'unpaid') {
+    return 'payment_due'
+  }
+
+  return billing.ended_for === 'payment_failed' ? 'payment_failed' : 'ended'
+}

@@ -117,7 +117,7 @@ function CollectionsPane({
     <nav
       aria-label="Collections"
       data-testid="collections-pane"
-      className="hidden min-h-0 flex-col border-r bg-sidebar/40 md:sticky md:top-0 md:flex md:h-svh md:w-75 md:shrink-0"
+      className="hidden min-h-0 flex-col border-r bg-sidebar/40 md:sticky md:top-[var(--shell-notice,0px)] md:flex md:h-[calc(100svh-var(--shell-notice,0px))] md:w-75 md:shrink-0"
     >
       <div className="flex items-center justify-between gap-2 border-b px-3 py-3">
         {/* The page's h1 is the open collection's name; this pane is a landmark with its own heading. */}
