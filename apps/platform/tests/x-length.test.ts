@@ -12,6 +12,8 @@ describe('xLength, the way X counts', () => {
     expect(xLength('🇵🇱'.repeat(140))).toBe(280)
     expect(xLength('a'.repeat(250) + ' https://example.com/' + 'p'.repeat(60))).toBe(274)
     expect(xLength('Hello, world!')).toBe(13)
+    expect(xLength('1️⃣')).toBe(2) // keycap
+    expect(xLength('#⃣')).toBe(2)
   })
 })
 
