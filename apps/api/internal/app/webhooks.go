@@ -700,7 +700,7 @@ func (s *Service) deliver(ctx context.Context, client *http.Client, d db.Webhook
 	if w.Active != 1 {
 		// Disabled after the delivery was queued: finish it instead of
 		// leaving it pending forever (re-enable and retry it to resend).
-		if err := s.W.FinishDelivery(ctx, db.FinishDeliveryParams{ID: d.ID, Status: "failed", NextAttemptAt: s.now(),
+		if err := s.W.FinishDelivery(ctx, db.FinishDeliveryParams{ID: d.ID, Attempts: d.Attempts, Status: "failed", NextAttemptAt: s.now(),
 			LastError: "webhook disabled"}); err != nil {
 			s.logger(ctx).Error("webhook state update failed", "err", err)
 		}
@@ -748,7 +748,7 @@ func (s *Service) deliver(ctx context.Context, client *http.Client, d db.Webhook
 		respBody = ""
 	}
 	now := s.now()
-	upd := db.FinishDeliveryParams{ID: d.ID, NextAttemptAt: now, LastResponse: respBody}
+	upd := db.FinishDeliveryParams{ID: d.ID, Attempts: d.Attempts, NextAttemptAt: now, LastResponse: respBody}
 	if code != 0 {
 		upd.LastStatusCode.Int64, upd.LastStatusCode.Valid = int64(code), true
 	}
