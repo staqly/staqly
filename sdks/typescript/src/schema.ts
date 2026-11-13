@@ -4378,6 +4378,10 @@ export interface components {
             status: string;
             /** @description Stripe's page for the invoice (pay or download) */
             hosted_invoice_url: string;
+            /** @description Refunded of what was paid, smallest currency unit (Stripe keeps a refunded invoice paid): equal to amount_paid when fully refunded */
+            amount_refunded: number;
+            /** @description A dispute (chargeback) on its payment is open or was lost */
+            disputed: boolean;
             /** @description The invoice as a PDF */
             invoice_pdf: string;
         };

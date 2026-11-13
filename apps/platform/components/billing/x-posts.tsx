@@ -22,8 +22,8 @@ import { shortDay, xPostsWarning } from '@/lib/x-posts'
 export { xPostsLine, xPostsWarning } from '@/lib/x-posts'
 
 /**
- * Plan & usage, Posts per platform, under X's bar: the X posts bought on top of the plan (what is left and when it
- * expires), how posts count and the warning when this period's are used up. The bar shows the included posts.
+ * Plan & usage, Posts per platform, under X's bar: how posts count, when the included ones reset and the warning when
+ * this period's are used up. Bought posts show on the bar's line ("+ 200 bought").
  */
 export function XPostsNote({ x }: { x: XPosts }) {
   return (
@@ -34,11 +34,6 @@ export function XPostsNote({ x }: { x: XPosts }) {
         </Callout>
       )}
       <p className="text-xs text-muted-foreground">
-        <span className="tabular-nums" data-testid="x-posts-line">
-          {x.credits_left > 0
-            ? `${x.credits_left.toLocaleString('en-US')} bought posts left, used after the included ones; they expire ${shortDay(x.credits_expire_at)}.`
-            : 'None bought this period.'}
-        </span>{' '}
         Each post and thread reply counts once when it goes out, a post with a live link counts {x.link_post_weight}.
         Included posts reset on {shortDay(x.period_end)}.
       </p>

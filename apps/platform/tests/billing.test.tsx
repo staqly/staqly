@@ -50,6 +50,8 @@ function invoice(n: number): BillingDetails['invoices'][number] {
     status: 'paid',
     hosted_invoice_url: `https://invoice.stripe.test/${n}`,
     invoice_pdf: `https://invoice.stripe.test/${n}.pdf`,
+    amount_refunded: 0,
+    disputed: false,
   }
 }
 
@@ -191,6 +193,37 @@ describe('plan & usage', () => {
     expect(api.find('GET', '/v1/billing/details').some((c) => c.query.get('starting_after') === 'in_2')).toBe(true)
   })
 
+  it('invoices say Refunded, Partially refunded (with the amount) and Disputed, though Stripe keeps them paid', async () => {
+    mockApi({
+      'GET /v1/billing': BILLING_PRO,
+      'GET /v1/billing/details': {
+        ...DETAILS,
+        has_more_invoices: false,
+        invoices: [
+          invoice(1),
+          { ...invoice(2), currency: 'eur', total: 1000, amount_paid: 1000, amount_refunded: 1000 },
+          { ...invoice(3), amount_refunded: 500 },
+          { ...invoice(4), disputed: true },
+        ],
+      },
+      'GET /v1/billing/addons': { data: [] },
+      'GET /v1/billing/x-posts': XPOSTS,
+      'GET /v1/workspace/usage': usage(PLANS[1]),
+    })
+    renderPlan()
+
+    await waitFor(() => expect(screen.getAllByTestId('invoice-row')).toHaveLength(4))
+    const [paid, refunded, partly, disputed] = screen.getAllByTestId('invoice-row')
+
+    expect(paid).toHaveTextContent('Paid')
+    expect(refunded).toHaveTextContent('Refunded')
+    expect(refunded).not.toHaveTextContent('Paid')
+    expect(within(refunded).queryByTestId('invoice-refunded')).toBeNull()
+    expect(partly).toHaveTextContent('Partially refunded')
+    expect(within(partly).getByTestId('invoice-refunded')).toHaveTextContent('$5 refunded')
+    expect(disputed).toHaveTextContent('Disputed')
+  })
+
   it("platforms with an allowance of their own are lines in one card under the tiles, Buy more next to X's bar", async () => {
     mockApi({
       'GET /v1/billing': BILLING_PRO,
@@ -217,12 +250,51 @@ describe('plan & usage', () => {
     expect(meter).toHaveAttribute('aria-valuetext', '12 of 100')
     // Bought posts are bought and explained in X's block, not in a section of their own.
     expect(within(x).getByRole('button', { name: 'Buy more X posts' })).toBeInTheDocument()
-    expect(within(row).getByTestId('platform-x')).toHaveTextContent('None bought this period.')
+    // None bought: nothing about them on the line.
+    expect(within(x).queryByTestId('platform-posts-x-bought')).toBeNull()
+    expect(within(x).queryByTestId('platform-posts-x-bought-bar')).toBeNull()
     expect(screen.queryByRole('heading', { name: /extra x posts/i })).not.toBeInTheDocument()
     // The tiles stay alike: Posts this month holds no per-platform lines, and no platform has a tile of its own.
     expect(within(screen.getByTestId('meter-Posts this month')).queryByTestId('platform-posts-x')).toBeNull()
     expect(within(screen.getByTestId('usage-meters')).queryByTestId('platform-posts')).toBeNull()
     expect(screen.queryByTestId('meter-X posts this month')).not.toBeInTheDocument()
+  })
+
+  it("bought X posts show next to the count and as the bar's muted end, explained in a tooltip", async () => {
+    mockApi({
+      'GET /v1/billing': BILLING_PRO,
+      'GET /v1/billing/details': DETAILS,
+      'GET /v1/billing/addons': { data: [] },
+      'GET /v1/billing/x-posts': {
+        ...XPOSTS,
+        used: 100,
+        included_left: 0,
+        credits_left: 200,
+        credits_expire_at: '2026-11-24T00:00:00Z',
+        left: 200,
+      },
+      'GET /v1/workspace/usage': usage(PLANS[1], { x_posts_per_period: 100 }),
+    })
+    const user = userEvent.setup()
+
+    renderPlan()
+
+    const x = await screen.findByTestId('platform-posts-x')
+    const bought = await within(x).findByTestId('platform-posts-x-bought')
+
+    expect(x).toHaveTextContent('100 / 100')
+    expect(bought).toHaveTextContent('+ 200 bought')
+    // The included posts are used up, the bought ones are not: no "Limit reached".
+    expect(x).toHaveAttribute('data-level', 'ok')
+    expect(x).not.toHaveTextContent('Limit reached')
+
+    const meter = within(x).getByRole('progressbar', { name: 'X posts' })
+
+    expect(meter).toHaveAttribute('aria-valuemax', '300')
+    expect(meter).toHaveAttribute('aria-valuetext', '100 of 100, plus 200 bought')
+    expect(within(x).getByTestId('platform-posts-x-bought-bar').style.width).toMatch(/^66\.6/)
+    await user.hover(bought)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Used after the included ones; they expire Nov 24.')
   })
 
   it('LinkedIn is one block with a line for its posts and one for its videos, with the same warnings as X', async () => {

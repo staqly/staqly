@@ -27,6 +27,8 @@ describe('URLs from the API', () => {
           status: 'paid',
           hosted_invoice_url: 'javascript:alert(1)',
           invoice_pdf: 'https://invoice.stripe.test/1.pdf',
+          amount_refunded: 0,
+          disputed: false,
         },
       ],
       has_more_invoices: false,

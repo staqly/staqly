@@ -5230,7 +5230,7 @@ components:
         default: { type: boolean, description: The card the subscription is charged to }
     Invoice:
       type: object
-      required: [id, number, created, period_start, period_end, total, amount_paid, amount_due, currency, status, hosted_invoice_url, invoice_pdf]
+      required: [id, number, created, period_start, period_end, total, amount_paid, amount_due, currency, status, hosted_invoice_url, invoice_pdf, amount_refunded, disputed]
       properties:
         id: { type: string, examples: [in_1Q2w3E4r5T6y7U8i] }
         number: { type: string, examples: [A1B2C3D4-0001] }
@@ -5243,6 +5243,8 @@ components:
         currency: { type: string, examples: [usd] }
         status: { type: string, description: "paid, open, void or uncollectible", examples: [paid] }
         hosted_invoice_url: { type: string, description: Stripe's page for the invoice (pay or download) }
+        amount_refunded: { type: integer, description: "Refunded of what was paid, smallest currency unit (Stripe keeps a refunded invoice paid): equal to amount_paid when fully refunded" }
+        disputed: { type: boolean, description: A dispute (chargeback) on its payment is open or was lost }
         invoice_pdf: { type: string, description: The invoice as a PDF }
     PendingPayment:
       type: object
