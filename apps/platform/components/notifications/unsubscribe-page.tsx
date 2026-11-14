@@ -17,6 +17,7 @@ const EVENTS: Record<string, string> = {
   'channel.expiring': 'channel sign-ins that run out soon',
   'schedule.posts_requested': 'schedules out of posts',
   'invitation.accepted': 'people joining',
+  onboarding: 'getting started with staqly',
 }
 
 /** The unsubscribe link of a personal email: turns that kind of email off at once, no sign-in. */
@@ -45,7 +46,8 @@ export function UnsubscribePage() {
           <>
             <h1 className="text-xl font-semibold tracking-tight">You&apos;re unsubscribed</h1>
             <p className="text-sm text-muted-foreground">
-              No more emails about {what}. The bell in Staqly still shows them unless you turn that off too.
+              No more emails about {what}.
+              {run.data?.event !== 'onboarding' && ' The bell in Staqly still shows them unless you turn that off too.'}
             </p>
           </>
         ) : run.isError ? (

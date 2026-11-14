@@ -24,7 +24,9 @@ type emailDoc struct {
 	Error      string        // what went wrong, in a red box
 	Quote      string        // the post's first line
 	Rows       []emailRow    // one per channel (or alert entry)
+	After      []string      // paragraphs between the rows and the button
 	Button     *emailLink    // the main action
+	Closing    []string      // paragraphs under the button and links (a sign-off)
 	Footer     []string      // why they get it
 	Prefs      *emailLink    // change notification preferences
 	Unsub      *emailLink    // one-click unsubscribe from this kind of email
@@ -129,12 +131,24 @@ func renderEmail(d emailDoc, logoURL string) (string, string) {
 		}
 		w(`</table>`)
 	}
+	para := func(p string) {
+		w(`<p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#374151">%s</p>`, strings.ReplaceAll(emailBold(esc(p)), "\n", "<br>"))
+	}
+	for _, p := range d.After {
+		para(p)
+	}
 	if d.Button != nil {
 		w(`<table role="presentation" cellpadding="0" cellspacing="0" style="margin:4px 0 8px"><tr><td style="border-radius:10px;background:%s">`, emailBrand)
 		w(`<a href="%s" style="display:inline-block;padding:12px 22px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:10px">%s</a></td></tr></table>`, esc(d.Button.URL), esc(d.Button.Text))
 	}
 	for _, l := range d.Links {
 		w(`<p style="margin:8px 0 0;font-size:13px"><a href="%s" style="color:%s">%s</a></p>`, esc(l.URL), emailBrand, esc(l.Text))
+	}
+	if len(d.Closing) > 0 {
+		w(`<div style="height:12px"></div>`)
+	}
+	for _, p := range d.Closing {
+		para(p)
 	}
 	w(`</td></tr>`)
 	// Footer
@@ -195,6 +209,9 @@ func renderEmail(d emailDoc, logoURL string) (string, string) {
 	if len(d.Rows) > 0 {
 		t.WriteString("\n")
 	}
+	for _, p := range d.After {
+		t.WriteString(strings.ReplaceAll(p, "**", "") + "\n\n")
+	}
 	if d.Button != nil {
 		t.WriteString(d.Button.Text + ": " + d.Button.URL + "\n\n")
 	}
@@ -203,6 +220,9 @@ func renderEmail(d emailDoc, logoURL string) (string, string) {
 	}
 	if len(d.Links) > 0 {
 		t.WriteString("\n")
+	}
+	for _, p := range d.Closing {
+		t.WriteString(strings.ReplaceAll(p, "**", "") + "\n\n")
 	}
 	t.WriteString("Need help? Read the staqly docs: " + emailDocsURL + "\n\n--\n")
 	if d.To != "" {

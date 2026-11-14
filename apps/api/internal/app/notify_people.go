@@ -165,7 +165,7 @@ func (s *Service) Unsubscribe(ctx context.Context, token string) (string, error)
 		return "", bad
 	}
 	userID, event, _ := strings.Cut(string(msgB), ":")
-	if !slices.Contains(PersonalEvents, event) {
+	if !slices.Contains(PersonalEvents, event) && event != onboardingEmails {
 		return "", bad
 	}
 	err := s.updateNotificationPrefs(ctx, userID, func(st *storedPrefs) {

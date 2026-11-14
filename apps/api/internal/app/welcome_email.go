@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/staqly/staqly/apps/api/internal/db"
@@ -32,6 +34,15 @@ import (
 //     subscription (subscription_ended_for remembers it); the workspace is read-only until it has a plan again.
 //
 // A payment put right sends nothing: Stripe's receipt says so.
+//
+// With billing, a new workspace has no plan until its owner starts Starter's trial in Stripe Checkout (card
+// required), so someone who signs up and stops there would hear nothing. The transaction that creates the workspace
+// and its owner queues three sign-up emails for that owner (queueSignupEmails): signup after 10 minutes, then
+// signup_day1 and signup_day3, each pointing at the free trial. Each one is sent only while it is still true: the
+// person still owns the workspace, it is still locked without a plan, it never had a trial or a subscription
+// (workspace_trials, the subscription), the trial is still on offer to it (trialOffer), and the person hasn't
+// unsubscribed from them (the "onboarding" category of the personal unsubscribe links). Starting the trial within
+// the first 10 minutes leaves only the trial's own email.
 
 const (
 	welcomeTrial   = "trial"
@@ -43,7 +54,20 @@ const (
 
 	// welcomeTrialDelay: the trial's email waits, so a trial ended right after it began (guardCard) says nothing.
 	welcomeTrialDelay = time.Minute
+
+	emailSignup     = "signup"
+	emailSignupDay1 = "signup_day1"
+	emailSignupDay3 = "signup_day3"
+
+	// onboardingEmails: the unsubscribe category of the sign-up emails (apart from the personal notifications).
+	onboardingEmails = "onboarding"
 )
+
+// signupEmails: the sign-up emails and when they go, after the workspace was created.
+var signupEmails = []struct {
+	kind  string
+	after time.Duration
+}{{emailSignup, 10 * time.Minute}, {emailSignupDay1, 24 * time.Hour}, {emailSignupDay3, 72 * time.Hour}}
 
 // welcomeSubscription runs in applySubscription's transaction, before settleTrial, for a subscription that is
 // being applied: cur is the workspace before it. A trial is new when none was seen here yet; a payment is the
@@ -75,13 +99,55 @@ func (s *Service) welcomeSubscription(ctx context.Context, q *db.Queries, cur db
 	return s.queueWelcome(ctx, q, cur.ID, kind, interval)
 }
 
-// welcomeServerTrial runs in the transaction that creates a workspace and its owner, so once: without billing
-// the workspace's trial starts right there (with billing it starts at Stripe: welcomeSubscription).
-func (s *Service) welcomeServerTrial(ctx context.Context, q *db.Queries, workspaceID string) error {
+// welcomeNewWorkspace runs in the transaction that creates a workspace and its owner, so once: without billing
+// the workspace's trial starts right there; with billing it starts at Stripe (welcomeSubscription), and until
+// then the sign-up emails point the owner at it.
+func (s *Service) welcomeNewWorkspace(ctx context.Context, q *db.Queries, workspaceID string) error {
 	if s.BillingEnabled() {
-		return nil
+		return s.queueSignupEmails(ctx, q, workspaceID)
 	}
 	return s.queueWelcome(ctx, q, workspaceID, welcomeTrial, "")
+}
+
+// queueSignupEmails queues the sign-up emails for the new workspace's owner, in the caller's transaction (cloud
+// mode with mail only, like queueWelcome). Whether each one still goes is decided when it is due.
+func (s *Service) queueSignupEmails(ctx context.Context, q *db.Queries, workspaceID string) error {
+	if s.Cfg.Mode != ModeCloud || !s.mailConfigured() {
+		return nil
+	}
+	members, err := q.ListMembers(ctx, workspaceID)
+	if err != nil {
+		return err
+	}
+	now := s.Now()
+	for _, m := range members {
+		if m.Role != RoleOwner {
+			continue
+		}
+		for _, e := range signupEmails {
+			if err := s.enqueue(ctx, q, workspaceID, "welcome_email", "welcome_email:"+workspaceID+":"+e.kind+":"+m.UserID,
+				jobPayload{UserID: m.UserID, Welcome: e.kind}, now.Add(e.after), 0); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// signupEmailDue: whether a sign-up email still has something to offer: the workspace is locked without a plan,
+// never had a trial or a subscription, and Starter's trial is on offer to it.
+func (s *Service) signupEmailDue(ctx context.Context, w db.GetWorkspaceBillingRow) (bool, error) {
+	if !s.BillingEnabled() {
+		return false, nil
+	}
+	if _, err := s.Q.GetWorkspaceTrial(ctx, w.ID); err == nil || !isNoRows(err) {
+		return false, err // a trial (or a payment) was seen here
+	}
+	if _, _, suspended, err := s.planState(ctx, s.Q, w.ID); err != nil || !suspended {
+		return false, err // a plan the operator set, or one we don't know of: it works already
+	}
+	offer, err := s.trialOffer(ctx, s.Q, w)
+	return offer == TrialAvailable, err
 }
 
 // queueWelcome queues one email per owner (the people who manage billing), in the caller's transaction. Without
@@ -139,6 +205,7 @@ func (s *Service) runWelcomeEmail(ctx context.Context, workspaceID string, p job
 		return nil
 	}
 	f := welcomeFacts{Kind: p.Welcome, Workspace: w.Name, Plan: plan.Name, Interval: p.Interval, Base: s.webURL()}
+	var headers map[string]string
 	// day: a stored time in the workspace's time zone (zero when it can't be read).
 	day := func(v string) time.Time {
 		t, err := time.Parse(timeFormat, v)
@@ -186,11 +253,33 @@ func (s *Service) runWelcomeEmail(ctx context.Context, workspaceID string, p job
 			return nil // not paying after all (the payment failed, the plan was cancelled)
 		}
 		f.Steps = p.Welcome == welcomePaidNew
+	case emailSignup, emailSignupDay1, emailSignupDay3:
+		if !parsePrefs(u.NotificationPrefs).choice(onboardingEmails).Email {
+			return nil // unsubscribed
+		}
+		if due, err := s.signupEmailDue(ctx, w); err != nil || !due {
+			return err
+		}
+		if names := strings.Fields(u.Name); len(names) > 0 {
+			f.FirstName = names[0]
+		}
+		token := s.unsubscribeToken(u.ID, onboardingEmails)
+		f.Unsub = s.webURL() + "/unsubscribe#" + token
+		headers = map[string]string{
+			"List-Unsubscribe":      "<" + s.webURL() + "/api/v1/notifications/unsubscribe?token=" + token + ">",
+			"List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+		}
 	default:
 		return nil
 	}
 	subject, d := welcomeEmail(f)
-	return s.sendSystemEmailDoc(ctx, u.Email, subject, d, nil)
+	if err := s.sendSystemEmailDoc(ctx, u.Email, subject, d, headers); err != nil {
+		return err
+	}
+	if headers != nil { // a sign-up email: counted, to measure what they convert
+		s.trackAs(nil, Principal{WorkspaceID: workspaceID, Kind: PrincipalSystem, ID: "onboarding", UserID: u.ID}, "onboarding_email_sent", "step", p.Welcome)
+	}
+	return nil
 }
 
 // welcomeFacts is what a welcome email says. Nothing of the workspace's content: its name, its plan and dates.
@@ -205,6 +294,8 @@ type welcomeFacts struct {
 	Extra     bool      // payment failed: for a seat or an add-on added mid-period, not for the plan's renewal
 	Steps     bool      // show the first steps
 	Base      string    // the app's address
+	FirstName string    // sign-up: whom to greet ("" when unknown)
+	Unsub     string    // sign-up: the unsubscribe page's link
 }
 
 // welcomeEmail writes the email: its subject and the document in the shared look.
@@ -214,6 +305,8 @@ func welcomeEmail(f welcomeFacts) (string, emailDoc) {
 	subject := ""
 	const readOnly = "your posts and settings stay, but nothing new can be written or published"
 	switch f.Kind {
+	case emailSignup, emailSignupDay1, emailSignupDay3:
+		return signupEmail(f)
 	case emailPaymentFailed:
 		subject = "The payment for staqly " + f.Plan + " failed"
 		d.Title = "The payment for " + f.Plan + " failed"
@@ -288,4 +381,54 @@ func welcomeEmail(f welcomeFacts) (string, emailDoc) {
 		}
 	}
 	return subject, d
+}
+
+// signupEmail writes a sign-up email: the account is ready, the free trial is one step away.
+func signupEmail(f welcomeFacts) (string, emailDoc) {
+	hi := "Hi there 👋"
+	if f.FirstName != "" {
+		hi = "Hi " + f.FirstName + " 👋"
+	}
+	trial := fmt.Sprintf("**Start your %d-day free trial", TrialDays)
+	const terms = "You won't be charged before the trial ends, and you can cancel any time in Settings → Plan & usage."
+	d := emailDoc{
+		Button:  &emailLink{Text: "Start my free week", URL: f.Base + "/plans"},
+		Closing: []string{"The staqly team"},
+		Footer:  []string{"You get this email because you created a staqly account."},
+		Unsub:   &emailLink{Text: "Unsubscribe from these emails", URL: f.Unsub},
+	}
+	switch f.Kind {
+	case emailSignup:
+		d.Title = "Thanks for creating your staqly account! 🎉"
+		d.Preheader = "You're one step away from your first post."
+		d.Paragraphs = []string{hi,
+			"You're one step away from writing a post once and having it go out everywhere — on time, without copy-pasting between apps.",
+			"Here's what's waiting inside:"}
+		d.Rows = []emailRow{
+			{Label: "Write once, publish everywhere", Detail: "Facebook, Instagram, Threads, LinkedIn, X, Bluesky and more."},
+			{Label: "Plan your week in one sitting", Detail: "Schedule a week of posts and see them on the calendar."},
+			{Label: "Your AI agents post for you", Detail: "Claude Code, Codex or n8n write and schedule posts through MCP or the API."},
+			{Label: "Know what people say", Detail: "The comments under your posts, read by AI: what people like, dislike and ask."},
+		}
+		d.After = []string{trial + " and publish your first post today.** " + terms}
+		d.Closing = []string{"See you in your feed,\nThe staqly team",
+			"PS: Questions? Ask us from Help & Feedback in the app."}
+		return "Your staqly account is ready – start your free week", d
+	case emailSignupDay1:
+		d.Title = "Your first post, scheduled in 2 minutes"
+		d.Preheader = "Connect a channel, write, pick a time."
+		d.Paragraphs = []string{hi,
+			"Connect a channel, write your post, pick a time. That's it: staqly publishes it on time, on every channel you chose.",
+			"Rather not write it yourself? Ask Claude Code or Codex: they draft and schedule posts for you through MCP.",
+			trial + ".** " + terms}
+		return d.Title, d
+	}
+	d.Title = "Your free week is still waiting"
+	d.Preheader = "Our last reminder about your free trial."
+	d.Paragraphs = []string{hi,
+		fmt.Sprintf("Your staqly account is ready, but your %d-day free trial hasn't started yet. ", TrialDays) +
+			"Start it and write, schedule and publish to all your channels from one place.",
+		terms,
+		"This is the last reminder we send about it."}
+	return d.Title, d
 }

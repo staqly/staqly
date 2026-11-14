@@ -96,6 +96,7 @@ acted, `agent` (the MCP or REST client's name, e.g. `Claude Code`) are on every 
 | `trial_paused` | A trial was paused for review because it connected accounts of an earlier unpaid trial (cloud; nothing charged) | `reason` (`channels`) |
 | `trial_ended_early` | An owner chose to start the paid plan during the trial (Start paid plan now) | `charged` |
 | `credits_purchased` | A bundle of extra posts paid | `posts` |
+| `onboarding_email_sent` | A [sign-up email](/plans#sign-up-emails) went to a new workspace's owner (cloud with Stripe), as that person | `step` (`signup`, `signup_day1`, `signup_day3`) |
 | `$exception` | An error report (server or dashboard) | PostHog's exception properties; server: the fixed log message, stack trace and diagnostic tags (`request_id`, `trace_id`, `route`, `workspace_id`, `worker`, `mode`, `version`), without raw errors or extra log fields |
 | `$pageview`, `$web_vitals` | Dashboard pages | PostHog's, URL without query and fragment |
 
