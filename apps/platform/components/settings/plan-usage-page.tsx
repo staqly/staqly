@@ -1,0 +1,641 @@
+'use client'
+
+import { useQueryClient } from '@tanstack/react-query'
+import { BellRing, CircleHelp, HardDrive, KeyRound, Layers, Share2, Webhook } from 'lucide-react'
+import dynamic from 'next/dynamic'
+import Link from 'next/link'
+import { useEffect } from 'react'
+import { toast } from 'sonner'
+
+import { AddonsSection, bonusHint } from '@/components/billing/addons'
+import { Invoices, PaymentMethods } from '@/components/billing/payments'
+import { PlanSummary } from '@/components/billing/plan-summary'
+import { BuyXPosts, XPostsNote } from '@/components/billing/x-posts'
+import { Callout } from '@/components/common/callout'
+import { ErrorState } from '@/components/common/error-state'
+import { PageContainer } from '@/components/common/page-header'
+import { usePlanActions } from '@/components/plans/plans-page'
+import { SettingsHeader } from '@/components/settings/settings-header'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { api, POST_STATUSES, UNLIMITED, type WorkspaceUsage } from '@/lib/api'
+import { formatBytes } from '@/lib/format'
+import { lockReason } from '@/lib/plans'
+import {
+  qk,
+  useAddons,
+  useBilling,
+  useBillingDetails,
+  useMode,
+  usePendingPayment,
+  useRole,
+  useUsage,
+  useXPosts,
+} from '@/lib/queries'
+import { POST_STATUS_META } from '@/lib/status'
+import { TONES } from '@/lib/tones'
+import { meterTone, usageMeter } from '@/lib/usage'
+import { cn } from '@/lib/utils'
+import { shortDay } from '@/lib/x-posts'
+
+import { SettingsNav } from './settings-nav'
+
+// Every provider's mark is ~11 KB gzipped: loaded after the page, next to the two names it decorates.
+const ProviderIcon = dynamic(() => import('@staqly/brand/providers').then((m) => m.ProviderIcon), {
+  ssr: false,
+  loading: () => <span className="size-4" />,
+})
+
+type MeterKey = keyof WorkspaceUsage['usage'] & keyof WorkspaceUsage['plan']['limits']
+
+const METERS: { key: MeterKey; label: string; Icon: typeof Layers; bytes?: boolean; hint?: string }[] = [
+  { key: 'posts_per_month', label: 'Posts this month', Icon: Layers, hint: 'Created · resets on the 1st' },
+  { key: 'channels', label: 'Channels', Icon: Share2 },
+  { key: 'webhooks', label: 'Webhooks', Icon: Webhook },
+  { key: 'api_keys', label: 'API keys', Icon: KeyRound },
+  { key: 'storage_bytes', label: 'Storage', Icon: HardDrive, bytes: true },
+  { key: 'alerts', label: 'Alerts', Icon: BellRing },
+]
+
+/**
+ * Platforms whose posts count against an allowance of their own (X charges per post, LinkedIn's daily quotas are
+ * shared by every workspace): one block each in the full-width Posts per platform card under the tiles, a line per
+ * allowance. id names the line for tests; the bar's label is the platform and the line ("LinkedIn videos").
+ */
+const PLATFORM_POSTS: { id: string; name: string; meters: { key: MeterKey; id: string; name: string }[] }[] = [
+  { id: 'x', name: 'X', meters: [{ key: 'x_posts_per_period', id: 'x', name: 'Posts' }] },
+  {
+    id: 'linkedin',
+    name: 'LinkedIn',
+    meters: [
+      { key: 'linkedin_posts_per_period', id: 'linkedin', name: 'Posts' },
+      { key: 'linkedin_videos_per_period', id: 'linkedin-videos', name: 'Videos' },
+    ],
+  },
+]
+
+function UsageMeter({
+  label,
+  used,
+  max,
+  bytes,
+  hint,
+  Icon,
+}: {
+  label: string
+  used: number
+  max: number
+  bytes?: boolean
+  hint?: string
+  Icon?: typeof Layers
+}) {
+  const { level, pct } = usageMeter(used, max)
+  const tone = meterTone(level)
+  const fmt = (n: number) => (bytes ? formatBytes(n) : n.toLocaleString('en-US'))
+
+  return (
+    <div
+      className="grid content-start gap-2.5 rounded-xl border bg-card p-3.5 sm:p-4"
+      data-testid={`meter-${label}`}
+      data-level={level}
+    >
+      <div className="flex min-h-5 flex-wrap items-center justify-between gap-x-2 gap-y-1 text-[13px] sm:text-sm">
+        <span className="inline-flex items-center gap-2 font-medium">
+          {Icon && <Icon className="size-4 shrink-0 text-muted-foreground" />}
+          {label}
+        </span>
+        {level === 'full' && <span className={cn('text-xs font-medium', tone.text)}>Limit reached</span>}
+        {level === 'warn' && <span className={cn('text-xs font-medium', tone.text)}>Almost full</span>}
+      </div>
+      <div className="flex items-baseline gap-1.5">
+        <span className="text-xl font-semibold tracking-tight tabular-nums sm:text-2xl">{fmt(used)}</span>
+        <span className="text-sm text-muted-foreground tabular-nums">
+          /{' '}
+          {level === 'unlimited' ? (
+            <span aria-label="unlimited" title="Unlimited">
+              ∞
+            </span>
+          ) : (
+            fmt(max)
+          )}
+        </span>
+      </div>
+      <div
+        role="progressbar"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={level === 'unlimited' ? undefined : max}
+        aria-valuenow={used}
+        aria-valuetext={level === 'unlimited' ? `${fmt(used)} of unlimited` : `${fmt(used)} of ${fmt(max)}`}
+        className="h-2 overflow-hidden rounded-full bg-muted"
+      >
+        {level === 'unlimited' ? (
+          <div className="h-full w-full bg-[repeating-linear-gradient(-45deg,transparent_0_6px,color-mix(in_oklch,var(--foreground)_7%,transparent)_6px_12px)]" />
+        ) : (
+          <div
+            className={cn('h-full rounded-full transition-[width] duration-500', tone.fill)}
+            style={{ width: `${Math.max(pct, used > 0 ? 2 : 0)}%` }}
+          />
+        )}
+      </div>
+      {hint && <div className="text-xs text-muted-foreground">{hint}</div>}
+    </div>
+  )
+}
+
+const count = (n: number) => n.toLocaleString('en-US')
+
+/**
+ * One allowance line: name, used / limit, a bar, then the status and Buy more. The cells sit on the list's columns
+ * (subgrid), so every bar starts and ends at the same place whatever the numbers' width. `bought`: posts bought on
+ * top (X): the count shows the total (included + bought), its tooltip the split, and the bar's muted end the bought part.
+ */
+function PlatformMeter({
+  id,
+  name,
+  label,
+  used,
+  max,
+  hint,
+  action,
+  bought,
+}: {
+  id: string
+  name: string
+  label: string
+  used: number
+  max: number
+  hint?: string
+  action?: React.ReactNode
+  bought?: { left: number; expires: string }
+}) {
+  const extra = bought && bought.left > 0 ? bought.left : 0
+  // Bought posts are used after the included ones: what is left of them always sits at the end of the bar.
+  const total = Math.max(used, max) + extra
+  const { level, pct } = usageMeter(used, total)
+  const tone = meterTone(level)
+  const status = level === 'full' ? 'Limit reached' : level === 'warn' ? 'Almost full' : ''
+  const boughtPct = total > 0 ? (extra / total) * 100 : 0
+
+  return (
+    <li
+      className="col-span-full grid min-h-8 grid-cols-subgrid items-center"
+      data-testid={`platform-posts-${id}`}
+      data-level={level}
+      title={hint}
+    >
+      <span className="text-muted-foreground">{name}</span>
+      <span className="flex flex-wrap items-center justify-end gap-x-1.5 text-right text-muted-foreground tabular-nums">
+        {extra > 0 ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex items-center justify-end gap-1 rounded whitespace-nowrap hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none pointer-coarse:-my-3 pointer-coarse:py-3"
+                data-testid={`platform-posts-${id}-bought`}
+              >
+                <span>
+                  <span className={cn('font-medium', status ? tone.text : 'text-foreground')}>{count(used)}</span> /{' '}
+                  {count(Math.max(used, max) + extra)}
+                </span>
+                <CircleHelp className="size-3.5" aria-hidden />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {count(max)} included in the plan + {count(extra)} bought. Included posts are used first; bought ones
+              expire {bought!.expires}.
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <span>
+            <span className={cn('font-medium', status ? tone.text : 'text-foreground')}>{count(used)}</span> /{' '}
+            {count(max)}
+          </span>
+        )}
+      </span>
+      <span
+        role="progressbar"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={total}
+        aria-valuenow={used}
+        aria-valuetext={`${count(used)} of ${count(total)}${extra > 0 ? ` (${count(max)} included, ${count(extra)} bought)` : ''}`}
+        className="relative h-1.5 overflow-hidden rounded-full bg-muted"
+      >
+        {extra > 0 && (
+          <span
+            className="absolute inset-y-0 right-0 bg-muted-foreground/25"
+            style={{ width: `${boughtPct}%` }}
+            data-testid={`platform-posts-${id}-bought-bar`}
+          />
+        )}
+        <span
+          className={cn('relative block h-full rounded-full transition-[width] duration-500', tone.fill)}
+          style={{ width: `${Math.max(pct, used > 0 ? 4 : 0)}%` }}
+        />
+      </span>
+      <span className="flex items-center justify-end gap-2">
+        {status && <span className={cn('text-xs font-medium whitespace-nowrap', tone.text)}>{status}</span>}
+        {action}
+      </span>
+    </li>
+  )
+}
+
+/** Shown even at 0; the others only when a post of this period has them. */
+const MAIN_STATUSES = new Set(['scheduled', 'published', 'failed'])
+
+/** Posts created this period by current status, and the webhook delivery backlog. */
+function PeriodActivity({ usage }: { usage: WorkspaceUsage }) {
+  const counts = usage.posts_by_status
+  const created = Object.values(counts).reduce((a, b) => a + b, 0)
+  const statuses = POST_STATUSES.filter((s) => MAIN_STATUSES.has(s) || (counts[s] ?? 0) > 0)
+  const d = usage.webhook_deliveries
+  const rows = [
+    { label: 'Queued', value: d.queued, hint: 'Waiting for the first attempt' },
+    { label: 'Retrying', value: d.retrying, hint: 'Failed at least once, will try again' },
+    { label: 'Failed', value: d.failed, hint: 'Gave up after every retry; redeliver it from Webhooks' },
+  ]
+
+  return (
+    <div className="grid gap-3 lg:grid-cols-3">
+      <div
+        className="grid content-start gap-3 rounded-xl border bg-card p-3.5 sm:p-4 lg:col-span-2"
+        data-testid="period-posts"
+      >
+        <div className="flex items-center justify-between gap-2 text-[13px] sm:text-sm">
+          <span className="font-medium">Posts created this period</span>
+          <span className="text-muted-foreground">
+            <span className="font-semibold text-foreground tabular-nums">{created.toLocaleString('en-US')}</span>{' '}
+            created
+          </span>
+        </div>
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+          {statuses.map((s) => {
+            const meta = POST_STATUS_META[s]
+
+            return (
+              <Link
+                key={s}
+                href={`/posts?status=${s}`}
+                title={`${meta.description}: open in Posts`}
+                className="grid justify-items-center gap-1.5 rounded-lg p-2 hover:bg-muted"
+              >
+                <span className={cn('text-xl font-semibold tabular-nums sm:text-2xl', TONES[meta.tone].text)}>
+                  {(counts[s] ?? 0).toLocaleString('en-US')}
+                </span>
+                <span className={cn('rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset', meta.badge)}>
+                  {meta.label}
+                </span>
+              </Link>
+            )
+          })}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          By current status. Counts every post created since the 1st (UTC).
+        </p>
+      </div>
+      <div className="grid content-start gap-2 rounded-xl border bg-card p-3.5 sm:p-4" data-testid="webhook-deliveries">
+        <Link
+          href="/webhooks"
+          className="inline-flex w-fit items-center gap-2 text-[13px] font-medium hover:underline sm:text-sm pointer-coarse:-my-3 pointer-coarse:py-3"
+        >
+          <Webhook className="size-4 shrink-0 text-muted-foreground" /> Webhook delivery
+        </Link>
+        <dl className="divide-y text-sm">
+          {rows.map((r) => (
+            <div key={r.label} className="flex items-center justify-between py-1.5" title={r.hint}>
+              <dt className="text-muted-foreground">{r.label}</dt>
+              <dd
+                className={cn('font-semibold tabular-nums', r.label === 'Failed' && r.value > 0 && TONES.danger.text)}
+              >
+                {r.value.toLocaleString('en-US')}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </div>
+  )
+}
+
+function periodLabel(period?: string) {
+  if (!period) {
+    return ''
+  }
+
+  const [y, m] = period.split('-').map(Number)
+
+  if (!y || !m) {
+    return period
+  }
+
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+}
+
+/** A group of the page: a heading with a line under it, then its cards. */
+function Group({
+  id,
+  title,
+  description,
+  children,
+  testId,
+}: {
+  id: string
+  title: string
+  description?: React.ReactNode
+  children: React.ReactNode
+  testId?: string
+}) {
+  return (
+    <section aria-labelledby={id} className="grid gap-3" data-testid={testId}>
+      <div>
+        <h2 id={id} className="text-base font-semibold tracking-tight">
+          {title}
+        </h2>
+        {description && <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>}
+      </div>
+      {children}
+    </section>
+  )
+}
+
+/** Back from Stripe (checkout, a plan switch, bought X posts): say so, and read the plan again once its event is in. */
+function useCheckoutReturn() {
+  const qc = useQueryClient()
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const result = params.get('checkout')
+    const credits = params.get('credits')
+
+    if (credits === 'success') {
+      // They show once Stripe's webhook adds them: LiveUpdates reloads billing on workspace.credits_added.
+      toast.success('Payment received', { description: 'Your extra X posts show here in a moment.' })
+    }
+
+    if (result === 'success' || result === 'switched') {
+      toast.success(result === 'success' ? 'Payment received' : 'Plan changed', {
+        description: 'The new plan shows here in a moment.',
+      })
+      // The server reads the subscription from Stripe itself, so the plan shows (and a locked workspace opens)
+      // even when Stripe's webhook is late or lost.
+      setTimeout(() => {
+        void api
+          .syncBilling()
+          .catch(() => undefined)
+          .then(() => {
+            void qc.invalidateQueries({ queryKey: qk.usage })
+            void qc.invalidateQueries({ queryKey: qk.billing })
+            void qc.invalidateQueries({ queryKey: qk.billingDetails })
+          })
+      }, 1500)
+    }
+
+    if (result || credits) {
+      window.history.replaceState(null, '', window.location.pathname)
+    }
+  }, [qc])
+}
+
+/**
+ * Settings, Plan & usage: the plan and where it stands (with the subscription's price, seats and next payment), the
+ * usage against the plan's limits, add-ons and extra X posts, then the card on file and the invoices. Billing (the
+ * subscription, add-ons, cards, invoices) is read and changed only by those who manage the workspace; everyone sees
+ * the plan and the usage. Local installs are unlocked: no billing at all.
+ */
+export function PlanUsagePage() {
+  const { isLocal } = useMode()
+  const { canManagePeople, isOwner } = useRole()
+  const manage = !isLocal && canManagePeople
+  const usage = useUsage()
+  const billing = useBilling({ enabled: manage })
+  const details = useBillingDetails({ enabled: manage })
+  const addons = useAddons({ enabled: manage })
+  const xPosts = useXPosts({ enabled: !isLocal })
+  const { portal } = usePlanActions()
+  const { mutate: openPortal } = portal
+  // Busy until the browser has left for Stripe's portal, not only until the API answered.
+  const opening = portal.isPending || portal.isSuccess
+  const { refetch: refetchUsage } = usage
+  const { refetch: refetchDetails } = details
+
+  useCheckoutReturn()
+
+  const u = usage.data
+  const plan = u?.plan
+  const unlocked = isLocal || plan?.id === 'unlocked'
+  const b = billing.data
+  const d = details.data
+  const sub = d?.subscription ?? null
+  const payOnline = !!b?.enabled
+  const canBuy = isOwner && payOnline
+  const portalOpen = isOwner && payOnline && !!b?.has_customer
+  const pending = usePendingPayment({ enabled: canBuy && !!b?.subscription_status })
+  const hasXPosts = !isLocal && !!xPosts.data && !xPosts.data.unlimited
+  // A locked workspace buys nothing on top (the API answers 402): what opens it comes first.
+  const payFirst = !!u?.suspended && !!b && lockReason(b) === 'payment_due'
+  const blocked = !u?.suspended
+    ? undefined
+    : payFirst
+      ? 'Not while the workspace is locked. Pay the open invoice first.'
+      : 'Not while the workspace is locked. Choose a plan first.'
+  // Stripe charges nothing during the trial, so an add-on would be free until its end: the API answers 409.
+  const addBlocked =
+    b?.subscription_status === 'trialing' ? 'Add-ons come with a paid plan. Choose a plan first.' : undefined
+
+  const summary = u ? (
+    <PlanSummary
+      usage={u}
+      billing={b}
+      details={d}
+      detailsLoading={details.isLoading}
+      canManage={manage}
+      onManage={portalOpen ? () => openPortal() : undefined}
+      managing={opening}
+    />
+  ) : usage.error ? null : (
+    <Skeleton className="h-40 rounded-2xl" />
+  )
+
+  // The platforms with an allowance of their own this plan has (none when local or unlocked: nothing is metered).
+  const limitOf = (key: MeterKey) => u?.plan?.limits?.[key] ?? UNLIMITED
+  const metered =
+    u && !isLocal && !unlocked
+      ? PLATFORM_POSTS.map((p) => ({ ...p, meters: p.meters.filter((m) => limitOf(m.key) !== UNLIMITED) })).filter(
+          (p) => p.meters.length > 0,
+        )
+      : []
+  const x = hasXPosts ? xPosts.data : undefined
+  const platformPosts =
+    u && metered.length > 0 ? (
+      <div className="grid gap-2 rounded-xl border bg-card p-3.5 sm:p-4" data-testid="platform-posts">
+        <span id="platform-posts-heading" className="text-[13px] font-medium sm:text-sm">
+          Posts per platform
+        </span>
+        {/* One column grid for every line of every platform: label, count, bar, actions. */}
+        <ul
+          className="grid grid-cols-[auto_auto_minmax(2.5rem,1fr)_auto] gap-x-3 divide-y rounded-lg border bg-background text-sm"
+          aria-labelledby="platform-posts-heading"
+        >
+          {metered.map((p) => (
+            <li
+              key={p.id}
+              className="col-span-full grid grid-cols-subgrid gap-y-1 px-3 py-2.5"
+              data-testid={`platform-${p.id}`}
+            >
+              <span className="col-span-full flex items-center gap-2 font-medium">
+                <span aria-hidden className="flex">
+                  <ProviderIcon id={p.id} className="size-4" />
+                </span>
+                {p.name}
+              </span>
+              <ul className="col-span-full grid grid-cols-subgrid" aria-label={p.name}>
+                {p.meters.map((m) => (
+                  <PlatformMeter
+                    key={m.key}
+                    id={m.id}
+                    name={m.name}
+                    label={`${p.name} ${m.name.toLowerCase()}`}
+                    used={u.usage?.[m.key] ?? 0}
+                    max={limitOf(m.key)}
+                    hint={bonusHint(plan, m.key) || undefined}
+                    action={p.id === 'x' && x && canBuy ? <BuyXPosts x={x} blocked={blocked} /> : undefined}
+                    bought={
+                      p.id === 'x' && x ? { left: x.credits_left, expires: shortDay(x.credits_expire_at) } : undefined
+                    }
+                  />
+                ))}
+              </ul>
+              {p.id === 'x' && x && (
+                <div className="col-span-full">
+                  <XPostsNote x={x} />
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
+    ) : null
+
+  const meters = usage.error ? (
+    <ErrorState title="Could not load usage" error={usage.error} onRetry={() => refetchUsage()} />
+  ) : (
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-3" data-testid="usage-meters">
+      {/* Local installs have no API keys: agents use the access token (Integrations, Agents). */}
+      {METERS.filter((m) => !(isLocal && m.key === 'api_keys')).map((m) =>
+        !u ? (
+          <Skeleton key={m.key} className="h-32 rounded-xl" />
+        ) : (
+          <UsageMeter
+            key={m.key}
+            label={m.label}
+            Icon={m.Icon}
+            bytes={m.bytes}
+            hint={unlocked ? undefined : bonusHint(plan, m.key) || m.hint}
+            used={u.usage?.[m.key] ?? 0}
+            max={unlocked ? UNLIMITED : (u.plan?.limits?.[m.key] ?? UNLIMITED)}
+          />
+        ),
+      )}
+    </div>
+  )
+
+  const usageGroup = (
+    <Group
+      id="usage-heading"
+      title="Usage"
+      testId="usage"
+      description={
+        unlocked
+          ? `This month: ${periodLabel(u?.period)}.`
+          : `Against the ${plan?.name ?? ''} plan's limits, for ${periodLabel(u?.period)}. Posts reset on the 1st (UTC).`
+      }
+    >
+      {meters}
+      {!usage.error && platformPosts}
+      {u?.posts_by_status && <PeriodActivity usage={u} />}
+      {!unlocked && plan && plan.limits.max_upload_bytes > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Files up to {formatBytes(plan.limits.max_upload_bytes)} per upload on the {plan.name} plan.
+        </p>
+      )}
+    </Group>
+  )
+
+  // Add-ons are sold on the subscription, to those who manage the workspace. Extra X posts are bought next to X's bar.
+  const hasAddons = manage && payOnline && !!addons.data?.length
+  // A plan change or an add-on charged at once and not paid waits at Stripe for about a day: said here, with the
+  // way to the page that tells why and what to do (the invoice row alone says only "Due").
+  const waiting = pending.data?.pending ? (
+    <Callout
+      tone="warning"
+      role="status"
+      data-testid="pending-payment"
+      action={
+        <Link
+          href="/plans/payment-failed"
+          className="font-medium whitespace-nowrap underline underline-offset-2 hover:no-underline"
+        >
+          See what to do
+        </Link>
+      }
+    >
+      {pending.data.addon
+        ? 'An add-on is waiting for its payment, which did not go through. It is added once it is paid.'
+        : 'A plan change is waiting for its payment, which did not go through. The plan changes once it is paid.'}
+    </Callout>
+  ) : null
+
+  const extras =
+    !unlocked && hasAddons ? (
+      <Group
+        id="addons-heading"
+        title="Add-ons"
+        description={
+          !canBuy
+            ? 'The account owner buys them.'
+            : (blocked ?? addBlocked ?? 'On top of the plan, incl. VAT, charged with the subscription.')
+        }
+      >
+        <AddonsSection canBuy={canBuy} yearly={sub?.interval === 'year'} blocked={blocked} addBlocked={addBlocked} />
+      </Group>
+    ) : null
+
+  // The card on file and the invoices: Stripe's, once the workspace has a billing account.
+  const payments =
+    manage && payOnline && b?.has_customer ? (
+      <Group id="payments-heading" title="Payments" testId="payments">
+        {details.error ? (
+          <ErrorState
+            title="Could not load payments"
+            error={details.error}
+            onRetry={() => refetchDetails()}
+            className="max-w-none"
+          />
+        ) : !d ? (
+          <Skeleton className="h-40 rounded-xl" />
+        ) : (
+          <>
+            <PaymentMethods details={d} onManage={portalOpen ? () => openPortal() : undefined} managing={opening} />
+            <Invoices details={d} planEnded={!!u?.suspended && !!b && !payFirst} />
+          </>
+        )}
+      </Group>
+    ) : null
+
+  return (
+    <PageContainer>
+      <SettingsHeader />
+      <SettingsNav className="mt-4" />
+
+      <div className="mt-6 grid gap-8">
+        {summary}
+        {waiting}
+        {extras}
+        {usageGroup}
+        {payments}
+      </div>
+    </PageContainer>
+  )
+}

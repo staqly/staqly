@@ -1,0 +1,24 @@
+{
+  "$comment": "Ceilings with room, gzipped KB (scripts/bundle-size.mjs, `pnpm size` after `pnpm build`), set 2026-10-28 at about 10 KB per route and 140 KB for the total above what was measured, so a feature passes without touching this file. Raise one only when a change truly needs it, after checking what grew (e2e/README.md#performance), and say why in the commit, not here: this line is not a changelog (its old history is in git log). Routes not listed use defaultRouteJsGzKB; editorJsGzKB counts the full-screen editors' own chunks apart from the dashboard total.",
+  "defaultRouteJsGzKB": 370,
+  "routes": {
+    "/posts": 416,
+    "/posts/_": 418,
+    "/channels": 399,
+    "/channels/callback/_": 405,
+    "/analytics": 387,
+    "/media": 380,
+    "/activity": 375,
+    "/schedule": 375,
+    "/settings": 355,
+    "/invite": 350,
+    "/login": 340,
+    "/setup": 340,
+    "/media/edit": 280,
+    "/connect": 275,
+    "/": 180
+  },
+  "cssGzKB": 42,
+  "totalJsGzKB": 1950,
+  "editorJsGzKB": 400
+}

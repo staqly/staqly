@@ -1,0 +1,35 @@
+diff --git a/dist/packages/shared-api/dist/components/playground/fields.js b/dist/packages/shared-api/dist/components/playground/fields.js
+index d518eef..3d11d82 100644
+--- a/dist/packages/shared-api/dist/components/playground/fields.js
++++ b/dist/packages/shared-api/dist/components/playground/fields.js
+@@ -411,7 +411,7 @@ function NavRow({ fieldName, field, type, required, marked = required, name, des
+ 		if (!isPlainObject(value)) return null;
+ 		const keys = Object.keys(value);
+ 		if (keys.length === 0) return "{}";
+-		return `{ ${keys.slice(0, 3).join(", ")}${keys.length > 3 ? ", …" : ""} }`;
++		return `{ ${keys.slice(0, 3).join(", ")}${keys.length > 3 ? ", ..." : ""} }`;
+ 	} });
+ 	return /* @__PURE__ */ jsx(Row, {
+ 		name,
+diff --git a/dist/packages/shared-api/dist/components/schema/client.js b/dist/packages/shared-api/dist/components/schema/client.js
+index e5e8f91..eaf56e5 100644
+--- a/dist/packages/shared-api/dist/components/schema/client.js
++++ b/dist/packages/shared-api/dist/components/schema/client.js
+@@ -240,7 +240,7 @@ function Breadcrumbs({ from, unions, onBack }) {
+ 		children: [/* @__PURE__ */ jsx(ChevronRightIcon, { className: chevronClassName }), /* @__PURE__ */ jsxs(Menu.Root, { children: [/* @__PURE__ */ jsx(Menu.Trigger, {
+ 			"aria-label": t("Show Path", { note: "aria-label" }),
+ 			className: crumbClassName,
+-			children: "…"
++			children: "..."
+ 		}), /* @__PURE__ */ jsx(Menu.Portal, { children: /* @__PURE__ */ jsx(Menu.Positioner, {
+ 			align: "start",
+ 			sideOffset: 4,
+@@ -270,7 +270,7 @@ function Breadcrumbs({ from, unions, onBack }) {
+ 					className: "flex items-center gap-0.5",
+ 					children: [/* @__PURE__ */ jsx(ChevronRightIcon, { className: chevronClassName }), /* @__PURE__ */ jsx("span", {
+ 						className: "px-1.5 py-1",
+-						children: "…"
++						children: "..."
+ 					})]
+ 				})]
+ 			}, names)

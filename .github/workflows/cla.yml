@@ -1,0 +1,52 @@
+# Contributor License Agreement: every outside contributor accepts ICLA.md (individuals) or
+# CCLA.md (companies) once, by commenting on their first pull request. Signatures are stored in
+# signatures/cla.json of the private repository staqly/cla-signatures, written with the token in the
+# secret CLA_SIGNATURES_TOKEN (a classic token with the repo scope of an account that can push there).
+# Pull requests by the organization's owners, members and collaborators skip the check.
+# pull_request_target is safe here: the action never checks out or runs the pull request's code.
+name: CLA
+
+on:
+  issue_comment: # zizmor: ignore[dangerous-triggers] -- never checks out or runs pull request code (see above)
+    types: [created]
+  pull_request_target: # zizmor: ignore[dangerous-triggers] -- never checks out or runs pull request code (see above)
+    types: [opened, closed, synchronize]
+
+# Nothing by default; the one job gets what the action needs. Signatures go to the remote repository
+# with CLA_SIGNATURES_TOKEN, so this repository's contents stay read-only.
+permissions: {}
+
+jobs:
+  cla:
+    permissions:
+      actions: write # re-runs the check after a sign comment
+      contents: read
+      pull-requests: write # comments, locks the pull request after merge
+      statuses: write # the CLA status on the head commit
+    if: >-
+      (github.event_name == 'pull_request_target' &&
+        !contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association)) ||
+      (github.event.issue.pull_request &&
+        (github.event.comment.body == 'recheck' || github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: contributor-assistant/github-action@ca4a40a7d1004f18d9960b404b97e5f30a505a08 # v2.6.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PERSONAL_ACCESS_TOKEN: ${{ secrets.CLA_SIGNATURES_TOKEN }}
+        with:
+          remote-organization-name: staqly
+          remote-repository-name: cla-signatures
+          path-to-signatures: signatures/cla.json
+          path-to-document: https://github.com/staqly/staqly/blob/main/ICLA.md
+          branch: main
+          # web-flow: GitHub as the committer of bot and web-UI commits; their authors are still checked.
+          allowlist: mits87,dependabot[bot],github-actions[bot],web-flow
+          custom-notsigned-prcomment: >-
+            Thank you for your contribution! Before we can merge it, please accept the
+            [Individual Contributor License Agreement](https://github.com/staqly/staqly/blob/main/ICLA.md)
+            (or, for a company, the [Entity agreement](https://github.com/staqly/staqly/blob/main/CCLA.md))
+            by posting the comment below. You only do this once.
+          custom-pr-sign-comment: I have read the CLA Document and I hereby sign the CLA
+          custom-allsigned-prcomment: Every contributor has accepted the CLA. Thank you!

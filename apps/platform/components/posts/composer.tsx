@@ -1,0 +1,2535 @@
+'use client'
+
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  AlertTriangle,
+  CalendarClock,
+  CheckCircle2,
+  ChevronDown,
+  CircleHelp,
+  Trash2,
+  MessageSquarePlus,
+  MonitorSmartphone,
+  Clock3,
+  ChevronUp,
+  Film,
+  Repeat2,
+  ImagePlus,
+  RotateCcw,
+  Send,
+  X,
+  Palette,
+  Pencil,
+  Radio,
+} from 'lucide-react'
+import dynamic from 'next/dynamic'
+import Link from 'next/link'
+import { memo, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import { flushSync } from 'react-dom'
+import { toast } from 'sonner'
+
+import { ChannelAvatar } from '@/components/channels/channel-avatars'
+import { ProviderFields, visibleFields } from '@/components/channels/provider-fields'
+import { Callout } from '@/components/common/callout'
+import { DateTimeFields, formatShort } from '@/components/common/date-time-picker'
+import { MultiSelect } from '@/components/common/multi-select'
+import { PostStatusBadge } from '@/components/common/status-badge'
+import { DesignDrawer } from '@/components/design/design-drawer'
+import { useDesignedMedia, useEditedMedia } from '@/components/design/edited-media'
+import { placeSaved } from '@/components/design/embed'
+import { LibraryPickerButton } from '@/components/media/library-picker'
+import { PostStats } from '@/components/posts/post-stats'
+import { TargetStatus } from '@/components/posts/target-status'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Button } from '@/components/ui/button'
+import { ButtonGroup } from '@/components/ui/button-group'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { FieldError } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { Label, RequiredMark } from '@/components/ui/label'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, useSheetSaved } from '@/components/ui/sheet'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { useIsPast } from '@/hooks/use-is-past'
+import { useLazyDialog } from '@/hooks/use-lazy-dialog'
+import {
+  api,
+  ApiError,
+  mediaThumbUrl,
+  type Channel,
+  type ChannelGroup,
+  type Media,
+  type Post,
+  type PostInput,
+  type Provider,
+  type ProviderField,
+} from '@/lib/api'
+import { acceptFor, channelFit, pictureTarget, takesFile, takesWords } from '@/lib/channel-fit'
+import { apiFieldErrors } from '@/lib/form-errors'
+import { formatDateTime, timeAgo } from '@/lib/format'
+import { applyLinks, linksNotice } from '@/lib/links'
+import { namedToast, toastApiError } from '@/lib/notify'
+import { charCount, deletedOutside, isLocked, postTitle, xLength } from '@/lib/posts'
+import { undoDelayMs, undoToast } from '@/lib/publish-undo'
+import {
+  invalidateAfterPostChange,
+  refetchPostListsFromStart,
+  syncPostInCache,
+  useChannelGroups,
+  useChannels,
+  useCollections,
+  useProviders,
+  useMode,
+  useTags,
+  useXPosts,
+} from '@/lib/queries'
+import { dateFormats, formatSchedule, formatTime, liveLabel, nextFullHour } from '@/lib/schedule'
+import { appendHashtags, hashtagsFor, tagInput } from '@/lib/tags'
+import { cn } from '@/lib/utils'
+import { xPostsWarning } from '@/lib/x-posts'
+import { displayZone } from '@/lib/zone'
+
+import type { AiPostResult } from './ai-post-dialog'
+import { AllChannelsTab, ChannelTab } from './channel-tab'
+import { convertPicture, toastConverted, useConvertedMedia } from './convert-media'
+import { PostEditor } from './post-editor'
+import { isVideo, MediaItem } from './preview/parts'
+import { PublishReview } from './publish-review'
+
+// The live preview and the platforms' templates load on its first opening, not with the composer.
+const PostPreviewSheet = dynamic(() => import('./preview/post-preview').then((m) => m.PostPreviewSheet), {
+  ssr: false,
+})
+
+// Write with AI: loads with the composer's first render, not with the page (it shows once AI is known to be there).
+const WriteWithAi = dynamic(() => import('./ai-post-dialog').then((m) => m.WriteWithAi), { ssr: false })
+
+/** How often a published post comes back: a copy is scheduled that much later (the API's repeat_every). */
+const REPEAT_OPTIONS = [
+  ['never', "Don't repeat"],
+  ['1d', 'Every day'],
+  ['2d', 'Every 2 days'],
+  ['3d', 'Every 3 days'],
+  ['4d', 'Every 4 days'],
+  ['5d', 'Every 5 days'],
+  ['6d', 'Every 6 days'],
+  ['1w', 'Every week'],
+  ['2w', 'Every 2 weeks'],
+  ['1mo', 'Every month'],
+] as const
+
+interface Override {
+  /** null: the channel uses the shared text. */
+  content: string | null
+  settings: Record<string, string>
+}
+
+interface Count {
+  channel: Channel
+  /** Characters the channel receives: after its links mode took links out or made them plain text. */
+  n: number
+  max: number
+  /** The links the channel's links mode changes, as written. */
+  links: string[]
+}
+
+/**
+ * A channel's count for this text, as the API will count it at publish time: with the post's tags as hashtags
+ * at the end (not for your own automation, which gets them apart, nor a platform with tags of its own; comments
+ * get none).
+ */
+function countFor(channel: Channel, text: string, provider?: Provider, tags: readonly string[] = []): Count {
+  const links = applyLinks(channel.links, text)
+  const out = { ...links, text: appendHashtags(links.text, hashtagsFor(channel, provider, tags)) }
+
+  // X counts its own way (CJK and emoji 2, a link 23): the API checks that length, so the counter shows it.
+  const n = channel.provider === 'x' ? xLength(out.text) : charCount(out.text)
+
+  return { channel, n, max: provider?.limits?.max_chars ?? 0, links: out.found }
+}
+
+/** Under the editor: every picked channel that changes this text's links, named, with the links. */
+function LinksNotices({ counts }: { counts: Count[] }) {
+  const changed = counts.filter((c) => c.links.length)
+
+  if (!changed.length) {
+    return null
+  }
+
+  return (
+    <ul className="grid gap-1" data-testid="links-notices">
+      {changed.map(({ channel, links }) => (
+        <li key={channel.id} className="flex items-start gap-1.5 text-sm text-destructive">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span className="min-w-0 wrap-anywhere">
+            {linksNotice(channel.links, channel.name)} ({links.join(', ')})
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/**
+ * The counter in the editor's corner: the tightest channel's count with a tick, or a warning past a limit or
+ * when a channel takes links out; the popover lists every picked channel.
+ */
+function Counter({ counts }: { counts: Count[] }) {
+  if (!counts.length) {
+    return null
+  }
+
+  const limited = counts.filter((c) => c.max > 0)
+  const tight = limited.toSorted((a, b) => a.max - a.n - (b.max - b.n))[0]
+  const over = limited.some((c) => c.n > c.max) || counts.some((c) => c.links.length > 0)
+  const Icon = over ? AlertTriangle : CheckCircle2
+  const shown = tight ? `${tight.n}/${tight.max}` : String(counts[0]!.n)
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={cn('tabular-nums', over && 'border-destructive text-destructive')}
+          // Starts with the count it shows (speech input names it by its visible text).
+          aria-label={`${shown} characters per channel`}
+          data-testid="counter"
+        >
+          <Icon className={over ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'} />
+          {shown}
+          <ChevronDown className="opacity-60" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-auto min-w-64 p-2" data-testid="counters">
+        {/* One column of counts for every channel (subgrid), right-aligned and well clear of the names. */}
+        <ul className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-8 gap-y-1 text-sm">
+          {counts.map(({ channel, n, max, links }) => (
+            <li
+              key={channel.id}
+              className={cn(
+                'col-span-full grid grid-cols-subgrid items-center gap-y-1 px-1 py-0.5',
+                links.length > 0 && 'rounded-md border border-destructive px-2 py-1.5 text-destructive',
+              )}
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <ChannelAvatar channel={channel} className="size-5" />
+                <span className="min-w-0 truncate">{channel.name}</span>
+              </span>
+              <span
+                className={cn(
+                  'text-right tabular-nums',
+                  (max > 0 && n > max) || links.length ? 'text-destructive' : 'text-muted-foreground',
+                )}
+              >
+                {max > 0 ? `${n}/${max}` : n}
+              </span>
+              {links.length > 0 && (
+                <span className="col-span-full max-w-72 text-xs wrap-anywhere">
+                  {linksNotice(channel.links, channel.name)}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+/** Every connected channel as an avatar; picked ones are in colour with a ring, the rest greyed out. */
+const NO_GROUPS: ChannelGroup[] = []
+
+function ChannelPicker({
+  channels,
+  providers,
+  selected,
+  onChange,
+  disabled,
+  invalid,
+}: {
+  channels: Channel[]
+  providers: Provider[]
+  selected: Set<string>
+  onChange: (ids: string[]) => void
+  /** A post that went out: the channels show, nothing changes. */
+  disabled?: boolean
+  invalid?: boolean
+}) {
+  // With channel groups, the picker lists the channels under their group's name, in the groups' order.
+  const groups = useChannelGroups().data ?? NO_GROUPS
+  const groupIndex = new Map(groups.map((g, i) => [g.id, i]))
+  const groupName = (c: Channel) => (groups.length > 1 ? groups.find((g) => g.id === c.group_id)?.name : undefined)
+
+  if (!channels.length) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        No channels yet.{' '}
+        <Link href="/channels" className="text-foreground underline underline-offset-2 hover:no-underline">
+          Connect a channel
+        </Link>{' '}
+        to publish somewhere; a post without channels stays a draft.
+      </p>
+    )
+  }
+
+  const picked = channels.filter((c) => selected.has(c.id))
+  const platform = (c: Channel) => providers.find((p) => p.id === c.provider)?.name ?? c.provider
+
+  return (
+    <MultiSelect
+      id="post-channels"
+      label="Channels"
+      placeholder="Pick where the post goes"
+      className="h-auto min-h-8 w-full py-1 pointer-coarse:min-h-11"
+      value={[...selected]}
+      onChange={onChange}
+      disabled={disabled}
+      invalid={invalid}
+      summary={
+        picked.length ? (
+          <span className="flex flex-wrap gap-1.5">
+            {picked.map((c) => (
+              <span
+                key={c.id}
+                className="inline-flex items-center gap-1.5 rounded-full border bg-muted/50 pr-2.5 pl-px text-sm"
+              >
+                <ChannelAvatar channel={c} className="size-5" />
+                {c.name}
+              </span>
+            ))}
+          </span>
+        ) : undefined
+      }
+      options={channels
+        .toSorted((a, b) => (groupIndex.get(a.group_id) ?? 0) - (groupIndex.get(b.group_id) ?? 0))
+        .map((c) => {
+          const off = c.status !== 'connected'
+
+          return {
+            value: c.id,
+            label: c.name,
+            group: groupName(c),
+            hint: off
+              ? `${platform(c)}, ${c.status === 'disabled' ? 'turned off' : 'needs reconnecting'}`
+              : // Not a dot: platform names carry one (Dev.to), and the handle would read as part of it.
+                [platform(c), c.handle].filter(Boolean).join(' | '),
+            icon: <ChannelAvatar channel={c} className="size-6" />,
+            disabled: off,
+            testId: `pick-channel-${c.id}`,
+          }
+        })}
+    />
+  )
+}
+
+/** Uploaded pictures and files as thumbnails with a remove button (and, for pictures, Edit in the design editor). */
+function MediaStrip({
+  media,
+  onRemove,
+  onEdit,
+}: {
+  media: Media[]
+  onRemove?: (id: string) => void
+  /** Edit opens the design editor in a drawer; what it saves replaces the picture here. */
+  onEdit?: (update: (ms: Media[]) => Media[]) => void
+}) {
+  const strip = useRef<HTMLDivElement>(null)
+  const [editing, setEditing] = useState({ open: false, id: '' })
+  // The picture that took the edited one's place, for focus once the drawer closes.
+  const placed = useRef('')
+
+  if (!media.length) {
+    return null
+  }
+
+  return (
+    <div ref={strip} className="media-strip flex flex-wrap gap-2 px-3 pt-1 pb-3">
+      {media.map((m) => (
+        // The tools show on hover or focus (always on touch), on solid chips in the corners.
+        <span
+          key={m.id}
+          data-media={m.id}
+          className="group/media relative size-20 overflow-hidden rounded-lg bg-muted ring-1 ring-border pointer-coarse:size-24"
+        >
+          {m.mime_type.startsWith('image/') ? (
+            <img
+              src={mediaThumbUrl(m.id, 160)}
+              alt={m.alt_text || m.original_name}
+              className="size-full object-cover"
+            />
+          ) : isVideo(m) ? (
+            // Its first frame with a play mark, as the previews show it; the name for screen readers.
+            <span role="img" aria-label={m.original_name} className="block size-full">
+              <MediaItem media={m} />
+            </span>
+          ) : (
+            <span className="flex size-full items-center justify-center p-1 text-center text-[10px] wrap-anywhere text-muted-foreground">
+              {m.original_name}
+            </span>
+          )}
+          {onEdit && m.mime_type.startsWith('image/') && (
+            <button
+              type="button"
+              aria-label={`Edit ${m.original_name}`}
+              data-testid="edit-attachment"
+              onClick={() => setEditing({ open: true, id: m.id })}
+              className="absolute bottom-1 left-1 flex size-6 items-center justify-center rounded-full border bg-background text-foreground opacity-0 shadow-sm transition-opacity group-focus-within/media:opacity-100 group-hover/media:opacity-100 hover:bg-muted pointer-coarse:size-8 pointer-coarse:opacity-100 pointer-coarse:after:absolute pointer-coarse:after:-inset-1"
+            >
+              <Pencil className="size-3" />
+            </button>
+          )}
+          {onRemove && (
+            <button
+              type="button"
+              aria-label={`Remove ${m.original_name}`}
+              onClick={() => onRemove(m.id)}
+              className="absolute top-1 right-1 flex size-6 items-center justify-center rounded-full border bg-background text-foreground opacity-0 shadow-sm transition-opacity group-focus-within/media:opacity-100 group-hover/media:opacity-100 hover:bg-muted pointer-coarse:size-8 pointer-coarse:opacity-100 pointer-coarse:after:absolute pointer-coarse:after:-inset-1"
+            >
+              <X className="size-3" />
+            </button>
+          )}
+        </span>
+      ))}
+      {onEdit && editing.id && (
+        <DesignDrawer
+          open={editing.open}
+          onOpenChange={(open) => setEditing((e) => ({ ...e, open }))}
+          edit={editing.id}
+          onSaved={(files) => {
+            placed.current = files[0]?.after.id ?? ''
+            onEdit((ms) => placeSaved(ms, files, editing.id))
+          }}
+          onCloseAutoFocus={(e) => {
+            // The edited picture was replaced: focus its replacement's Edit.
+            const next = placed.current
+              ? strip.current?.querySelector<HTMLElement>(`[data-media="${CSS.escape(placed.current)}"] button`)
+              : null
+
+            placed.current = ''
+
+            if (next) {
+              e.preventDefault()
+              next.focus()
+            }
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+/**
+ * The "Upload" button: uploads and hands each file back. With `limits` (the one picked channel's), it offers only the
+ * files that platform takes, stops once it has as many as it takes (`count`), and is not there when it takes none.
+ */
+function MediaButton({
+  onAdd,
+  limits,
+  count = 0,
+  platforms = NO_PROVIDERS,
+}: {
+  onAdd: (m: Media) => void
+  limits?: Provider['limits']
+  count?: number
+  /** The picked channels' platforms: a picture one of them refuses is converted to a type they all take first. */
+  platforms?: Provider[]
+}) {
+  const input = useRef<HTMLInputElement>(null)
+  // Video opens the video editor in a new tab; what it saves for this token lands here.
+  const [token] = useState(() => Math.random().toString(36).slice(2, 12))
+  // Design opens the design editor in a drawer over the post (its code loads on first open).
+  const design = useLazyDialog()
+
+  useDesignedMedia(token, onAdd)
+  const upload = useMutation({
+    mutationFn: async (file: File) => {
+      const target = pictureTarget(platforms, file.type)
+      const converted = target && (await convertPicture(file, target.to))
+
+      if (target && converted) {
+        toastConverted(file.name, file.type, target)
+      }
+
+      return api.uploadMedia(converted ?? file, undefined, { reuse: true })
+    },
+    onSuccess: onAdd,
+    onError: (e) => toastApiError(e),
+  })
+  const full = !!limits && count >= limits.max_media
+  const why = full && limits ? `${takesWords(limits)}.` : undefined
+
+  if (limits?.max_media === 0) {
+    return null
+  }
+
+  return (
+    <>
+      <input
+        ref={input}
+        type="file"
+        accept={acceptFor(limits) ?? 'image/*,video/*'}
+        multiple={!limits || limits.max_media - count > 1}
+        className="sr-only"
+        tabIndex={-1}
+        aria-hidden
+        onChange={(e) => {
+          for (const f of Array.from(e.target.files ?? [])) {
+            upload.mutate(f)
+          }
+
+          e.target.value = ''
+        }}
+      />
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => input.current?.click()}
+        disabled={upload.isPending || full}
+        title={why}
+      >
+        <ImagePlus /> {upload.isPending ? 'Uploading...' : 'Upload'}
+      </Button>
+      <LibraryPickerButton onAdd={onAdd} disabled={full} />
+      {/* One Design button: pick what to make (a graphic in a drawer here, a video in the video editor). */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant="outline" size="sm" data-testid="design-menu" disabled={full} title={why}>
+            <Palette /> Design <ChevronDown />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          {takesFile(limits, 'image/png') && (
+            <DropdownMenuItem onSelect={() => design.setOpen(true)} data-testid="design-new">
+              <ImagePlus /> Image or graphic
+            </DropdownMenuItem>
+          )}
+          {takesFile(limits, 'video/mp4') && (
+            <DropdownMenuItem asChild>
+              <a
+                href={`/media/video?from=composer&for=${token}`}
+                target="_blank"
+                rel="noopener"
+                data-testid="video-new"
+              >
+                <Film /> Video
+              </a>
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {design.used && (
+        <DesignDrawer
+          open={design.open}
+          onOpenChange={design.setOpen}
+          onSaved={(files) => {
+            for (const f of files) {
+              onAdd(f.after)
+            }
+          }}
+        />
+      )}
+    </>
+  )
+}
+
+/**
+ * Adds an uploaded or picked file, unless the one picked channel's platform doesn't take it or has as many as it takes
+ * already: then it says so, and the file stays in the library.
+ */
+function addWithin(limits: Provider['limits'] | undefined, set: Dispatch<SetStateAction<Media[]>>, m: Media) {
+  if (limits && !takesFile(limits, m.mime_type)) {
+    toast.error(`${takesWords(limits)}: ${m.original_name} isn't added`)
+
+    return
+  }
+
+  set((ms) => (limits && ms.length >= limits.max_media ? ms : [...ms, m]))
+}
+
+/** One comment under the post: its text, media and how long after the previous part it goes out. */
+interface ThreadPart {
+  uid: string
+  content: string
+  media: Media[]
+  delay: number // seconds after the previous part
+}
+
+// Quick picks, in seconds; any other minute count goes in the custom field (the server takes up to a day).
+const DELAY_PICKS = [60, 120, 300, 600, 900, 1800, 3600, 7200]
+const MAX_DELAY_MINUTES = 1440
+
+function delayLabel(seconds: number, short = false) {
+  if (!seconds) {
+    return 'Right after'
+  }
+
+  const m = Math.round(seconds / 60)
+  const text = m % 60 === 0 ? `${m / 60} h` : m > 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`
+
+  return short ? text.replace(' min', 'm').replace(' h', 'h').replaceAll(' ', '') : `${text} later`
+}
+
+/** The non-default settings of a channel in a few words, for its folded card ("Who can reply: Accounts you follow"). */
+/** The platform as people know it in a settings heading ("X.com advanced settings"). */
+function platformLabel(provider: string, name?: string) {
+  return provider === 'x' ? 'X.com' : (name ?? provider)
+}
+
+function settingsSummary(fields: ProviderField[], values: Record<string, string>, all: Channel[]) {
+  return visibleFields(fields, values)
+    .flatMap((f) => {
+      const v = (values[f.key] ?? '').trim()
+
+      if (!v || v === (f.default ?? '')) {
+        return []
+      }
+
+      if (f.kind === 'boolean') {
+        return v === 'true' ? [f.label] : []
+      }
+
+      if (f.kind === 'select') {
+        return [`${f.label}: ${f.options?.find((o) => o.value === v)?.label ?? v}`]
+      }
+
+      if (f.kind === 'remote') {
+        const fixed = f.options?.find((o) => o.value === v)
+
+        return [fixed ? fixed.label : f.label]
+      }
+
+      if (f.kind === 'channels') {
+        const names = v.split(',').map((id) => all.find((c) => c.id === id.trim())?.name ?? id)
+
+        return [`${f.label}: ${names.join(', ')}`]
+      }
+
+      return [f.kind === 'textarea' ? f.label : `${f.label}: ${v}`]
+    })
+    .join(' · ')
+}
+
+/** When a comment goes out after the one before: quick picks, Right after, or any number of minutes. */
+function DelayPicker({ value, onChange, label }: { value: number; onChange: (s: number) => void; label: string }) {
+  const [open, setOpen] = useState(false)
+  const [custom, setCustom] = useState('')
+  const minutes = Number(custom)
+  const valid = Number.isInteger(minutes) && minutes >= 1 && minutes <= MAX_DELAY_MINUTES
+  const pick = (s: number) => {
+    onChange(s)
+    setOpen(false)
+    setCustom('')
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button type="button" variant="outline" size="sm" aria-label={label} className="h-7 text-xs">
+          <Clock3 className="text-muted-foreground" />
+          {delayLabel(value)}
+          <ChevronDown className="opacity-60" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-64 p-2">
+        <div className="grid grid-cols-4 gap-1" role="group" aria-label="Delay">
+          <Button
+            type="button"
+            size="sm"
+            variant={value === 0 ? 'secondary' : 'ghost'}
+            className="col-span-4"
+            aria-pressed={value === 0}
+            onClick={() => pick(0)}
+          >
+            Right after
+          </Button>
+          {DELAY_PICKS.map((s) => (
+            <Button
+              key={s}
+              type="button"
+              size="sm"
+              variant={value === s ? 'secondary' : 'ghost'}
+              aria-pressed={value === s}
+              aria-label={delayLabel(s)}
+              tooltip={false}
+              onClick={() => pick(s)}
+            >
+              {delayLabel(s, true)}
+            </Button>
+          ))}
+        </div>
+        <form
+          className="mt-2 flex gap-1.5 border-t pt-2"
+          onSubmit={(e) => {
+            // React events cross the popover's portal: without this the composer's own form would submit too.
+            e.preventDefault()
+            e.stopPropagation()
+
+            if (valid) {
+              pick(minutes * 60)
+            }
+          }}
+        >
+          <Input
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={MAX_DELAY_MINUTES}
+            placeholder="Minutes, up to 1440"
+            aria-label="Custom delay in minutes"
+            value={custom}
+            onChange={(e) => setCustom(e.target.value)}
+            className="h-8"
+          />
+          <Button type="submit" size="sm" className="h-8" disabled={!valid}>
+            Set
+          </Button>
+        </form>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+/**
+ * The comments under a post (a thread): each part is published as a reply to the one before, after its delay.
+ * Shared by every channel that can reply (X); your own automation receives them with the post.
+ */
+function ThreadEditor({
+  parts,
+  onChange,
+  countsFor,
+  errors,
+  locked,
+  noComments,
+  textOnly,
+}: {
+  /** The one picked channel posts no comments: why, in place of Add comment. */
+  noComments?: string
+  /** The one picked channel's comments take text only: no files. */
+  textOnly?: boolean
+  parts: ThreadPart[]
+  /** A state setter: every change applies to the latest thread, by uid, so uploads that finish later and several
+   * files picked at once never write back an older thread or land on another comment. */
+  onChange: Dispatch<SetStateAction<ThreadPart[]>>
+  countsFor: (text: string) => Count[]
+  errors: Record<string, string | undefined>
+  locked: boolean
+}) {
+  const set = (uid: string, patch: (part: ThreadPart) => Partial<ThreadPart>) =>
+    onChange((ps) => ps.map((p) => (p.uid === uid ? { ...p, ...patch(p) } : p)))
+  const move = (uid: string, by: number) =>
+    onChange((ps) => {
+      const i = ps.findIndex((p) => p.uid === uid)
+
+      if (i < 0 || i + by < 0 || i + by >= ps.length) {
+        return ps
+      }
+
+      const next = [...ps]
+      const [part] = next.splice(i, 1)
+
+      next.splice(i + by, 0, part!)
+
+      return next
+    })
+
+  return (
+    <div className="grid gap-3" data-testid="thread">
+      {parts.map((part, i) => {
+        const err = errors[`thread.${i}.content`] ?? errors[`thread.${i}.media`]
+
+        return (
+          <div key={part.uid} className="relative grid gap-1.5 pl-6" data-testid={`thread-part-${i}`}>
+            {/* One line from the post down through every comment (it bridges the gap-3 above each one) and ends
+                at the last comment's branch; the branch meets the middle of the 28 px label row. */}
+            <span
+              aria-hidden
+              className={cn('absolute -top-3 left-2 w-px bg-border', i === parts.length - 1 ? 'h-6.5' : 'bottom-0')}
+            />
+            <span aria-hidden className="absolute top-3.5 left-2 h-px w-3 bg-border" />
+            <div className="flex flex-wrap items-center gap-2">
+              <span id={`thread-${part.uid}-label`} className="text-sm font-medium">
+                Comment {i + 1}
+              </span>
+              {!locked && (
+                <>
+                  <DelayPicker
+                    value={part.delay}
+                    onChange={(d) => set(part.uid, () => ({ delay: d }))}
+                    label={`When comment ${i + 1} goes out`}
+                  />
+                  <span className="ml-auto flex items-center">
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      aria-label={`Move comment ${i + 1} up`}
+                      tooltip="Move up"
+                      disabled={i === 0}
+                      onClick={() => move(part.uid, -1)}
+                    >
+                      <ChevronUp />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      aria-label={`Move comment ${i + 1} down`}
+                      tooltip="Move down"
+                      disabled={i === parts.length - 1}
+                      onClick={() => move(part.uid, 1)}
+                    >
+                      <ChevronDown />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      aria-label={`Remove comment ${i + 1}`}
+                      tooltip="Remove this comment"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => onChange((ps) => ps.filter((p) => p.uid !== part.uid))}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </span>
+                </>
+              )}
+            </div>
+            <div className={cn('rounded-xl border bg-background', err && 'border-destructive')}>
+              <PostEditor
+                id={`thread-${part.uid}`}
+                labelledBy={`thread-${part.uid}-label`}
+                value={part.content}
+                onChange={(content) => set(part.uid, () => ({ content }))}
+                placeholder="Write a comment"
+                invalid={!!err}
+                testId={`thread-content-${i}`}
+                className="post-editor--short border-0 shadow-none"
+                editable={!locked}
+                below={
+                  <MediaStrip
+                    media={part.media}
+                    onEdit={locked ? undefined : (fn) => set(part.uid, (p) => ({ media: fn(p.media) }))}
+                    onRemove={
+                      locked ? undefined : (id) => set(part.uid, (p) => ({ media: p.media.filter((m) => m.id !== id) }))
+                    }
+                  />
+                }
+                start={
+                  locked || textOnly ? undefined : (
+                    <MediaButton onAdd={(m) => set(part.uid, (p) => ({ media: [...p.media, m] }))} />
+                  )
+                }
+                end={<Counter counts={countsFor(part.content)} />}
+              />
+            </div>
+            <FieldError>{err}</FieldError>
+          </div>
+        )
+      })}
+      {!locked && noComments && <p className="text-xs text-muted-foreground">{noComments}</p>}
+      {!locked && !noComments && (
+        <div className={cn(parts.length > 0 && 'pl-6')}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onChange((ps) => [...ps, { uid: crypto.randomUUID(), content: '', media: [], delay: 0 }])}
+            data-testid="add-comment"
+          >
+            <MessageSquarePlus /> Add comment
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** "Wed 21 Oct, 16:00": the picked time on the footer's chip. */
+function chipLabel(d: Date) {
+  return `${dateFormats.shortDay().format(d)}, ${formatTime(d)}`
+}
+
+/** A picked channel whose sign-in the platform ends (renew_by) before the post's time: it would wait for a reconnect. */
+function RenewFirst({ channel }: { channel: Channel }) {
+  return (
+    <Callout tone="warning" size="xs" data-testid="channel-renew-first">
+      The sign-in of {channel.name} runs out {dateFormats.monthDay().format(new Date(channel.renew_by!))}, before this
+      post goes out.{' '}
+      <Link href="/channels" className="underline underline-offset-2 hover:no-underline">
+        Renew it on Channels
+      </Link>{' '}
+      by then, or the post will wait.
+    </Callout>
+  )
+}
+
+const renewsBefore = (channels: Channel[], at: Date | null) =>
+  at ? channels.filter((c) => c.renew_by && new Date(c.renew_by) < at) : NO_CHANNELS
+
+/**
+ * The calendar half of the footer's split button: a popover with the day, the time, quick picks and Repeat;
+ * Schedule applies them (and sends the post when it can go). Focus returns to the button on close.
+ */
+function ScheduleMenu({
+  value,
+  repeat,
+  disabled,
+  streams,
+  picked,
+  onApply,
+  onApplyLive,
+}: {
+  value: Date | null
+  repeat: string
+  disabled?: boolean
+  /** The post's channels: Schedule saves and closes in one step, so a sign-in that runs out first is said here. */
+  picked: Channel[]
+  /** Channels whose platform says when a stream starts (live_trigger): the post can wait for one instead. */
+  streams: Channel[]
+  onApply: (at: Date, repeat: string) => void
+  onApplyLive: (channelId: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [at, setAt] = useState<Date | null>(null)
+  const [rep, setRep] = useState('')
+  const [opening, setOpening] = useState(0)
+  // One timer to the picked time, not a clock: the summary turns red the moment it passes.
+  const past = useIsPast(at)
+  const tz = displayZone()
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        if (o) {
+          setAt(value ?? nextFullHour(Date.now()))
+          setRep(repeat)
+          setOpening((n) => n + 1)
+        }
+
+        setOpen(o)
+      }}
+    >
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          size="icon"
+          aria-label="Schedule for later"
+          aria-haspopup="dialog"
+          data-testid="date-time-picker"
+          disabled={disabled}
+          className="size-8 border-l border-l-primary-foreground/25 pointer-coarse:size-11"
+        >
+          <CalendarClock />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        align="end"
+        collisionPadding={8}
+        className="w-auto max-w-[calc(100vw-1rem)] gap-0 p-0 text-sm"
+        aria-label="Pick a date and time"
+      >
+        {streams.length > 0 && (
+          <div className="grid gap-0.5 border-b p-1.5" data-testid="schedule-live">
+            <p className="px-2 pt-1 pb-0.5 text-xs text-muted-foreground">Or when a stream starts</p>
+            {streams.map((c) => (
+              <Button
+                key={c.id}
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="justify-start"
+                onClick={() => {
+                  setOpen(false)
+                  onApplyLive(c.id)
+                }}
+              >
+                <Radio /> <span className="truncate">When {c.name} goes live</span>
+              </Button>
+            ))}
+          </div>
+        )}
+        <DateTimeFields key={opening} id="post-publish-at" value={at} onChange={setAt} />
+        <div className="flex flex-wrap items-center gap-2 border-t px-3 py-2">
+          <Select value={rep || 'never'} onValueChange={(v) => setRep(v === 'never' ? '' : v)}>
+            <SelectTrigger aria-label="Repeat" className="w-40" data-testid="post-repeat">
+              <Repeat2 className="text-muted-foreground" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {REPEAT_OPTIONS.map(([v, text]) => (
+                <SelectItem key={v} value={v}>
+                  {text}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <span className="text-xs text-muted-foreground">Times are in {tz}.</span>
+        </div>
+        {renewsBefore(picked, at).map((c) => (
+          <div key={c.id} className="w-0 min-w-full border-t px-3 py-2">
+            <RenewFirst channel={c} />
+          </div>
+        ))}
+        <div className="flex items-center justify-between gap-3 border-t px-3 py-2">
+          <p
+            className={cn('min-w-0 truncate text-sm', past && 'text-destructive')}
+            aria-live="polite"
+            data-testid="date-time-summary"
+          >
+            {past ? 'Pick a time in the future' : at ? formatShort(at) : 'No time picked'}
+          </p>
+          <div className="flex shrink-0 gap-1.5">
+            <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={!at || past}
+              onClick={() => {
+                setOpen(false)
+                onApply(at!, rep)
+              }}
+            >
+              Schedule
+            </Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+const NO_CHANNELS: Channel[] = []
+const NO_PROVIDERS: Provider[] = []
+const NO_SETTINGS: Record<string, string> = {}
+
+/** Shallow prop equality, ignoring `skip`. */
+function sameProps<T extends object>(a: T, b: T, skip: readonly (keyof T)[] = []) {
+  const keys = Object.keys(a) as (keyof T)[]
+
+  return keys.length === Object.keys(b).length && keys.every((k) => skip.includes(k) || Object.is(a[k], b[k]))
+}
+
+interface ChannelEditorProps {
+  /** Undefined: the shared text (the "All channels" tab). */
+  channel?: Channel
+  value: string
+  hidden: boolean
+  error?: string
+  locked: boolean
+  media: Media[]
+  /** The shared editor counts for every picked channel, each with its own text when it has one. */
+  picked?: Channel[]
+  overrides?: Record<string, Override>
+  providers: Provider[]
+  /** The post's tags: they go out as hashtags, so they count. */
+  tags: string[]
+  onText: (channelId: string | undefined, text: string) => void
+  onMedia: Dispatch<SetStateAction<Media[]>>
+  /** The one picked channel's limits: the files it takes, how many. */
+  limits?: Provider['limits']
+  /** Every picked channel's platform: an uploaded picture one of them refuses is converted first. */
+  platforms: Provider[]
+}
+
+/**
+ * One text tab's editor: the shared text or one channel's own. Every tab's editor stays mounted (the hidden ones
+ * keep their own document, lists and marks); a memo with stable callbacks, so a keystroke renders the editor it
+ * changed. A hidden one ignores text changes until its tab shows again, then takes up the text it mirrors.
+ */
+const ChannelEditor = memo(
+  function ChannelEditor({
+    channel,
+    value,
+    hidden,
+    error,
+    locked,
+    media,
+    picked,
+    overrides,
+    providers,
+    tags,
+    onText,
+    onMedia,
+    limits,
+    platforms,
+  }: ChannelEditorProps) {
+    const providerOf = (c: Channel) => providers.find((p) => p.id === c.provider)
+    const counts = channel
+      ? [countFor(channel, value, providerOf(channel), tags)]
+      : (picked ?? NO_CHANNELS).map((c) => countFor(c, overrides?.[c.id]?.content ?? value, providerOf(c), tags))
+
+    return (
+      <div
+        hidden={hidden}
+        className={cn('post-composer rounded-xl border bg-background', error && 'border-destructive')}
+      >
+        <PostEditor
+          id={channel ? `override-${channel.id}` : 'post-content'}
+          labelledBy="post-content-label"
+          value={value}
+          hidden={hidden}
+          onChange={(text) => onText(channel?.id, text)}
+          placeholder="What do you want to say?"
+          invalid={!!error}
+          required={!channel}
+          testId={channel ? `override-${channel.id}` : 'post-content'}
+          className="border-0 shadow-none"
+          editable={!locked}
+          below={
+            <MediaStrip
+              media={media}
+              onEdit={locked ? undefined : onMedia}
+              onRemove={locked ? undefined : (id) => onMedia((ms) => ms.filter((m) => m.id !== id))}
+            />
+          }
+          start={
+            locked ? undefined : (
+              <MediaButton
+                limits={limits}
+                count={media.length}
+                platforms={platforms}
+                onAdd={(m) => addWithin(limits, onMedia, m)}
+              />
+            )
+          }
+          end={<Counter counts={counts} />}
+        />
+      </div>
+    )
+  },
+  (a: ChannelEditorProps, b: ChannelEditorProps) =>
+    a.hidden && b.hidden ? sameProps(a, b, ['value', 'overrides'] as const) : sameProps(a, b),
+)
+
+/**
+ * A remote setting with preferred labels (Slack's channels: #random, else #general), filled in as soon as the
+ * channel is picked: the settings card may stay folded, and the post still saves. None of them there, the person
+ * picks.
+ */
+const PreferredDefaults = memo(function PreferredDefaults({
+  channel,
+  provider,
+  values,
+  onSetting,
+}: {
+  channel: Channel
+  provider?: Provider
+  values: Record<string, string>
+  onSetting: (channelId: string, key: string, value: string) => void
+}) {
+  const field = provider?.settings_fields?.find((f) => f.kind === 'remote' && f.prefer?.length && !values[f.key])
+  // The same cache as the field's own list in the settings card.
+  const options = useQuery({
+    queryKey: ['channels', channel.id, 'options', field?.key ?? ''],
+    queryFn: async () => (await api.channelOptions(channel.id, field!.key)).data,
+    enabled: !!field,
+    staleTime: 5 * 60_000,
+    retry: false,
+  })
+
+  useEffect(() => {
+    const pick = field?.prefer?.map((label) => options.data?.find((o) => o.label === label)).find(Boolean)
+
+    if (field && pick) {
+      onSetting(channel.id, field.key, pick.value)
+    }
+  }, [field, options.data, channel.id, onSetting])
+
+  return null
+})
+
+/** One channel's platform settings, folded under its name with a summary of what was changed. */
+const SettingsCard = memo(function SettingsCard({
+  channel,
+  provider,
+  values,
+  errors,
+  open,
+  channels,
+  onOpenChange,
+  onSetting,
+}: {
+  channel: Channel
+  provider?: Provider
+  values: Record<string, string>
+  /** Every field error of the form; the card takes its own. */
+  errors: Record<string, string | undefined>
+  open: boolean
+  channels: Channel[]
+  onOpenChange: (channelId: string, open: boolean) => void
+  onSetting: (channelId: string, key: string, value: string) => void
+}) {
+  const fields = provider?.settings_fields ?? []
+  const summary = settingsSummary(fields, values, channels)
+  const remote = useMemo(
+    () => ({
+      channelId: channel.id,
+      load: async (key: string) => (await api.channelOptions(channel.id, key)).data,
+    }),
+    [channel.id],
+  )
+  // Required options still empty: named on the header, so a folded card says what it waits for.
+  const missing = visibleFields(fields, values)
+    .filter((f) => f.required && !(values[f.key] ?? f.default ?? '').trim())
+    .map((f) => f.label)
+  const prefix = `targets.${channel.id}.settings.`
+  const fieldErrors = Object.fromEntries(
+    Object.entries(errors)
+      .filter(([k]) => k.startsWith(prefix))
+      .map(([k, v]) => [k.slice(prefix.length), v]),
+  )
+
+  return (
+    <Collapsible open={open} onOpenChange={(o) => onOpenChange(channel.id, o)} asChild>
+      <section
+        aria-label={`${channel.name} settings`}
+        // The header's focus ring is drawn on the card, so it follows the card's rounded corners (inside, the
+        // overflow clipping cut an inset ring's corners square).
+        className="overflow-hidden rounded-xl border bg-card has-[[data-slot=collapsible-trigger]:focus-visible]:ring-2 has-[[data-slot=collapsible-trigger]:focus-visible]:ring-ring"
+        data-testid={`settings-${channel.id}`}
+      >
+        {/* A tinted header, set off from the page and from the open fields under it: whose options (the channel,
+            big; its platform under it), what is set or still needed, folded or not. */}
+        <CollapsibleTrigger className="flex w-full min-w-0 items-center gap-3 bg-muted/60 px-3 py-2.5 text-left outline-none hover:bg-muted">
+          <ChannelAvatar channel={channel} className="size-8" />
+          <span className="grid min-w-0 flex-1">
+            <span className="truncate text-sm font-medium">{channel.name}</span>
+            <span className="truncate text-xs text-muted-foreground">
+              {platformLabel(channel.provider, provider?.name)} options
+              {missing.length > 0 ? (
+                <span className="text-amber-700 dark:text-amber-400"> · Needs {missing.join(', ')}</span>
+              ) : (
+                !open && summary && <span> · {summary}</span>
+              )}
+            </span>
+          </span>
+          <ChevronDown
+            className={cn('size-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')}
+          />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="border-t p-3">
+          <ProviderFields
+            idPrefix={`settings-${channel.id}`}
+            fields={fields}
+            values={values}
+            onChange={(k, v) => onSetting(channel.id, k, v)}
+            errors={fieldErrors}
+            remote={remote}
+            channelOptions={channels
+              .filter((o) => o.provider === channel.provider && o.id !== channel.id)
+              .map((o) => ({ value: o.id, label: o.name, hint: o.handle ?? undefined }))}
+          />
+        </CollapsibleContent>
+      </section>
+    </Collapsible>
+  )
+})
+
+/**
+ * The composer's footer: the picked time as a chip, Save draft, and the split button: Publish now (Save changes
+ * on a live post) with the calendar half. It holds the "is the picked time past" timer, so the form itself never renders for the clock.
+ */
+/** The publish time's problem: the picked time went by, or the API refused it. */
+function publishTimeError(locked: boolean, inPast: boolean, error?: string) {
+  if (locked) {
+    return undefined
+  }
+
+  return error ?? (inPast ? 'This time is in the past. Pick a future time or clear it.' : undefined)
+}
+
+/** The publish time's problem at the top of the drawer, where it is seen first; the footer's chip points at it. */
+function PublishTimeAlert({ locked, publishAt, error }: { locked: boolean; publishAt: Date | null; error?: string }) {
+  const message = publishTimeError(locked, useIsPast(publishAt), error)
+
+  if (!message) {
+    return null
+  }
+
+  return (
+    <div className="px-4 pt-3">
+      <Callout tone="danger" size="xs" role="alert" id="publish-at-error" data-testid="publish-at-error">
+        {message}
+      </Callout>
+    </div>
+  )
+}
+
+/**
+ * A post that was sent and failed on some channels: its time is history now, so instead of the time's problem the top
+ * says how many channels failed and leads to Insights, where each one is retried.
+ */
+function SentAlert({ failed, total, onShow }: { failed: number; total: number; onShow: () => void }) {
+  return (
+    <div className="px-4 pt-3">
+      <Callout tone="danger" size="xs" role="alert" className="items-center" data-testid="sent-failed">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <p>
+            {total > 1 ? `${failed} of ${total} channels failed.` : 'It failed on its channel.'} See why and retry them
+            in Insights.
+          </p>
+          <Button type="button" size="sm" variant="outline" onClick={onShow}>
+            Show channels
+          </Button>
+        </div>
+      </Callout>
+    </div>
+  )
+}
+
+function ComposerFooter({
+  post,
+  locked,
+  sent,
+  live,
+  busy,
+  canSend,
+  canSaveDraft,
+  publishAt,
+  waitsFor,
+  streams,
+  picked,
+  repeatEvery,
+  error,
+  onClearSchedule,
+  onSave,
+  onApplySchedule,
+  onApplyLive,
+}: {
+  post?: Post
+  locked: boolean
+  /** Sent and failed somewhere: its time is history, failed channels are retried one by one in Insights. */
+  sent: boolean
+  live: boolean
+  busy: boolean
+  canSend: boolean
+  canSaveDraft: boolean
+  publishAt: Date | null
+  /** What the post waits for instead of a time ("When Kick goes live"), or null. */
+  waitsFor: string | null
+  streams: Channel[]
+  picked: Channel[]
+  repeatEvery: string
+  error?: string
+  onClearSchedule: () => void
+  onSave: (mode: 'draft' | 'now') => void
+  onApplySchedule: (at: Date, repeat: string) => void
+  onApplyLive: (channelId: string) => void
+}) {
+  const inPast = useIsPast(publishAt)
+  // The time's problem (shown at the top by PublishTimeAlert): the chip turns red and points at it.
+  const timeError = publishTimeError(locked, inPast, error)
+  // Publish now with a past time would be refused: the button stays focusable and says why (a disabled button
+  // gets no hover or focus, so no tooltip).
+  const nowBlocked = !locked && inPast
+  const nowReason = nowBlocked
+    ? 'The date is in the past: pick a future time or clear the date to publish now'
+    : undefined
+  const publishNow = () => {
+    if (!nowBlocked) {
+      onSave('now')
+    }
+  }
+
+  return (
+    <div
+      data-slot="sheet-footer"
+      className="flex flex-wrap items-center gap-2 border-t p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+    >
+      {locked ? (
+        <p className="ml-auto text-sm text-muted-foreground">
+          {post?.status === 'publishing'
+            ? 'Going out now. The channels above show how it goes.'
+            : 'This post went out and can no longer be edited. Duplicate it to post it again.'}
+        </p>
+      ) : sent ? (
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-x-3 gap-y-2">
+          <p className="text-sm text-muted-foreground">Retries send the saved text.</p>
+          <Button type="submit" disabled={busy || !canSend} data-testid="save-post">
+            {busy ? 'Saving...' : 'Save changes'}
+          </Button>
+        </div>
+      ) : (
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          {publishAt && (
+            <span
+              // A group names the time and points at its problem (a group takes no aria-invalid: the red border
+              // and the notice say it).
+              role="group"
+              aria-label={`Publish time: ${formatShort(publishAt)}`}
+              aria-describedby={timeError ? 'publish-at-error' : undefined}
+              className={cn(
+                'inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border pr-1 pl-3 text-sm tabular-nums',
+                timeError && 'border-destructive text-destructive',
+              )}
+              data-testid="publish-at-chip"
+              title={formatShort(publishAt)}
+            >
+              <CalendarClock className="size-4 shrink-0 text-muted-foreground" />
+              <span className="truncate">{chipLabel(publishAt)}</span>
+              {repeatEvery && <Repeat2 className="size-4 shrink-0 text-muted-foreground" aria-label="Repeats" />}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                className="rounded-full"
+                aria-label="Clear schedule"
+                onClick={onClearSchedule}
+              >
+                <X />
+              </Button>
+            </span>
+          )}
+          {waitsFor && (
+            <span
+              role="group"
+              aria-label={`Publish: ${waitsFor}`}
+              className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border pr-1 pl-3 text-sm"
+              data-testid="publish-on-chip"
+              title={waitsFor}
+            >
+              <Radio className="size-4 shrink-0 text-muted-foreground" />
+              <span className="truncate">{waitsFor}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                className="rounded-full"
+                aria-label="Clear schedule"
+                onClick={onClearSchedule}
+              >
+                <X />
+              </Button>
+            </span>
+          )}
+          {!live && (
+            <Button type="button" variant="outline" onClick={() => onSave('draft')} disabled={busy || !canSaveDraft}>
+              Save draft
+            </Button>
+          )}
+          {live && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={publishNow}
+              disabled={busy || !canSend}
+              aria-disabled={nowBlocked || undefined}
+              aria-describedby={nowBlocked ? 'publish-at-error' : undefined}
+              tooltip={nowReason}
+              data-testid="publish-now"
+            >
+              <Send /> Publish now
+            </Button>
+          )}
+          {/* Two ways out of a post: now, or the calendar half (with the time already picked, if any). */}
+          <ButtonGroup aria-label="Publish">
+            {live ? (
+              <Button type="submit" disabled={busy || !canSend || inPast} data-testid="save-post">
+                {busy ? 'Saving...' : 'Save changes'}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                onClick={publishNow}
+                disabled={busy || !canSend}
+                aria-disabled={nowBlocked || undefined}
+                aria-describedby={nowBlocked ? 'publish-at-error' : undefined}
+                tooltip={nowReason}
+                data-testid="publish-now"
+              >
+                <Send /> {busy ? 'Saving...' : 'Publish now'}
+              </Button>
+            )}
+            <ScheduleMenu
+              value={publishAt}
+              repeat={repeatEvery}
+              disabled={busy}
+              streams={streams}
+              picked={picked}
+              onApply={onApplySchedule}
+              onApplyLive={onApplyLive}
+            />
+          </ButtonGroup>
+        </div>
+      )}
+    </div>
+  )
+}
+
+type SaveMode = 'draft' | 'schedule' | 'now'
+
+// A dot before each part of the header's line after the collection ("Default · Published ... · created ...").
+const DOT = "before:mr-3 before:content-['·']"
+
+/**
+ * Write or edit a post: the channels in a multi-select with their avatars, a tab row (all channels, then each
+ * picked one, from two channels on) that switches the editor between the shared text and one channel's own
+ * text, the editor with Upload and a counter per channel, the platform's settings folded under it.
+ * Footer: the collection, the time, Repeat, tags, Save draft and Schedule or Publish now.
+ */
+const TITLE_HINT = 'YouTube, Reddit, Pinterest and blogs publish it; the other platforms only show it in staqly.'
+
+export function Composer({
+  open,
+  onOpenChange,
+  collectionId,
+  post,
+  defaultPublishAt,
+  defaultMedia,
+  headerActions,
+  onSaved,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  /** The collection a new post starts in. */
+  collectionId?: string
+  /** Edit this post instead of creating one. */
+  post?: Post
+  /** A time to start with (the calendar's "+" on a slot). */
+  defaultPublishAt?: string
+  /** Files to start with (the media library's "New post with this"). */
+  defaultMedia?: Media[]
+  /** Buttons in the header (the calendar's "Load a draft"). */
+  headerActions?: React.ReactNode
+  onSaved?: (post: Post) => void
+}) {
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-2xl data-[side=right]:lg:max-w-4xl">
+        {/* Mounted with the drawer's content: it stays while the drawer slides out and starts fresh on each opening,
+            and on another post (a draft loaded from the calendar). */}
+        <ComposerForm
+          key={post?.id}
+          headerActions={headerActions}
+          collectionId={collectionId}
+          post={post}
+          defaultPublishAt={defaultPublishAt}
+          defaultMedia={defaultMedia}
+          onDone={(p) => {
+            onOpenChange(false)
+            onSaved?.(p)
+          }}
+        />
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+/**
+ * The composer's form, also used for a saved post (PostSheet): then it shows each channel's state, link, error
+ * and Retry, opens on `initialTab`, puts `headerActions` in the header and is read only once the post went out.
+ */
+type ComposerProps = {
+  collectionId?: string
+  post?: Post
+  defaultPublishAt?: string
+  defaultMedia?: Media[]
+  /** A channel id to open on (the calendar's card of that channel). */
+  initialTab?: string
+  headerActions?: React.ReactNode
+  onDone: (post: Post) => void
+}
+
+/** What the composer edits of a post. Two versions equal in this differ only in what happened to the post. */
+const editedFields = (p: Post) =>
+  JSON.stringify([
+    p.title,
+    p.content,
+    (p.media_items ?? []).map((m) => m.id),
+    (p.thread ?? []).map((t) => [t.content, (t.media_items ?? []).map((m) => m.id), t.delay_seconds ?? 0]),
+    (p.targets ?? []).map((t) => [t.channel_id, t.content ?? null, t.settings]),
+    p.tags,
+    p.repeat_every ?? '',
+    p.publish_at ?? null,
+    p.publish_on ?? null,
+  ])
+
+export function ComposerForm({ post: latest, ...props }: ComposerProps) {
+  // The version the fields were loaded from, or this form last saved (a write that survived a failed scheduling
+  // step): every save is based on it. A newer one arriving from elsewhere never moves it under typed fields.
+  const [base, setBase] = useState(latest)
+  const [round, setRound] = useState(0)
+  const sheetSaved = useSheetSaved()
+  const post = latest && (!base || latest.version >= base.version) ? latest : base
+
+  // Fields loaded anew are not unsaved work.
+  useEffect(() => {
+    if (round > 0) {
+      sheetSaved()
+    }
+  }, [round, sheetSaved])
+
+  return (
+    <ComposerBody
+      key={round}
+      {...props}
+      post={post}
+      base={base}
+      onBase={(p, reload) => {
+        setBase(p)
+
+        if (reload) {
+          setRound((r) => r + 1)
+        }
+      }}
+    />
+  )
+}
+
+function ComposerBody({
+  collectionId,
+  post,
+  base,
+  onBase,
+  defaultPublishAt,
+  defaultMedia,
+  initialTab,
+  headerActions,
+  onDone,
+}: ComposerProps & {
+  /** The version of the post the fields hold; `post` is the newest one known (its status, its channels' state). */
+  base?: Post
+  /** The fields are now based on `p`; `reload` starts them over from it. */
+  onBase: (p: Post, reload: boolean) => void
+}) {
+  const qc = useQueryClient()
+  const collections = useCollections()
+  const channels = useChannels()
+  const providers = useProviders()
+  const [chosenCollection, setCollection] = useState(post?.collection_id ?? collectionId ?? '')
+  // Nothing picked yet: the workspace's Default collection.
+  const collection = chosenCollection || (collections.data?.find((c) => c.is_default)?.id ?? '')
+  const [content, setContent] = useState(post?.content ?? '')
+  const [media, setMedia] = useState<Media[]>(post?.media_items ?? defaultMedia ?? [])
+
+  useEditedMedia(setMedia)
+  const [thread, setThread] = useState<ThreadPart[]>(() =>
+    (post?.thread ?? []).map((p) => ({
+      uid: crypto.randomUUID(),
+      content: p.content,
+      media: p.media_items ?? [],
+      delay: p.delay_seconds ?? 0,
+    })),
+  )
+  const [selected, setSelected] = useState<Set<string>>(() => new Set((post?.targets ?? []).map((t) => t.channel_id)))
+  const [overrides, setOverrides] = useState<Record<string, Override>>(() =>
+    Object.fromEntries(
+      (post?.targets ?? []).map((t) => [t.channel_id, { content: t.content ?? null, settings: { ...t.settings } }]),
+    ),
+  )
+  const [tags, setTags] = useState<string[]>(post?.tags ?? [])
+  const [repeatEvery, setRepeatEvery] = useState<string>(post?.repeat_every ?? '')
+  const knownTags = useTags()
+  const [publishAt, setPublishAt] = useState<Date | null>(() => {
+    const iso = post?.publish_at ?? defaultPublishAt
+
+    return iso ? new Date(iso) : null
+  })
+  const [publishOn, setPublishOn] = useState<Post['publish_on']>(post?.publish_on ?? null)
+  const [errors, setErrors] = useState<Record<string, string | undefined>>({})
+  const channelList = channels.data ?? NO_CHANNELS
+  // A platform's title and tags come from the post's own fields: the channel settings leave them out.
+  const providerList = useMemo(
+    () =>
+      (providers.data ?? NO_PROVIDERS).map((pr) => ({
+        ...pr,
+        settings_fields: pr.settings_fields?.filter((f) => !f.from_post),
+      })),
+    [providers.data],
+  )
+  const [title, setTitle] = useState(post?.title ?? '')
+  // What the person changed since the fields were loaded.
+  const formFields = JSON.stringify([
+    title,
+    content,
+    media.map((m) => m.id),
+    thread.map((p) => [p.content, p.media.map((m) => m.id), p.delay]),
+    [...selected],
+    overrides,
+    tags,
+    repeatEvery,
+    publishAt?.getTime() ?? null,
+    publishOn,
+  ])
+  const [loadedFields] = useState(formFields)
+  const dirty = formFields !== loadedFields
+  // The version a save is based on: the one the fields hold, or a newer one that changed nothing this form
+  // edits (a retry, an outcome).
+  const saveOver = useMemo(
+    () => (post && base && post.version > base.version && editedFields(post) === editedFields(base) ? post : base),
+    [post, base],
+  )
+  const picked = useMemo(() => channelList.filter((c) => selected.has(c.id)), [channelList, selected])
+  const pickedPlatforms = useMemo(
+    () => picked.flatMap((c) => providerList.find((p) => p.id === c.provider) ?? []),
+    [picked, providerList],
+  )
+  // Channels a post can wait for: connected, on a platform that says when a stream starts.
+  const streams = useMemo(
+    () =>
+      channelList.filter(
+        (c) => c.status === 'connected' && providerList.some((p) => p.id === c.provider && p.live_trigger),
+      ),
+    [channelList, providerList],
+  )
+  const waitsFor = publishOn
+    ? `When ${channelList.find((c) => c.id === publishOn.channel_id)?.name ?? 'the channel'} goes live`
+    : null
+  const providerOf = (ch: Channel) => providerList.find((p) => p.id === ch.provider)
+  const textFor = (ch: Channel) => overrides[ch.id]?.content ?? content
+
+  const setOverride = (id: string, patch: Partial<Override>) =>
+    setOverrides((o) => {
+      const cur: Override = o[id] ?? { content: null, settings: {} }
+
+      return { ...o, [id]: { ...cur, ...patch } }
+    })
+  // Stable callbacks for the memo editors and settings cards. A channel's text equal to the shared text is no
+  // text of its own; the shared text is read from a ref, so the callback never changes.
+  const contentRef = useRef(content)
+
+  useEffect(() => {
+    contentRef.current = content
+  })
+  const [onText] = useState(() => (channelId: string | undefined, text: string) => {
+    if (!channelId) {
+      setContent(text)
+
+      return
+    }
+
+    setOverrides((o) => {
+      const cur: Override = o[channelId] ?? { content: null, settings: {} }
+
+      return { ...o, [channelId]: { ...cur, content: text === contentRef.current ? null : text } }
+    })
+  })
+  const [onSetting] = useState(() => (channelId: string, key: string, value: string) => {
+    setOverrides((o) => {
+      const cur: Override = o[channelId] ?? { content: null, settings: {} }
+
+      return { ...o, [channelId]: { ...cur, settings: { ...cur.settings, [key]: value } } }
+    })
+    // A changed field is no longer what was refused: its error goes (the next save checks it again).
+    setErrors((e) => {
+      const k = `targets.${channelId}.settings.${key}`
+
+      if (!(k in e)) {
+        return e // unchanged: the editors and cards keep their memo
+      }
+
+      const rest = { ...e }
+
+      delete rest[k]
+
+      return rest
+    })
+  })
+  // The open settings card: one at a time, opening one folds the others (undefined: none picked yet).
+  const [openSetting, setOpenSetting] = useState<string | null>()
+  const [onSettingsOpen] = useState(
+    () => (channelId: string, open: boolean) =>
+      setOpenSetting((cur) => (open ? channelId : cur === channelId ? null : cur)),
+  )
+
+  function input(status: 'draft' | 'scheduled'): PostInput {
+    return {
+      collection,
+      title,
+      content,
+      media: media.map((m) => m.id),
+      targets: picked.map((ch) => ({
+        channel_id: ch.id,
+        content: overrides[ch.id]?.content?.trim() ? overrides[ch.id]!.content : null,
+        settings: overrides[ch.id]?.settings ?? {},
+      })),
+      publish_at: publishAt && !publishOn ? publishAt.toISOString() : null,
+      publish_on: publishOn,
+      tags,
+      repeat_every: repeatEvery as PostInput['repeat_every'],
+      thread: thread
+        .filter((p) => p.content.trim() || p.media.length)
+        .map((p) => ({ content: p.content, media: p.media.map((m) => m.id), delay_seconds: p.delay })),
+      status,
+    }
+  }
+
+  const save = useMutation({
+    // `version`: the one to save over, when the person chose to (the conflict dialog).
+    mutationFn: async ({ mode, version }: { mode: SaveMode; version?: number }) => {
+      const body = input(mode === 'schedule' ? 'scheduled' : 'draft')
+      let saved: Post
+
+      if (post) {
+        const { collection: _c, status: _s, publish_at, publish_on, repeat_every, ...patch } = body
+        // A post that was sent keeps its time (history, and in the past): only its text and settings change.
+        const when = post.status === 'failed' ? {} : { publish_at, publish_on, repeat_every }
+
+        saved = await api.updatePost(post.id, { ...patch, ...when, expected_version: version ?? saveOver?.version })
+      } else {
+        saved = await api.createPost(body)
+      }
+
+      // Publish now waits a few seconds with an Undo; existing drafts schedule after their content is saved.
+      const at =
+        mode === 'now'
+          ? new Date(Date.now() + undoDelayMs()).toISOString()
+          : post && mode === 'schedule'
+            ? publishAt?.toISOString()
+            : undefined
+
+      const scheduleOn = mode === 'schedule' && post && publishOn ? { publish_on: publishOn } : undefined
+
+      if (at || scheduleOn) {
+        saved = await api.schedulePost(saved.id, at ?? scheduleOn!).catch((e: unknown) => {
+          // The first write committed: retain its id/version and expose it even if this drawer closes.
+          onBase(saved, false)
+
+          if (post) {
+            syncPostInCache(qc, saved)
+          } else {
+            refetchPostListsFromStart(qc, saved.id)
+          }
+
+          invalidateAfterPostChange(qc, saved.id, { usage: !post })
+
+          throw e
+        })
+      }
+
+      return { saved, mode, created: !post }
+    },
+    onSuccess: ({ saved, mode, created }) => {
+      if (created) {
+        refetchPostListsFromStart(qc, saved.id)
+      } else {
+        syncPostInCache(qc, saved)
+      }
+
+      invalidateAfterPostChange(qc, saved.id, { usage: created })
+
+      if (mode === 'now') {
+        // The canceled post (a draft again), not `saved`, which still says scheduled.
+        undoToast(saved, (draft) => {
+          syncPostInCache(qc, draft)
+          invalidateAfterPostChange(qc, draft.id)
+        })
+      } else {
+        namedToast(
+          postTitle(saved, 40),
+          mode === 'schedule' ? 'is scheduled' : created ? 'was saved as a draft' : 'was saved',
+        )
+      }
+
+      onDone(saved)
+    },
+    onError: (e, { mode }) => {
+      // Changed elsewhere since these fields were loaded: nothing was saved, the person decides.
+      if (e instanceof ApiError && e.code === 'post_changed') {
+        setConflict(mode)
+
+        return
+      }
+
+      const { errors: fields, complete } = apiFieldErrors<string>(e, (k) => k)
+      const keys = Object.keys(fields)
+
+      setErrors(fields)
+
+      // A platform setting is wrong: show it where it lives, in red (the text's own error waits under the text).
+      if (keys.some((k) => /^targets\.[^.]+\.settings\./.test(k))) {
+        setSection('settings')
+      }
+
+      // A channel's own objection (its text or media) shows under that channel's text, not under All channels:
+      // open it there, or the click looks like it did nothing. One about the channel itself has no place: a toast.
+      const channelError = keys.find((k) => /^targets\.[^.]+(\.content)?$/.test(k))
+
+      if (channelError && !keys.some((k) => /^targets\.[^.]+\.settings\./.test(k))) {
+        const id = channelError.split('.')[1]!
+
+        setSection('post')
+
+        if (picked.length > 1) {
+          setTab(id)
+        }
+
+        if (!channelError.endsWith('.content')) {
+          toastApiError(e)
+        }
+      }
+
+      if (!complete) {
+        toastApiError(e)
+      }
+    },
+  })
+
+  const [tab, setTab] = useState<string>(initialTab ?? 'all')
+  const locked = !!post && isLocked(post)
+
+  useConvertedMedia(media, pickedPlatforms, setMedia, locked)
+  // Sent and failed on some channels: its time is history; each failed channel is retried in Insights.
+  const sent = post?.status === 'failed'
+  // Post (the content), Settings (each channel's platform settings) and, once it was sent off, Insights.
+  const [section, setSection] = useState<'post' | 'settings' | 'delivery'>('post')
+  const targetOf = (id: string) => post?.targets?.find((t) => t.channel_id === id)
+  // Per-channel text only makes sense with two channels or more; with one, the shared text is that channel's.
+  const multi = picked.length > 1
+  const active = multi && tab !== 'all' ? picked.find((c) => c.id === tab) : undefined
+  // One channel picked: the composer offers only what its platform takes (files, comments).
+  const only = picked.length === 1 ? picked[0] : undefined
+  const onlyLimits = only && only.provider !== 'custom' ? providerOf(only)?.limits : undefined
+  // What each channel leaves out of the post, shown before it goes out.
+  const leftOut = picked
+    .map((ch) => ({ channel: ch, notes: channelFit(ch, providerOf(ch), media, thread) }))
+    .filter((c) => c.notes.length > 0)
+  // With one channel there is no tab of its own: its objection (too many files, a video it can't take) shows here.
+  const sharedError = errors.content ?? (!multi && picked[0] ? errors[`targets.${picked[0].id}.content`] : undefined)
+  const shownTab = active?.id ?? 'all'
+  const ownText = active ? (overrides[active.id]?.content ?? null) : null
+  const countsFor = (ch?: Channel): Count[] =>
+    (ch ? [ch] : picked).map((c) => countFor(c, textFor(c), providerOf(c), tags))
+  const { isLocal } = useMode()
+  const xPosts = useXPosts({ enabled: !isLocal })
+  const xOut = xPosts.data && !xPosts.data.unlimited && xPosts.data.left <= 0 ? xPostsWarning(xPosts.data) : ''
+  const settingsChannels = useMemo(
+    () =>
+      locked
+        ? NO_CHANNELS
+        : picked.filter((c) => (providerList.find((p) => p.id === c.provider)?.settings_fields ?? []).length > 0),
+    [locked, picked, providerList],
+  )
+  const changedSettings = settingsChannels.filter((c) =>
+    settingsSummary(providerOf(c)?.settings_fields ?? [], overrides[c.id]?.settings ?? NO_SETTINGS, channelList),
+  ).length
+  const settingsInvalid = Object.keys(errors).some((k) => /^targets\.[^.]+\.settings\./.test(k))
+  const deliveryTargets = useMemo(() => (post && post.status !== 'draft' ? (post.targets ?? []) : []), [post])
+  const failedTargets = deliveryTargets.filter((t) => t.status === 'failed').length
+  const shownSection =
+    (section === 'settings' && settingsChannels.length === 0) || (section === 'delivery' && !deliveryTargets.length)
+      ? 'post'
+      : section
+  const formRef = useRef<HTMLFormElement>(null)
+  // Scheduled or failed: saving is the main action, Publish now the other one. Never two saves side by side.
+  const live = !!post && post.status !== 'draft'
+  const canSend = picked.length > 0 && content.trim().length > 0 && !!collection
+  const { mutate: runSave, isPending: busy } = save
+  const saveAs = (mode: SaveMode, version?: number) => runSave({ mode, version })
+
+  // The post moved on elsewhere (an agent, a teammate, another tab) while nothing was typed: the fields start
+  // over from it. Typed fields stay on their version, so saving them answers 409 and asks (the conflict dialog)
+  // instead of overwriting. Not under a save on its way: its own answer is the next version.
+  useEffect(() => {
+    if (!busy && !dirty && post && saveOver && post.version > saveOver.version) {
+      onBase(post, true)
+    }
+  }, [busy, dirty, post, saveOver, onBase])
+  // The save the server refused because the post changed elsewhere (409), until the person chose.
+  const [conflict, setConflict] = useState<SaveMode | null>(null)
+  const resolveConflict = (keepMine: boolean) => {
+    const mode = conflict
+
+    setConflict(null)
+
+    if (!post || !mode) {
+      return
+    }
+
+    api
+      .post(post.id)
+      .then((now) => {
+        if (keepMine) {
+          onBase(now, false)
+          saveAs(mode, now.version)
+        } else {
+          syncPostInCache(qc, now)
+          onBase(now, true)
+        }
+      })
+      .catch((e: unknown) => toastApiError(e))
+  }
+  // Publishing (now or at its time) first lists what each channel leaves out, when one does.
+  const [review, setReview] = useState<'now' | 'schedule' | null>(null)
+  // Required settings left empty, checked first so every one turns red at once (the server names one at a time).
+  const missingSettings = () => {
+    const out: Record<string, string> = {}
+
+    for (const ch of picked) {
+      const values = overrides[ch.id]?.settings ?? NO_SETTINGS
+
+      for (const f of visibleFields(providerOf(ch)?.settings_fields ?? [], values)) {
+        if (f.required && !(values[f.key] ?? f.default ?? '').trim()) {
+          out[`targets.${ch.id}.settings.${f.key}`] = `${f.label} is required`
+        }
+      }
+    }
+
+    return out
+  }
+  const publish = (mode: 'draft' | 'schedule' | 'now') => {
+    const missing = missingSettings()
+
+    if (Object.keys(missing).length > 0) {
+      setErrors(missing)
+      setSection('settings')
+    } else if (mode !== 'draft' && leftOut.length > 0) {
+      setReview(mode)
+    } else {
+      saveAs(mode)
+    }
+  }
+  // The live preview: a second drawer beside this one, fed the same state (nothing is saved for it).
+  const { open: previewOpen, used: previewUsed, setOpen: setPreviewOpen, toggle: togglePreview } = useLazyDialog()
+  const previewState = useMemo(
+    () => ({
+      channels: picked,
+      providers: providers.data ?? NO_PROVIDERS,
+      title,
+      content,
+      overrides,
+      media,
+      thread,
+      tags,
+    }),
+    [picked, providers.data, title, content, overrides, media, thread, tags],
+  )
+  const previewButton = (
+    <Button
+      type="button"
+      size="icon-sm"
+      variant={previewOpen ? 'secondary' : 'ghost'}
+      aria-label="Live preview"
+      aria-expanded={previewOpen}
+      tooltip="Live preview"
+      onClick={togglePreview}
+      data-testid="open-live-preview"
+    >
+      <MonitorSmartphone />
+    </Button>
+  )
+  const aiMaxChars = Math.min(...picked.map((c) => providerOf(c)?.limits?.max_chars || Infinity))
+  const applyAiPost = ({ draft, picture }: AiPostResult) => {
+    setTitle(draft.title)
+    setContent(draft.content)
+    setTab('all')
+
+    if (draft.comments.length) {
+      setThread(draft.comments.map((c) => ({ uid: crypto.randomUUID(), content: c, media: [], delay: 0 })))
+    }
+
+    if (picture) {
+      setMedia((ms) => [...ms, picture])
+    }
+  }
+
+  const preview = previewUsed && (
+    <PostPreviewSheet
+      open={previewOpen}
+      onOpenChange={setPreviewOpen}
+      state={previewState}
+      // Opens on the channel being written for (the only one, when there is one).
+      initialTab={picked.length === 1 ? picked[0]!.id : shownTab}
+    />
+  )
+
+  return (
+    // Like every drawer: the header and the footer stay put, the fields scroll between them.
+    // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- onKeyDown only stops the browser's implicit submit
+    <form
+      ref={formRef}
+      onSubmit={(e) => {
+        e.preventDefault()
+
+        // Whatever submits the form (a key, a button) sends nothing the buttons would not: not twice, not half.
+        if (busy || !canSend) {
+          return
+        }
+
+        // A draft's primary sends it (now or at the picked time); a post already on its way saves, keeping its time.
+        publish(sent ? 'draft' : publishAt || publishOn ? 'schedule' : live ? 'draft' : 'now')
+      }}
+      // Enter in a one-line field (the title, a tag, a setting) is not "send": only the buttons publish.
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && e.target instanceof HTMLInputElement) {
+          e.preventDefault()
+        }
+      }}
+      className="flex min-h-0 flex-1 flex-col"
+      noValidate
+      data-testid="composer"
+      // Attachments are unsaved changes too (the drawer's guard reads fields; these live in none).
+      data-form-value={[...media, ...thread.flatMap((p) => p.media)].map((m) => m.id).join(' ')}
+    >
+      <SheetHeader className="border-b pt-[max(1rem,env(safe-area-inset-top))] pr-12 pointer-coarse:pr-14">
+        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+          <div className="min-w-0 flex-1 basis-64">
+            <SheetTitle className="truncate" title={post ? postTitle(post, 200) : undefined}>
+              {post ? postTitle(post) : 'New post'}
+            </SheetTitle>
+            {post ? (
+              <SheetDescription asChild>
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                  <PostStatusBadge
+                    status={post.status}
+                    unpublishedAt={post.unpublished_at}
+                    deleted={deletedOutside(post)}
+                  />
+                  <span>{post.collection_name}</span>
+                  {post.publish_on && !post.publish_at && post.status === 'scheduled' && (
+                    <span className={DOT}>
+                      Goes out{' '}
+                      <span className="font-semibold text-foreground">
+                        {liveLabel(post, channelList.find((c) => c.id === post.publish_on?.channel_id)?.name)?.replace(
+                          /^When/,
+                          'when',
+                        )}
+                      </span>
+                    </span>
+                  )}
+                  {post.publish_at && (
+                    <span className={DOT} title={formatDateTime(post.publish_at)}>
+                      {post.status === 'published' ? 'Published' : sent ? 'Sent' : 'Goes out'}{' '}
+                      <span className="font-semibold text-foreground">{formatSchedule(post.publish_at)}</span>
+                    </span>
+                  )}
+                  <span className={DOT} title={formatDateTime(post.created_at)}>
+                    created {timeAgo(post.created_at)}
+                  </span>
+                  {post.source && (
+                    // The API records the app as "dashboard".
+                    <span className={DOT}>via {post.source === 'dashboard' ? 'app' : post.source}</span>
+                  )}
+                </div>
+              </SheetDescription>
+            ) : (
+              <SheetDescription>Pick the channels, write once, change it per channel if you like.</SheetDescription>
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {/* Up top: it writes the title as well as the text. */}
+            {!locked && (
+              <WriteWithAi
+                maxChars={Number.isFinite(aiMaxChars) ? aiMaxChars : 0}
+                replaces={!!(title.trim() || content.trim())}
+                onUse={applyAiPost}
+              />
+            )}
+            {previewButton}
+            {headerActions && (
+              <div className="flex items-center gap-1.5" data-testid="post-actions">
+                {headerActions}
+              </div>
+            )}
+          </div>
+        </div>
+      </SheetHeader>
+      {sent && failedTargets > 0 ? (
+        // Insights already lists the failed channels: the alert only points there.
+        shownSection !== 'delivery' && (
+          <SentAlert failed={failedTargets} total={deliveryTargets.length} onShow={() => setSection('delivery')} />
+        )
+      ) : (
+        <PublishTimeAlert locked={locked || sent} publishAt={publishAt} error={errors.publish_at} />
+      )}
+      <Tabs
+        value={shownSection}
+        onValueChange={(v) => setSection(v as typeof section)}
+        className="flex min-h-0 flex-1 flex-col gap-0"
+      >
+        {/* Post always; Settings while it can still change (it waits for a channel with options); Insights once it went out. */}
+        {/* A post that went nowhere has only Post: no strip for a single tab. */}
+        <div className={cn('overflow-x-auto px-4 pt-3 pb-1', locked && deliveryTargets.length === 0 && 'hidden')}>
+          <TabsList aria-label="Post sections">
+            <TabsTrigger value="post">Post</TabsTrigger>
+            {!locked && (
+              <TabsTrigger
+                value="settings"
+                data-testid="tab-settings"
+                disabled={settingsChannels.length === 0}
+                title={settingsChannels.length > 0 ? undefined : 'Pick a channel with its own options first'}
+              >
+                Settings
+                {settingsInvalid ? (
+                  <span className="size-2 rounded-full bg-destructive" aria-label="has an error" role="img" />
+                ) : changedSettings > 0 ? (
+                  <span className="rounded-full bg-muted px-1.5 text-[11px] leading-4 tabular-nums">
+                    {changedSettings}
+                  </span>
+                ) : null}
+              </TabsTrigger>
+            )}
+            {deliveryTargets.length > 0 && (
+              <TabsTrigger value="delivery" data-testid="tab-delivery">
+                Insights
+                {failedTargets > 0 && (
+                  <span
+                    className="rounded-full bg-destructive/15 px-1.5 text-[11px] leading-4 text-destructive tabular-nums"
+                    aria-label={`${failedTargets} failed`}
+                  >
+                    {failedTargets}
+                  </span>
+                )}
+              </TabsTrigger>
+            )}
+          </TabsList>
+        </div>
+        <div className="grid min-h-0 flex-1">
+          {/* Every section stays mounted (hidden when inactive), so switching never loses what was typed. */}
+          <div className="grid min-h-0 content-start overflow-y-auto overscroll-contain p-4">
+            <TabsContent value="post" forceMount className="grid content-start gap-4 data-[state=inactive]:hidden">
+              {/* Title and, for a new post, its collection side by side; stacked on phones. Both labels sit on a row of
+                  the same height, so the title's help button doesn't push its field below the collection's. */}
+              <div className={cn('grid gap-4', !post && 'sm:grid-cols-[minmax(0,1fr)_minmax(12rem,15rem)]')}>
+                <div className="grid min-w-0 content-start gap-2">
+                  <div className="flex h-5 items-center gap-1">
+                    <Label htmlFor="post-title" required>
+                      Title
+                    </Label>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label="Where the title is published"
+                          className="relative inline-flex size-5 items-center justify-center rounded-full text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:after:absolute pointer-coarse:after:-inset-2.5"
+                        >
+                          <CircleHelp className="size-3.5" aria-hidden />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-64">{TITLE_HINT}</TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <Input
+                    id="post-title"
+                    value={title}
+                    onChange={(e) => {
+                      setTitle(e.target.value)
+                      // A typed title is no longer the one refused: its error goes (the next save checks it again).
+                      setErrors((cur) => (cur.title ? { ...cur, title: undefined } : cur))
+                    }}
+                    placeholder="What is this post about?"
+                    maxLength={300}
+                    disabled={locked}
+                    aria-required
+                    aria-invalid={!!errors.title}
+                    aria-describedby="post-title-hint"
+                    data-testid="post-title"
+                  />
+                  <span id="post-title-hint" className="sr-only">
+                    {TITLE_HINT}
+                  </span>
+                  <FieldError>{errors.title}</FieldError>
+                </div>
+                {!post && (
+                  <div className="grid min-w-0 content-start gap-2">
+                    <div className="flex h-5 items-center">
+                      <Label htmlFor="post-collection" required>
+                        Collection
+                      </Label>
+                    </div>
+                    <Select value={collection} onValueChange={setCollection}>
+                      <SelectTrigger
+                        id="post-collection"
+                        className="w-full [&>span]:truncate"
+                        aria-invalid={!!errors.collection}
+                      >
+                        <SelectValue placeholder="Choose a collection" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(collections.data ?? []).map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FieldError>{errors.collection}</FieldError>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid min-w-0 content-start gap-2">
+                <Label htmlFor="post-channels" required>
+                  Channels
+                </Label>
+                <ChannelPicker
+                  channels={channelList}
+                  providers={providerList}
+                  selected={selected}
+                  onChange={(ids) => setSelected(new Set(ids))}
+                  disabled={locked}
+                  invalid={!!errors.targets}
+                />
+                <FieldError>{errors.targets}</FieldError>
+                {/* A sign-in the platform ends before this post's time (renew_by): it would wait for a reconnect. */}
+                {!locked && renewsBefore(picked, publishAt).map((c) => <RenewFirst key={c.id} channel={c} />)}
+                {/* Posts to X are metered: say so before publishing when this period's are used up. */}
+                {!locked && xOut && picked.some((c) => c.provider === 'x') && (
+                  <Callout tone="danger" size="xs" data-testid="x-posts-exhausted">
+                    {xOut}{' '}
+                    <Link href="/settings/plan" className="font-medium underline underline-offset-2">
+                      Plan & usage
+                    </Link>
+                  </Callout>
+                )}
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="post-tags">Tags</Label>
+                <MultiSelect
+                  id="post-tags"
+                  label="Tags"
+                  placeholder="Add tags to find and filter posts"
+                  className="w-full"
+                  value={tags}
+                  onChange={setTags}
+                  disabled={locked}
+                  options={(knownTags.data ?? []).map((t) => ({ value: t.name, label: `#${t.name}` }))}
+                  creatable={tagInput}
+                />
+              </div>
+
+              {multi && (
+                <div
+                  role="tablist"
+                  // No visible label: the avatars say it (the user asked for the row without one); screen readers
+                  // still hear what the row picks.
+                  aria-label="Text for"
+                  className="flex flex-wrap items-center gap-1.5 border-b pb-3"
+                >
+                  <AllChannelsTab selected={shownTab === 'all'} onSelect={setTab} />
+                  {picked.map((ch) => (
+                    <ChannelTab
+                      key={ch.id}
+                      channel={ch}
+                      selected={shownTab === ch.id}
+                      own={overrides[ch.id]?.content != null}
+                      status={targetOf(ch.id)?.status}
+                      onSelect={setTab}
+                    />
+                  ))}
+                </div>
+              )}
+
+              <div className="grid gap-1.5">
+                <h3 id="post-content-label" className="flex min-w-0 items-center gap-2 text-sm font-medium">
+                  {active ? (
+                    <>
+                      <span className="shrink-0 font-normal text-muted-foreground">Text for</span>{' '}
+                      <span
+                        // Solid fill and border in both themes: the dark muted colour is nearly the drawer's own.
+                        className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-input bg-muted py-0.5 pr-2.5 pl-0.5 dark:border-[oklch(0.4_0.012_265)] dark:bg-[oklch(0.31_0.01_265)]"
+                        title={active.name}
+                        data-testid="text-for-channel"
+                      >
+                        <span aria-hidden className="inline-flex">
+                          <ChannelAvatar channel={active} className="size-5" />
+                        </span>
+                        <span className="truncate">{active.name}</span>
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      Post <RequiredMark />
+                    </>
+                  )}
+                </h3>
+                {active && post && targetOf(active.id) && <TargetStatus post={post} target={targetOf(active.id)!} />}
+                {active && !locked && (
+                  <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span className="min-w-0 wrap-anywhere">
+                      <span className="font-medium text-foreground">{active.name}</span>
+                      {ownText != null
+                        ? ' gets its own text.'
+                        : ' uses the text for all channels. Change it here to give it its own.'}
+                    </span>
+                    {ownText != null && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setOverride(active.id, { content: null })}
+                      >
+                        <RotateCcw /> Use the shared text
+                      </Button>
+                    )}
+                  </p>
+                )}
+                {[undefined, ...picked].map((ch) => (
+                  <ChannelEditor
+                    key={ch?.id ?? 'all'}
+                    channel={ch}
+                    value={ch ? (overrides[ch.id]?.content ?? content) : content}
+                    hidden={(ch?.id ?? 'all') !== shownTab}
+                    error={ch ? errors[`targets.${ch.id}.content`] : sharedError}
+                    locked={locked}
+                    media={media}
+                    picked={ch ? undefined : picked}
+                    overrides={ch ? undefined : overrides}
+                    providers={providerList}
+                    tags={tags}
+                    onText={onText}
+                    onMedia={setMedia}
+                    limits={onlyLimits}
+                    platforms={pickedPlatforms}
+                  />
+                ))}
+                <LinksNotices counts={countsFor(active)} />
+                <FieldError>{active ? errors[`targets.${active.id}.content`] : sharedError}</FieldError>
+              </div>
+
+              {/* Comments belong to the post as a whole: written on the shared tab, shown read only per channel. */}
+              {!active && (
+                <ThreadEditor
+                  parts={thread}
+                  onChange={setThread}
+                  countsFor={(text) => picked.map((c) => countFor(c, text, providerOf(c)))}
+                  errors={errors}
+                  locked={locked}
+                  noComments={
+                    only && !only.comments && only.provider !== 'custom'
+                      ? `${providerOf(only)?.name ?? 'This platform'} has no comments under a post, so this one is published alone.`
+                      : undefined
+                  }
+                  textOnly={!!onlyLimits?.comments_text_only}
+                />
+              )}
+            </TabsContent>
+
+            <TabsContent value="settings" forceMount className="grid content-start gap-3 data-[state=inactive]:hidden">
+              <p className="text-sm text-muted-foreground">
+                Each channel&apos;s own options on its platform. Defaults are fine for most posts.
+              </p>
+              {/* Every picked channel gets its preferred defaults (Slack's #random) at once, folded card or not. */}
+              {picked.map((ch) => (
+                <PreferredDefaults
+                  key={ch.id}
+                  channel={ch}
+                  provider={providerOf(ch)}
+                  values={overrides[ch.id]?.settings ?? NO_SETTINGS}
+                  onSetting={onSetting}
+                />
+              ))}
+              {settingsChannels.map((ch) => (
+                <SettingsCard
+                  key={ch.id}
+                  channel={ch}
+                  provider={providerOf(ch)}
+                  values={overrides[ch.id]?.settings ?? NO_SETTINGS}
+                  errors={errors}
+                  // One channel opens by default; with several one at a time, and a setting with an error always shows.
+                  open={
+                    Object.keys(errors).some((k) => k.startsWith(`targets.${ch.id}.settings.`)) ||
+                    (openSetting === undefined ? settingsChannels.length === 1 : openSetting === ch.id)
+                  }
+                  channels={channelList}
+                  onOpenChange={onSettingsOpen}
+                  onSetting={onSetting}
+                />
+              ))}
+            </TabsContent>
+
+            <TabsContent value="delivery" forceMount className="grid content-start gap-3 data-[state=inactive]:hidden">
+              {/* How it went out per channel, with each one's numbers and comments once it did. */}
+              {post && deliveryTargets.length > 0 && <PostStats post={post} active={shownSection === 'delivery'} />}
+            </TabsContent>
+          </div>
+        </div>
+      </Tabs>
+      {preview}
+      <ComposerFooter
+        post={post}
+        locked={locked}
+        sent={sent}
+        live={live}
+        busy={busy}
+        canSend={canSend}
+        canSaveDraft={!!collection && !!content.trim()}
+        publishAt={publishOn ? null : publishAt}
+        waitsFor={waitsFor}
+        streams={streams}
+        picked={picked}
+        repeatEvery={repeatEvery}
+        error={errors.publish_at ?? errors.publish_on}
+        onClearSchedule={() => {
+          setPublishAt(null)
+          setPublishOn(null)
+        }}
+        onSave={publish}
+        onApplyLive={(channelId) => {
+          flushSync(() => {
+            setPublishOn({ event: 'live', channel_id: channelId })
+            setPublishAt(null)
+            setRepeatEvery('') // a post that waits for a stream doesn't repeat
+          })
+
+          if (canSend) {
+            formRef.current?.requestSubmit()
+          }
+        }}
+        onApplySchedule={(at, rep) => {
+          flushSync(() => {
+            setPublishAt(at)
+            setPublishOn(null)
+            setRepeatEvery(rep)
+          })
+
+          if (canSend) {
+            formRef.current?.requestSubmit()
+          }
+        }}
+      />
+      <PublishReview
+        open={review !== null}
+        onOpenChange={(open) => !open && setReview(null)}
+        channels={leftOut}
+        confirmLabel={review === 'schedule' ? 'Schedule' : 'Publish now'}
+        onConfirm={() => {
+          if (review) {
+            saveAs(review)
+          }
+
+          setReview(null)
+        }}
+      />
+      <AlertDialog open={conflict !== null} onOpenChange={(open) => !open && setConflict(null)}>
+        <AlertDialogContent data-testid="post-conflict">
+          <AlertDialogHeader>
+            <AlertDialogTitle>This post was changed elsewhere</AlertDialogTitle>
+            <AlertDialogDescription>
+              Someone else or an agent saved it while you were editing. Your changes are still here, not saved yet: save
+              your version to replace theirs, or load theirs to drop what you changed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction variant="outline" onClick={() => resolveConflict(false)}>
+              Load their version
+            </AlertDialogAction>
+            <AlertDialogAction onClick={() => resolveConflict(true)}>Save my version</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </form>
+  )
+}

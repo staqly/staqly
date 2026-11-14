@@ -1,0 +1,87 @@
+import {
+  ArrowRight,
+  Bold,
+  CalendarCheck,
+  Clock,
+  GalleryHorizontalEnd,
+  LayoutGrid,
+  Link2Off,
+  Ratio,
+  TvMinimalPlay,
+  Type,
+} from 'lucide-react'
+import Link from 'next/link'
+import type { ReactNode } from 'react'
+
+import { ORGANIZATION, breadcrumbLd, ldJson } from '@/lib/seo'
+import { SITE_URL } from '@/lib/site'
+import { TOOLS, type Tool } from '@/lib/tools'
+
+const ICONS: Record<Tool['icon'], ReactNode> = {
+  clock: <Clock />,
+  type: <Type />,
+  link: <Link2Off />,
+  check: <CalendarCheck />,
+  ratio: <Ratio />,
+  grid: <LayoutGrid />,
+  slides: <GalleryHorizontalEnd />,
+  format: <Bold />,
+  title: <TvMinimalPlay />,
+}
+
+export function ToolCards({ items = TOOLS }: { items?: Tool[] }) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {items.map((t) => (
+        // The title is the link (a short anchor text), stretched over the whole card so all of it stays clickable.
+        <div
+          key={t.slug}
+          className="group relative flex flex-col rounded-2xl border border-border bg-card p-6 transition-colors has-focus-visible:ring-2 has-focus-visible:ring-ring hover:bg-accent/50"
+        >
+          {/* The icon beside the title, so the card reads as a heading line and its text. */}
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-background text-brand [&_svg]:size-5">
+              {ICONS[t.icon]}
+            </span>
+            <h3 className="font-semibold tracking-tight text-balance">
+              <Link href={`/tools/${t.slug}`} className="outline-none after:absolute after:inset-0 after:rounded-2xl">
+                {t.title}
+              </Link>
+            </h3>
+          </div>
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{t.summary}</p>
+          <span
+            aria-hidden
+            className="mt-auto inline-flex items-center gap-1 pt-5 text-sm font-medium text-muted-foreground transition-colors group-hover:text-brand-strong"
+          >
+            Open the tool <ArrowRight className="size-3.5" />
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** Structured data for a free browser tool, and the breadcrumb its page shows (Free tools > tool). */
+export function ToolJsonLd({ tool }: { tool: Tool }) {
+  const data = [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'WebApplication',
+      name: tool.title,
+      description: tool.summary,
+      url: `${SITE_URL}/tools/${tool.slug}`,
+      applicationCategory: 'BusinessApplication',
+      operatingSystem: 'Web',
+      isAccessibleForFree: true,
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'EUR' },
+      publisher: { '@type': 'Organization', '@id': ORGANIZATION['@id'], name: ORGANIZATION.name, url: SITE_URL },
+    },
+    breadcrumbLd([
+      ['Free tools', '/tools'],
+      [tool.title, `/tools/${tool.slug}`],
+    ]),
+  ]
+
+  return <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: ldJson(data) }} />
+}

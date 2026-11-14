@@ -1,0 +1,137 @@
+---
+title: Whop
+description: Publish to a Whop forum with text, a title, pictures and videos, pinned posts, member notifications and comments. Sign in with Whop, or connect with an Account API key.
+---
+
+Staqly publishes to a **forum of your Whop business** through Whop's REST API, signed in
+with Whop (or with the business's Account API key), uploads pictures and videos to Whop, and posts with
+`POST /api/v1/forum_posts`. Each forum is its own channel. A published target links to the
+business's page on whop.com (Whop's API gives no address for a single post).
+
+## Sign in with Whop
+
+**Channels → Add channel → Whop** sends you to Whop, where you pick the business and approve staqly's
+Whop app. The business's forums come back as a list: pick one or more, each becomes a channel, and
+they share the sign-in (Whop renews it every hour and rotates its refresh token, so staqly keeps one
+for all of them).
+
+This needs a Whop app on the server, registered once:
+
+<Steps>
+<Step>
+
+### Register the app
+
+On [whop.com/dashboard](https://whop.com/dashboard), **Developer → Apps → Create app**, type **B2B
+app**. Under **OAuth**: client mode **Confidential**, and the redirect URL your dashboard's
+`/channels/callback/whop` (`https://staqly.example.com/channels/callback/whop`). Under
+**Permissions**, add as required:
+
+| Permission | Why |
+|---|---|
+| `company:basic:read` | Show the business's name and logo |
+| `forum:read` | List the forums to post into |
+| `forum:post:create` | Publish posts and comments, with their files |
+| `developer:manage_webhook` | Make the channel's webhook (see [Webhook](#webhook)) |
+| `webhook_receive:memberships`, `member:basic:read` | New members and memberships in **Analytics → Audience** |
+
+</Step>
+<Step>
+
+### Give staqly the keys
+
+```bash title=".env"
+PROVIDER_WHOP_ENABLED=true
+PROVIDER_WHOP_CLIENT_ID=app_...
+PROVIDER_WHOP_CLIENT_SECRET=...
+```
+
+Until both are set, **Whop** connects with an API key only.
+
+</Step>
+</Steps>
+
+## Or connect with an Account API key
+
+Under the sign-in, **Use an Account API key instead** opens **Whop (API key)**: nothing is
+registered on the server, and each forum brings the business's key.
+
+<Steps>
+<Step>
+
+### Create the key
+
+On [whop.com/dashboard](https://whop.com/dashboard), pick the business, open the **Developer**
+page and, under **Account API keys**, click **Create**. Give it a name (for example `staqly`) and
+the permissions in the table above. Copy the key: Whop shows it once.
+
+</Step>
+<Step>
+
+### Connect a forum
+
+Paste the key. When the business has one forum, staqly uses it; with several, it lists them
+(`General (exp_...)`) and asks for the **Forum** id. To connect another forum, add the channel again
+with the same key and the other id. The channel shows the business's name and logo and the forum's
+name.
+
+</Step>
+</Steps>
+
+A key does not expire. If you delete it on Whop, or a sign-in is revoked (the app removed from the
+business), the channel turns **Needs reconnect**.
+
+## Webhook
+
+Once the channel connects (and again daily), staqly makes a webhook on Whop for it, pointed at
+`https://<your API>/v1/whop/webhook/<channel id>` (`PUBLIC_API_URL`; Whop refuses `localhost` and
+private addresses), and keeps its signing secret with the channel's sign-in or key. Whop signs every event
+with it; staqly refuses a call more than five minutes off and handles each one once. A webhook Whop
+turned off after failures is turned on again, a deleted one is made again.
+
+- Someone joining the business (`member.created`) and a membership starting
+  (`membership.activated`) count in **Analytics → Audience** as new members and new memberships.
+- Whop sends nothing for forum posts; staqly reads their numbers and comments instead (see below).
+
+Without the webhook permissions publishing works as before; the Audience stays empty. Two forums of
+one business each have a webhook, so the business's members count once per connected forum.
+
+## Limits
+
+| | |
+|---|---|
+| Text | 5,000 characters, Markdown |
+| Media | up to **4** pictures or videos per post, uploaded to Whop first; staqly waits until Whop has processed each one |
+
+## Settings per post
+
+| Setting | What it does |
+|---|---|
+| **Title** (`title`) | The post's headline in the forum (optional, up to 200 characters). It is the post's **Title**, shared by every channel, not set per channel |
+| **Notify members** (`notify`) | Whop sends a mention notification to the forum's members who allow them |
+| **Pin to the top** (`pinned`) | Pins the post in the forum |
+
+Over the API: `{"title": "Week 42", "notify": "true"}` in the target's `settings`.
+
+## Comments
+
+A post's [thread](/concepts#threads-comments-under-a-post) goes out as comments, each answering the
+one before it, in order and after their delays. Comments take pictures and videos too.
+
+## Numbers and comments
+
+**Insights** reads a published post's views, likes and comments from Whop, and the comments under it with their
+first replies (the `forum:read` permission). A sign-in reads the forum it posted to; posts published before
+staqly kept the forum with the post read their numbers only.
+
+## When publishing fails
+
+| Whop says | Staqly does |
+|---|---|
+| The key is not valid (401) | Marks the channel **Needs reconnect**; reconnect it with a working key |
+| A missing permission or a forum where only admins post (403) | Fails the target with Whop's reason; give the key **Create forum posts** |
+| The forum is gone (404), a refused post (400, 422), a file Whop could not process | Fails the target with Whop's reason |
+| Rate limit (429) or Whop unavailable (5xx), an upload that did not go through | Retries through the job queue (after 1, 5, then 15 minutes) |
+
+Whop has no way to recognize a post sent twice. When its answer is lost, staqly does not post again
+and fails the target asking you to check the forum first.

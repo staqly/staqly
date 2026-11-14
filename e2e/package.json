@@ -1,0 +1,36 @@
+{
+  "name": "@staqly/e2e",
+  "license": "AGPL-3.0-only",
+  "version": "0.0.0",
+  "private": true,
+  "description": "End-to-end tests against the real Docker stack (compose.yml + compose.e2e.yml).",
+  "type": "module",
+  "scripts": {
+    "test:e2e": "vitest run",
+    "test:agent": "node agent/run.mjs",
+    "test:n8n": "node n8n/run.mjs",
+    "lint": "oxlint --deny-warnings",
+    "typecheck": "tsc --noEmit",
+    "format": "oxlint --fix --quiet; oxfmt",
+    "format:check": "oxfmt --check",
+    "test:cross-client": "vitest run --config cross-client/vitest.config.ts",
+    "test:ui": "playwright test -c ui/playwright.config.ts",
+    "test:ui-responsive": "vitest run --config ui-responsive/vitest.config.ts",
+    "demo:gif": "playwright test -c demo/playwright.config.ts"
+  },
+  "dependencies": {
+    "@staqly/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.65.0",
+    "@stylistic/eslint-plugin": "^5.10.0",
+    "@types/node": "^26.6.6",
+    "oxfmt": "^0.77.0",
+    "oxlint": "^1.92.0",
+    "playwright": "1.65.0",
+    "playwright-core": "1.65.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}

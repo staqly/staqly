@@ -1,0 +1,38 @@
+# Monthly dependency updates, grouped per ecosystem to keep PRs few. A release must be a week old
+# before it is proposed (cooldown): a hijacked package is usually caught and pulled by then.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directories: ["/apps/api", "/apps/cli"]
+    schedule: { interval: monthly }
+    cooldown: { default-days: 7 }
+    groups: { go: { patterns: ["*"] } }
+  - package-ecosystem: npm
+    # pnpm workspaces share the lockfile at the repository root.
+    directory: /
+    schedule: { interval: monthly }
+    cooldown: { default-days: 7 }
+    groups: { npm: { patterns: ["*"], update-types: [minor, patch] } }
+    ignore:
+      # @types/node follows the Node major we run (LTS), bumped deliberately.
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
+  - package-ecosystem: uv
+    directory: /sdks/python
+    schedule: { interval: monthly }
+    cooldown: { default-days: 7 }
+  - package-ecosystem: docker
+    directory: /
+    schedule: { interval: monthly }
+    cooldown: { default-days: 7 }
+    ignore:
+      # Stay on the current Node LTS; major upgrades are checked and applied deliberately.
+      - dependency-name: node
+        update-types: [version-update:semver-major]
+  # Actions are pinned to commit SHAs with a `# vX.Y.Z` comment; Dependabot bumps both. "/" covers
+  # .github/workflows; the composite action needs its own directory.
+  - package-ecosystem: github-actions
+    directories: ["/", "/.github/actions/*"]
+    schedule: { interval: monthly }
+    cooldown: { default-days: 7 }
+    groups: { actions: { patterns: ["*"] } }

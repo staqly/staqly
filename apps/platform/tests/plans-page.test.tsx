@@ -1,0 +1,360 @@
+import { cleanup, render as renderPlain, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+import { PlanGrid, teamTotal } from '@/components/plans/plan-cards'
+import { PlansPage } from '@/components/plans/plans-page'
+import type { BillingDetails } from '@/lib/api'
+import { qk } from '@/lib/queries'
+
+import { nav } from './navigation'
+import { PLANS, usage } from './plans-fixtures'
+import { makeClient, mockApi, renderWithProviders, sessionFixture } from './utils'
+
+const SUB: NonNullable<BillingDetails['subscription']> = {
+  status: 'active',
+  current_period_start: '2026-10-01T00:00:00Z',
+  current_period_end: '2026-11-01T00:00:00Z',
+  cancel_at_period_end: false,
+  cancel_at: null,
+  canceled_at: null,
+  trial_end: null,
+  amount: 2900,
+  quantity: 1,
+  currency: 'usd',
+  interval: 'month',
+  past_due_for: '',
+  discount: null,
+}
+
+const PROMOTIONS: Record<string, unknown> = {
+  'BIZ-5UUS-DUQR': { code: 'BIZ-5UUS-DUQR', percent_off: 50, duration: 'forever', plans: ['plus', 'business'] },
+  SPRING20: { code: 'SPRING20', percent_off: 20, duration: 'repeating', duration_in_months: 3, plans: ['plus', 'pro'] },
+}
+
+function render(paying: boolean, trial = paying ? 'none' : 'available', sub: object = SUB) {
+  const client = makeClient()
+
+  client.setQueryData(qk.session, {
+    ...sessionFixture('cloud'),
+    role: 'owner',
+    accounts_enabled: true,
+  })
+
+  const api = mockApi({
+    'GET /v1/plans': { data: PLANS },
+    'GET /v1/workspace/usage': {
+      ...usage(paying ? PLANS[1] : PLANS[0]),
+      trial_ends_at: paying ? null : new Date(Date.now() + 3 * 86_400_000 - 60_000).toISOString(),
+    },
+    'GET /v1/billing': {
+      enabled: true,
+      plan: paying ? 'plus' : 'starter',
+      subscription_status: paying ? 'active' : null,
+      plan_expires_at: '2026-11-04T00:00:00Z',
+      suspended: false,
+      has_customer: paying,
+      trial,
+    },
+    'GET /v1/billing/details': {
+      enabled: true,
+      subscription: paying ? sub : null,
+      payment_methods: [],
+      invoices: [],
+      has_more_invoices: false,
+    },
+    'POST /v1/billing/checkout': { url: 'https://checkout.stripe.test/cs_1' },
+    // Case sensitive, like the API: SPRING20, not spring20.
+    'POST /v1/billing/promotion-code': ({ body }: { body: { promotion_code: string } }) =>
+      PROMOTIONS[body.promotion_code] ?? {
+        status: 422,
+        body: {
+          error: {
+            code: 'validation_failed',
+            message: 'invalid input',
+            fields: { promotion_code: "this code isn't valid (or has been used up)" },
+          },
+        },
+      },
+  })
+
+  renderWithProviders(<PlansPage />, { client })
+
+  return api
+}
+
+describe('plan picker', () => {
+  const assign = vi.fn<(url: string) => void>()
+
+  vi.stubGlobal('location', { ...window.location, assign })
+  afterEach(() => assign.mockReset())
+
+  it('in the trial: four plans to choose, monthly or yearly in whole euros a month', async () => {
+    const api = render(false)
+    const user = userEvent.setup()
+
+    const plus = await screen.findByTestId('plan-plus')
+
+    expect(screen.getByTestId('plans-trial-ends')).toHaveTextContent(/Your free trial ends on .+, in 3 days/)
+    expect(screen.getByRole('link', { name: 'Back' })).toBeInTheDocument()
+    expect(within(plus).getByText('€29')).toBeInTheDocument()
+    expect(screen.queryByText('Your current plan')).not.toBeInTheDocument() // nothing is paid for yet
+    expect(within(plus).getByText('Most popular')).toBeInTheDocument()
+    await user.click(screen.getByRole('radio', { name: /yearly/i }))
+    expect(within(plus).getByText('€23')).toBeInTheDocument()
+    expect(within(plus).getByText('€276 per user, billed yearly, incl. VAT')).toBeInTheDocument()
+    expect(within(screen.getByTestId('plan-starter')).getByText('€12')).toBeInTheDocument()
+    await user.click(within(plus).getByRole('button', { name: 'Choose Plus' }))
+    await waitFor(() => expect(api.find('POST', '/v1/billing/checkout')).toHaveLength(1))
+    expect(api.find('POST', '/v1/billing/checkout')[0].body).toEqual({ plan: 'plus', interval: 'year' })
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('https://checkout.stripe.test/cs_1'))
+    // The browser is still leaving for Stripe: a second click must not start another checkout.
+    expect(within(plus).getByRole('button', { name: 'Choose Plus' })).toBeDisabled()
+  })
+
+  it('paying for Plus monthly: the current card, upgrades and downgrades switch the subscription', async () => {
+    const api = render(true)
+    const user = userEvent.setup()
+
+    const plus = await screen.findByTestId('plan-plus')
+
+    await waitFor(() => expect(within(plus).getByRole('button', { name: 'Your current plan' })).toBeDisabled())
+    expect(within(screen.getByTestId('plan-starter')).getByRole('button', { name: 'Switch to Starter' })).toBeEnabled()
+    // The same plan billed yearly is a switch too.
+    await user.click(screen.getByRole('radio', { name: /yearly/i }))
+    expect(within(plus).getByRole('button', { name: 'Switch to yearly' })).toBeEnabled()
+    await user.click(screen.getByRole('radio', { name: /monthly/i }))
+    await user.click(within(screen.getByTestId('plan-pro')).getByRole('button', { name: 'Upgrade to Pro' }))
+    await waitFor(() =>
+      expect(api.find('POST', '/v1/billing/checkout')[0]?.body).toEqual({ plan: 'pro', interval: 'month' }),
+    )
+  })
+
+  it('a promotion code goes with a switch, and can be applied to the current plan', async () => {
+    const api = render(true)
+    const user = userEvent.setup()
+
+    const plus = await screen.findByTestId('plan-plus')
+
+    await waitFor(() => expect(within(plus).getByRole('button', { name: 'Your current plan' })).toBeDisabled())
+    await user.click(screen.getByRole('button', { name: 'Have a promotion code?' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Add a promotion code' })
+
+    // Enter applies; the modal closes and focus goes back to the page.
+    await user.type(within(dialog).getByLabelText(/Promotion code/), 'BIZ-5UUS-DUQR{Enter}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByTestId('promotion-code-applied')).toHaveTextContent('BIZ-5UUS-DUQR 50% off')
+    expect(api.find('POST', '/v1/billing/promotion-code')[0].body).toEqual({ promotion_code: 'BIZ-5UUS-DUQR' })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Change' })).toHaveFocus())
+    await user.click(within(screen.getByTestId('plan-business')).getByRole('button', { name: 'Upgrade to Business' }))
+    await waitFor(() =>
+      expect(api.find('POST', '/v1/billing/checkout')[0]?.body).toEqual({
+        plan: 'business',
+        interval: 'month',
+        promotion_code: 'BIZ-5UUS-DUQR',
+      }),
+    )
+
+    // The browser leaves for the switch; the next visit applies the code to the current plan instead.
+    cleanup()
+    const again = render(true)
+    const plusAgain = await screen.findByTestId('plan-plus')
+
+    await waitFor(() => expect(within(plusAgain).getByRole('button', { name: 'Your current plan' })).toBeDisabled())
+    await user.click(screen.getByRole('button', { name: 'Have a promotion code?' }))
+    await user.type(
+      within(await screen.findByRole('dialog', { name: 'Add a promotion code' })).getByLabelText(/Promotion code/),
+      'BIZ-5UUS-DUQR{Enter}',
+    )
+    await user.click(await within(plusAgain).findByRole('button', { name: 'Apply the code to this plan' }))
+    await waitFor(() =>
+      expect(again.find('POST', '/v1/billing/checkout')[0]?.body).toEqual({
+        plan: 'plus',
+        interval: 'month',
+        promotion_code: 'BIZ-5UUS-DUQR',
+      }),
+    )
+  })
+
+  it('the promotion code modal: Cancel keeps nothing, an empty code asks for one, Remove clears it', async () => {
+    const api = render(true)
+    const user = userEvent.setup()
+
+    const plus = await screen.findByTestId('plan-plus')
+
+    await waitFor(() => expect(within(plus).getByRole('button', { name: 'Your current plan' })).toBeDisabled())
+    expect(screen.queryByLabelText(/Promotion code/)).not.toBeInTheDocument()
+
+    const link = screen.getByRole('button', { name: 'Have a promotion code?' })
+
+    await user.click(link)
+    let dialog = await screen.findByRole('dialog', { name: 'Add a promotion code' })
+
+    await user.type(within(dialog).getByLabelText(/Promotion code/), 'SPRING20')
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.queryByTestId('promotion-code-applied')).not.toBeInTheDocument()
+    await waitFor(() => expect(link).toHaveFocus())
+
+    await user.click(link)
+    dialog = await screen.findByRole('dialog', { name: 'Add a promotion code' })
+    await user.click(within(dialog).getByRole('button', { name: 'Apply' }))
+    expect(within(dialog).getByText('Type the code, such as SPRING20.')).toBeInTheDocument()
+    await user.type(within(dialog).getByLabelText(/Promotion code/), 'SPRING20')
+    await user.click(within(dialog).getByRole('button', { name: 'Apply' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByTestId('promotion-code-applied')).toHaveTextContent('SPRING20 20% off for 3 months')
+
+    await user.click(screen.getByRole('button', { name: 'Remove' }))
+    expect(screen.queryByTestId('promotion-code-applied')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Have a promotion code?' })).toHaveFocus()
+    expect(within(plus).getByRole('button', { name: 'Your current plan' })).toBeDisabled()
+    await user.click(within(screen.getByTestId('plan-pro')).getByRole('button', { name: 'Upgrade to Pro' }))
+    await waitFor(() =>
+      expect(api.find('POST', '/v1/billing/checkout')[0]?.body).toEqual({ plan: 'pro', interval: 'month' }),
+    )
+  })
+})
+
+describe('from the pricing page', () => {
+  it('opens on the billing period picked there', async () => {
+    nav.set('/plans', 'plan=pro&interval=year')
+    render(false)
+
+    const plus = await screen.findByTestId('plan-plus')
+
+    expect(screen.getByRole('radio', { name: /yearly/i })).toHaveAttribute('aria-checked', 'true')
+    expect(within(plus).getByText('€23')).toBeInTheDocument()
+    nav.reset()
+  })
+})
+
+describe('per user pricing', () => {
+  it('Most popular helps pick a first plan, not a switch: gone once a plan is paid for', () => {
+    const { rerender } = renderPlain(<PlanGrid plans={PLANS} />)
+
+    expect(within(screen.getByTestId('plan-plus')).getByText('Most popular')).toBeInTheDocument()
+    rerender(<PlanGrid plans={PLANS} currentPlanId="pro" />)
+    expect(screen.queryByText('Most popular')).not.toBeInTheDocument()
+  })
+
+  it('while a discount is on, no other code can be added: the plans page says which and until when', async () => {
+    render(true, 'none', { ...SUB, discount: { code: 'SPRING20', end: '2027-01-23T00:00:00Z' } })
+
+    expect(await screen.findByTestId('promotion-discount-on')).toHaveTextContent(
+      /SPRING20 is on until .+\. Another code can be added once it ends\./,
+    )
+    expect(screen.queryByRole('button', { name: 'Have a promotion code?' })).not.toBeInTheDocument()
+  })
+
+  it('a team pays the seat price times its members', () => {
+    const plus = PLANS.find((p) => p.id === 'plus')!
+
+    expect(teamTotal(plus, 'month', 3)).toBe('3 users × €29 = €87/month')
+    expect(teamTotal(plus, 'year', 2)).toBe('2 users × €276 = €552/year')
+  })
+
+  it('says before checkout whether Starter starts a free trial or is charged today', async () => {
+    render(false)
+
+    const starter = await screen.findByTestId('plan-starter')
+
+    expect(within(starter).getByRole('button', { name: 'Start 7-day free trial' })).toBeInTheDocument()
+    expect(within(starter).getByTestId('plan-charge-starter')).toHaveTextContent(/Free for 7 days, card required/)
+    expect(within(screen.getByTestId('plan-plus')).getByTestId('plan-charge-plus')).toHaveTextContent('Charged today.')
+  })
+
+  it('a second workspace while another is in its trial: Starter is charged today, and says why', async () => {
+    render(false, 'other_workspace')
+
+    const starter = await screen.findByTestId('plan-starter')
+
+    expect(within(starter).getByRole('button', { name: 'Choose Starter' })).toBeInTheDocument()
+    expect(within(starter).getByTestId('plan-charge-starter')).toHaveTextContent(
+      'Charged today: another workspace of yours is in its free trial.',
+    )
+  })
+
+  it('a card already used for an unpaid trial: no trial, said before Stripe opens', async () => {
+    render(false, 'card_used')
+
+    const starter = await screen.findByTestId('plan-starter')
+
+    expect(within(starter).getByTestId('plan-charge-starter')).toHaveTextContent(
+      'No free trial: this card was already used for one. Charged today.',
+    )
+  })
+
+  it('the promotion code modal refuses a code Stripe does not know, and keeps it out of the checkout', async () => {
+    const api = render(false)
+    const user = userEvent.setup()
+
+    await screen.findByTestId('plan-plus')
+    await user.click(screen.getByRole('button', { name: 'Have a promotion code?' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Add a promotion code' })
+    const field = within(dialog).getByLabelText(/Promotion code/)
+
+    await user.type(field, 'NOPE{Enter}')
+    expect(await within(dialog).findByText("This code isn't valid (or has been used up).")).toBeInTheDocument()
+    expect(field).toHaveAttribute('aria-invalid', 'true')
+    // Apply waits for another code: the refused one can't be applied.
+    expect(within(dialog).getByRole('button', { name: 'Apply' })).toBeDisabled()
+    expect(screen.queryByTestId('promotion-code-applied')).not.toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await user.click(within(screen.getByTestId('plan-pro')).getByRole('button', { name: 'Choose Pro' }))
+    await waitFor(() =>
+      expect(api.find('POST', '/v1/billing/checkout')[0]?.body).toEqual({ plan: 'pro', interval: 'month' }),
+    )
+  })
+
+  it('a valid code strikes the old price through on the plans it applies to and shows the new one', async () => {
+    const api = render(false)
+    const user = userEvent.setup()
+
+    const plus = await screen.findByTestId('plan-plus')
+    const business = screen.getByTestId('plan-business')
+
+    await user.click(screen.getByRole('button', { name: 'Have a promotion code?' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Add a promotion code' })
+
+    await user.type(within(dialog).getByLabelText(/Promotion code/), 'SPRING20{Enter}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+    expect(within(plus).getByTestId('plan-old-price-plus')).toHaveTextContent('€29')
+    expect(within(plus).getByTestId('plan-price-plus')).toHaveTextContent('€23.20')
+    expect(within(plus).getByTestId('plan-discount-plus')).toHaveTextContent('20% off for 3 months with SPRING20')
+    // Business isn't in the code: its usual price, and no code at checkout.
+    expect(within(business).queryByTestId('plan-old-price-business')).not.toBeInTheDocument()
+    expect(within(business).getByTestId('plan-price-business')).toHaveTextContent('€99')
+    // Yearly: the yearly price comes down too.
+    await user.click(screen.getByRole('radio', { name: /yearly/i }))
+    expect(within(plus).getByTestId('plan-old-price-plus')).toHaveTextContent('€23')
+    expect(within(plus).getByTestId('plan-price-plus')).toHaveTextContent('€18.40')
+    expect(within(plus).getByText('€220.80 per user, billed yearly, incl. VAT')).toBeInTheDocument()
+    await user.click(within(plus).getByRole('button', { name: 'Choose Plus' }))
+    await waitFor(() =>
+      expect(api.find('POST', '/v1/billing/checkout')[0]?.body).toEqual({
+        plan: 'plus',
+        interval: 'year',
+        promotion_code: 'SPRING20',
+      }),
+    )
+  })
+
+  it('a plan the code does not cover goes to checkout without it', async () => {
+    const api = render(false)
+    const user = userEvent.setup()
+
+    await screen.findByTestId('plan-plus')
+    await user.click(screen.getByRole('button', { name: 'Have a promotion code?' }))
+    await user.type(
+      within(await screen.findByRole('dialog', { name: 'Add a promotion code' })).getByLabelText(/Promotion code/),
+      'SPRING20{Enter}',
+    )
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await user.click(within(screen.getByTestId('plan-business')).getByRole('button', { name: 'Choose Business' }))
+    await waitFor(() =>
+      expect(api.find('POST', '/v1/billing/checkout')[0]?.body).toEqual({ plan: 'business', interval: 'month' }),
+    )
+  })
+})

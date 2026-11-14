@@ -1,0 +1,12 @@
+{
+  "name": "@staqly/sdk-python",
+  "private": true,
+  "description": "Python SDK. Scripts wrap uv for turbo.",
+  "scripts": {
+    "test": "uv run pytest -q",
+    "lint": "uv run ruff check . && uv run mypy",
+    "typecheck": "uv run mypy",
+    "format": "uv run ruff format .",
+    "format:check": "uv run ruff format --check ."
+  }
+}

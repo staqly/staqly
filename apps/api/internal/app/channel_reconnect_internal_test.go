@@ -1,0 +1,279 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/staqly/staqly/apps/api/internal/db"
+	"github.com/staqly/staqly/apps/api/internal/providers"
+)
+
+// fakeOAuth is an OAuth platform whose token refresh fails or works as the test says.
+type fakeOAuth struct {
+	providers.Base
+	fail bool
+}
+
+func (f *fakeOAuth) Refresh(_ context.Context, _ providers.App, c providers.Credentials) (providers.Credentials, error) {
+	if f.fail { // what providers answer for a revoked sign-in (X: invalid_grant)
+		return nil, &providers.Failure{Kind: providers.ErrReauth, Msg: "invalid_grant: refresh token revoked"}
+	}
+	out := providers.Credentials{}
+	for k, v := range c {
+		out[k] = v
+	}
+	out["access_token"] = "fresh"
+	return out, nil
+}
+
+// A channel whose token refresh fails becomes needs_reconnect with the reason and a channel.needs_reconnect
+// event (which alerts); one that refreshes keeps working with the new token.
+func TestRefreshFailureMarksTheChannelNeedsReconnect(t *testing.T) {
+	s, p, _ := publishTest(t)
+	ctx := context.Background()
+	orig, _ := providers.Get("x")
+	fake := &fakeOAuth{Base: providers.NewBase("x", "X", providers.AuthOAuth2, providers.Limits{MaxChars: 280})}
+	providers.Register(fake, providers.StatusAvailable)
+	t.Cleanup(func() { providers.Register(orig.Provider, orig.Status) })
+	s.Getenv = func(k string) string {
+		if k == providerEnv("x")+"CLIENT_ID" {
+			return "client"
+		}
+		return ""
+	}
+	sealed, err := s.seal(providers.Credentials{"access_token": "old", "refresh_token": "r1",
+		"expires_at": s.Now().Add(time.Hour).UTC().Format(time.RFC3339)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.W.CreateChannel(ctx, db.CreateChannelParams{ID: "chn_x", WorkspaceID: p.WorkspaceID, Provider: "x", Name: "Brand on X",
+		Status: "connected", Credentials: sealed, Settings: "{}", CreatedAt: s.now(), UpdatedAt: s.now()}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.refreshChannel(ctx, "chn_x"); err != nil {
+		t.Fatal(err)
+	}
+	row, creds, err := s.storedCredentials(ctx, "chn_x")
+	if err != nil || row.Status != "connected" || creds["access_token"] != "fresh" {
+		t.Fatalf("a working refresh: status %q, token %q, %v", row.Status, creds["access_token"], err)
+	}
+
+	fake.fail = true
+	if err := s.refreshChannel(ctx, "chn_x"); err != nil {
+		t.Fatal(err)
+	}
+	row, err = s.Q.GetChannelByID(ctx, "chn_x")
+	if err != nil || row.Status != "needs_reconnect" || !strings.Contains(row.LastError, "invalid_grant") {
+		t.Fatalf("a failed refresh: %+v %v", row, err)
+	}
+	evs, err := s.ListEvents(ctx, p, EventFilter{ChannelID: "chn_x", Type: "channel.needs_reconnect"})
+	if err != nil || len(evs.Data) != 1 {
+		t.Fatalf("channel.needs_reconnect events: %+v %v", evs.Data, err)
+	}
+}
+
+// A schedule run that ran out of attempts records "failed: <why>" and a schedule.failed event (which alerts).
+func TestScheduleRunFailureIsRecorded(t *testing.T) {
+	s, p, post := publishTest(t)
+	ctx := context.Background()
+	at := s.Now().Add(time.Hour).UTC().Format(time.RFC3339)
+	sc, err := s.CreateSchedule(ctx, p, ScheduleInput{Collection: &post.CollectionID, Name: ptrTo("Daily"), Kind: ptrTo("once"), RunAt: &at})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.jobFailed(ctx, "run_schedule", jobArgs{WorkspaceID: p.WorkspaceID, Payload: jobPayload{ScheduleID: sc.ID}}, errors.New("endpoint answered 500"))
+	got, err := s.GetSchedule(ctx, p, sc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(got.LastResult, "failed: endpoint answered 500") {
+		t.Fatalf("last result %q", got.LastResult)
+	}
+	evs, err := s.ListEvents(ctx, p, EventFilter{ScheduleID: sc.ID, Type: "schedule.failed"})
+	if err != nil || len(evs.Data) != 1 {
+		t.Fatalf("schedule.failed events: %+v %v", evs.Data, err)
+	}
+}
+
+// fakeNoRenew is a platform without refresh tokens (LinkedIn for most apps): a refresh keeps the token while it
+// works and fails once it ran out.
+type fakeNoRenew struct {
+	providers.Base
+	now func() time.Time
+}
+
+func (f *fakeNoRenew) Refresh(_ context.Context, _ providers.App, c providers.Credentials) (providers.Credentials, error) {
+	if exp, err := time.Parse(time.RFC3339, c["expires_at"]); err == nil && exp.After(f.now()) {
+		return c, nil
+	}
+	return nil, &providers.Failure{Kind: providers.ErrReauth, Msg: "signs apps out after 60 days; reconnect the account"}
+}
+
+func (f *fakeNoRenew) RunsOut(c providers.Credentials) (time.Time, bool) {
+	exp, err := time.Parse(time.RFC3339, c["expires_at"])
+	return exp, err == nil
+}
+
+// A token that can't be renewed is looked at again when it runs out: the channel turns needs_reconnect (and
+// alerts) then, even if nothing is published, instead of failing its next post.
+func TestUnrenewableTokenNeedsReconnectWhenItRunsOut(t *testing.T) {
+	s, p, _ := publishTest(t)
+	ctx := context.Background()
+	base := s.Now()
+	orig, _ := providers.Get("x")
+	providers.Register(&fakeNoRenew{Base: providers.NewBase("x", "X", providers.AuthOAuth2, providers.Limits{MaxChars: 280}), now: func() time.Time { return s.Now() }}, providers.StatusAvailable)
+	t.Cleanup(func() { providers.Register(orig.Provider, orig.Status) })
+	s.Getenv = func(k string) string {
+		if k == providerEnv("x")+"CLIENT_ID" {
+			return "client"
+		}
+		return ""
+	}
+	exp := base.Add(24 * time.Hour).UTC().Truncate(time.Second)
+	sealed, err := s.seal(providers.Credentials{"access_token": "at", "expires_at": exp.Format(time.RFC3339)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.W.CreateChannel(ctx, db.CreateChannelParams{ID: "chn_x", WorkspaceID: p.WorkspaceID, Provider: "x", Name: "Brand",
+		Status: "connected", Credentials: sealed, Settings: "{}", CreatedAt: s.now(), UpdatedAt: s.now()}); err != nil {
+		t.Fatal(err)
+	}
+
+	// A day before: still valid, nothing renewed; the next look is when it runs out.
+	if err := s.refreshChannel(ctx, "chn_x"); err != nil {
+		t.Fatal(err)
+	}
+	if row, _ := s.Q.GetChannelByID(ctx, "chn_x"); row.Status != "connected" {
+		t.Fatalf("a token still valid: %q", row.Status)
+	}
+	js := jobsByKey(t, s, "refresh_channel:chn_x")
+	if len(js) != 1 || js[0].ScheduledAt.Sub(exp.Add(time.Minute)).Abs() > time.Second {
+		t.Fatalf("refresh jobs %+v, want one at %s", js, exp.Add(time.Minute))
+	}
+	// That look told people, once, with the date; the channel carries it too.
+	soon, _ := s.ListEvents(ctx, p, EventFilter{ChannelID: "chn_x", Type: "channel.expiring"})
+	if len(soon.Data) != 1 || !strings.Contains(string(soon.Data[0].Data), formatTime(exp)) {
+		t.Fatalf("channel.expiring events: %+v", soon.Data)
+	}
+	if ch, err := s.GetChannel(ctx, p, "chn_x"); err != nil || ch.RenewBy == nil || *ch.RenewBy != formatTime(exp) {
+		t.Fatalf("renew_by: %+v %v", ch.RenewBy, err)
+	}
+	// A sign-in with longer to go is looked at two weeks ahead, not a day.
+	row0, _ := s.Q.GetChannelByID(ctx, "chn_x")
+	far := base.Add(60 * 24 * time.Hour)
+	s.scheduleRefresh(ctx, row0, providers.Credentials{"access_token": "at", "expires_at": far.Format(time.RFC3339)})
+	if js := jobsByKey(t, s, "refresh_channel:chn_x"); len(js) != 1 || js[0].ScheduledAt.Sub(far.Add(-renewNotice)).Abs() > time.Second {
+		t.Fatalf("refresh jobs %+v, want one at %s", js, far.Add(-renewNotice))
+	}
+	if err := s.enqueue(ctx, s.W, p.WorkspaceID, "refresh_channel", "refresh_channel:chn_x", map[string]any{"channel_id": "chn_x"}, exp.Add(time.Minute), 3); err != nil {
+		t.Fatal(err)
+	}
+
+	// Then: it ran out, the channel needs reconnecting and says so.
+	s.Now = func() time.Time { return exp.Add(time.Minute) }
+	if err := s.refreshChannel(ctx, "chn_x"); err != nil {
+		t.Fatal(err)
+	}
+	row, _ := s.Q.GetChannelByID(ctx, "chn_x")
+	evs, _ := s.ListEvents(ctx, p, EventFilter{ChannelID: "chn_x", Type: "channel.needs_reconnect"})
+	if row.Status != "needs_reconnect" || len(evs.Data) != 1 {
+		t.Fatalf("after it ran out: %q, %d events", row.Status, len(evs.Data))
+	}
+}
+
+// Was a bug: a few seconds without the network (DNS failing as a laptop wakes up) used up the refresh job's
+// attempts and marked the channel needs_reconnect, though nothing refused its sign-in. It stays connected and
+// the refresh runs again later.
+func TestRefreshFailingOfflineKeepsTheChannel(t *testing.T) {
+	s, p, _ := publishTest(t)
+	ctx := context.Background()
+	sealed, err := s.seal(providers.Credentials{"access_token": "at", "refresh_token": "rt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.W.CreateChannel(ctx, db.CreateChannelParams{ID: "chn_x", WorkspaceID: p.WorkspaceID, Provider: "x", Name: "Brand",
+		Status: "connected", Credentials: sealed, Settings: "{}", CreatedAt: s.now(), UpdatedAt: s.now()}); err != nil {
+		t.Fatal(err)
+	}
+	s.jobFailed(ctx, "refresh_channel", jobArgs{WorkspaceID: p.WorkspaceID, Payload: jobPayload{ChannelID: "chn_x"}},
+		errors.New(`X could not be reached: dial tcp: lookup api.x.com: no such host`))
+
+	row, _ := s.Q.GetChannelByID(ctx, "chn_x")
+	evs, _ := s.ListEvents(ctx, p, EventFilter{ChannelID: "chn_x", Type: "channel.needs_reconnect"})
+	if row.Status != "connected" || len(evs.Data) != 0 {
+		t.Fatalf("offline refresh: %q, %d needs_reconnect events", row.Status, len(evs.Data))
+	}
+	want := s.Now().Add(refreshRetryDelay)
+	if js := jobsByKey(t, s, "refresh_channel:chn_x"); len(js) != 1 || js[0].ScheduledAt.Sub(want).Abs() > time.Minute {
+		t.Fatalf("refresh jobs %+v, want one at %s", js, want)
+	}
+}
+
+// Channels connected before channel.expiring existed have their look queued a day before the end: a start moves it
+// two weeks ahead (to now, inside the two weeks), and people are told once however often the server starts.
+func TestStartMovesRenewalNoticeAhead(t *testing.T) {
+	s, p, _ := publishTest(t)
+	ctx := context.Background()
+	base := s.Now()
+	orig, _ := providers.Get("x")
+	providers.Register(&fakeNoRenew{Base: providers.NewBase("x", "X", providers.AuthOAuth2, providers.Limits{MaxChars: 280}), now: func() time.Time { return s.Now() }}, providers.StatusAvailable)
+	t.Cleanup(func() { providers.Register(orig.Provider, orig.Status) })
+	s.Getenv = func(k string) string {
+		if k == providerEnv("x")+"CLIENT_ID" {
+			return "client"
+		}
+		return ""
+	}
+	ends := map[string]time.Time{"chn_soon": base.Add(10 * 24 * time.Hour).UTC().Truncate(time.Second), "chn_far": base.Add(40 * 24 * time.Hour).UTC().Truncate(time.Second)}
+	for id, exp := range ends {
+		sealed, err := s.seal(providers.Credentials{"access_token": "at", "expires_at": exp.Format(time.RFC3339)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.W.CreateChannel(ctx, db.CreateChannelParams{ID: id, WorkspaceID: p.WorkspaceID, Provider: "x", Name: id,
+			Status: "connected", Credentials: sealed, Settings: "{}", CreatedAt: s.now(), UpdatedAt: s.now()}); err != nil {
+			t.Fatal(err)
+		}
+		// As queued before this release: a day before the end.
+		if err := s.enqueue(ctx, s.W, p.WorkspaceID, "refresh_channel", "refresh_channel:"+id, map[string]any{"channel_id": id}, exp.Add(-24*time.Hour), 3); err != nil {
+			t.Fatal(err)
+		}
+	}
+	at := func(id string) time.Time {
+		t.Helper()
+		js := jobsByKey(t, s, "refresh_channel:"+id)
+		if len(js) != 1 {
+			t.Fatalf("%s: %d refresh jobs, want 1", id, len(js))
+		}
+		return js[0].ScheduledAt
+	}
+
+	s.advanceRenewalNotices(ctx)
+	if got := at("chn_far"); got.Sub(ends["chn_far"].Add(-renewNotice)).Abs() > time.Second {
+		t.Fatalf("far: look at %s, want two weeks before %s", got, ends["chn_far"])
+	}
+	if got := at("chn_soon"); got.Sub(s.Now()).Abs() > time.Minute {
+		t.Fatalf("soon (inside the two weeks): look at %s, want now", got)
+	}
+	// The look runs, tells people and waits for the end; later starts change nothing and nobody is told again.
+	if err := s.refreshChannel(ctx, "chn_soon"); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		s.advanceRenewalNotices(ctx)
+	}
+	if got := at("chn_soon"); got.Sub(ends["chn_soon"].Add(time.Minute)).Abs() > time.Second {
+		t.Fatalf("soon, after the notice: look at %s, want the end", got)
+	}
+	if got := at("chn_far"); got.Sub(ends["chn_far"].Add(-renewNotice)).Abs() > time.Second {
+		t.Fatalf("far, after more starts: look at %s", got)
+	}
+	evs, _ := s.ListEvents(ctx, p, EventFilter{Type: "channel.expiring"})
+	if len(evs.Data) != 1 {
+		t.Fatalf("channel.expiring events: %d, want 1", len(evs.Data))
+	}
+}

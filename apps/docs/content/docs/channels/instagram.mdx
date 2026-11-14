@@ -1,0 +1,227 @@
+---
+title: Instagram
+description: Publish pictures, carousels, reels and stories to Instagram Business or Creator accounts, with collaborators and comments. What to register at Meta for Developers.
+---
+
+Staqly publishes to **Instagram professional accounts** (Business or Creator) through the Instagram
+API with Unified Login: the person signs in with Instagram or Facebook, shares one or more
+Instagram accounts with the app, and each account they pick becomes its own channel. Meta asks them
+to choose the business portfolio that owns the account. No Facebook account or Facebook Page is needed
+when they log in with Instagram. A published target links to the post on instagram.com.
+
+## What you need
+
+- A **Meta app** owned by a business portfolio, with the **Instagram** use case and **Facebook
+  Login for Business**, registered once per server. Its keys and its login configuration go into
+  the server's environment, the same way locally and in the cloud (see
+  [Developer apps](/channels/developer-apps)). The app that serves [Facebook Pages](/channels/facebook)
+  can serve Instagram too.
+- **Media storage Instagram can reach.** Instagram does not take uploads: it downloads every picture
+  and video from a link. Staqly hands it a time-limited link to the file in
+  [S3-compatible storage](/self-hosting/storage), so a server that keeps media on its own disk
+  can't publish to Instagram (the target fails and says why). Locally, the bucket needs an address
+  on the internet, for example a tunnel to it set as `S3_PUBLIC_URL`.
+- An Instagram account set to **Business** or **Creator** (Instagram app → Settings → Account type).
+  Personal accounts can't publish through the API.
+
+<Steps>
+<Step>
+
+### Create the app and its login configuration
+
+At [Meta for Developers](https://developers.facebook.com/apps), click **Create app**, choose a
+**Business** app and add the use case **Manage messaging & content on Instagram**. Open it
+(**Customize**), then **API setup with Unified login**:
+
+| Where | What |
+|---|---|
+| **Configure your app → Create new configuration** | a configuration marked **Instagram Login Compatible**, whose access token **never expires**, with the Instagram account as its asset and the permissions below. Copy its **configuration ID** |
+| **Redirect URL** | your dashboard's `/channels/callback/instagram`, for example `https://staqly.example.com/channels/callback/instagram`. Meta takes `https://` addresses only, so locally use a tunnel to `localhost:8080` |
+| **App roles → Roles** | the people who may connect while the app is in development |
+
+Copy the **App ID** and **App secret** from **App settings → Basic** (the Meta app's own keys).
+
+</Step>
+<Step>
+
+### Give staqly the keys
+
+Put them in the server's environment and restart it:
+
+```bash title=".env"
+PROVIDER_META_ENABLED=true
+PROVIDER_META_CLIENT_ID=your-meta-app-id
+PROVIDER_META_CLIENT_SECRET=your-meta-app-secret
+PROVIDER_INSTAGRAM_CONFIG_ID=your-configuration-id
+```
+
+- **Docker:** `docker run ... --env-file .env ghcr.io/staqly/staqly:latest`, or `-e PROVIDER_META_CLIENT_ID=...`.
+- **Binary:** export all three in your shell, then run `staqly serve` or `staqly service install` (the
+  service keeps `PROVIDER_*` settings). [Facebook Page](/channels/facebook) uses the same two keys.
+
+Until the ID and secret are set, Instagram shows as **soon** in **Channels → Add channel**; without
+the configuration ID, connecting says it is missing. Instagram shows only with
+`PROVIDER_INSTAGRAM_ENABLED=true`; unset or `false` hides it. A workspace may instead save its own app over the API
+(`PUT /v1/providers/instagram/app` with `client_id`, `client_secret` and `config_id`).
+
+</Step>
+<Step>
+
+### Connect the accounts
+
+**Connect** opens facebook.com, where the person signs in with Instagram or Facebook, chooses the
+business portfolio and Instagram accounts to share, and allows the app. Staqly includes `prompt=login`
+in the login URL so both login options appear even when the browser is already signed in to Facebook.
+Every professional Instagram account already has a business portfolio; select the one that owns the
+account, which may differ from the portfolio that owns the developer app.
+
+For publishing, an ad account is not needed. Configure only the assets and permissions you use; if
+Meta offers an optional ad account, the person can skip it. The configuration asks for these permissions:
+
+| Permission | Why |
+|---|---|
+| `instagram_basic` | Read the accounts' usernames, names and pictures |
+| `instagram_manage_messages` | Required by Meta for an Instagram-compatible Unified Login configuration; this permission alone does not add a messaging inbox to staqly |
+| `instagram_content_publish` | Publish posts, carousels, reels and stories |
+| `instagram_manage_comments` | Post the comments of a post's thread |
+| `instagram_manage_insights` | Read a post's views, shares and saves (**Statistics**) |
+| `instagram_manage_contents` | Delete a post when you unpublish it |
+
+Staqly then lists the shared accounts: pick one or more, and each becomes a channel showing the
+account's name, `@username` and picture. Connecting the same account again reconnects its channel.
+Without `instagram_manage_comments` the channel connects, but a post's comments are not sent on it.
+
+</Step>
+<Step>
+
+### Before other people connect
+
+While the app is in development, only people with a role on it can connect. Before your customers
+connect their accounts, Meta reviews the app: **App Review** for each permission above (a screen
+recording of staqly using it) and **Business Verification** of your company.
+
+</Step>
+</Steps>
+
+## Choosing Instagram instead of Facebook
+
+If a login link takes you straight to Facebook's business assets, open the account selector at the top
+of the Meta dialog and choose **Add another account**, then log in with Instagram. When using staqly's
+Connect button, both login options are requested automatically. If Instagram is still missing, the
+server operator should check the **Instagram Login Compatible** label on the selected configuration.
+
+If your Creator or Business account is missing from the account list, select the portfolio that owns
+it. You do not need to add your account to the developer app's portfolio just to connect it.
+
+Staqly uses Unified Login by default. If your Meta app has **API setup with Instagram login**, staqly can
+use that instead, or both side by side (below).
+
+See Meta's [business onboarding guide](https://developers.facebook.com/documentation/instagram-platform/instagram-api-with-unified-login/business-onboarding/)
+and [migration guide](https://developers.facebook.com/documentation/instagram-platform/instagram-api-with-instagram-login/migration-guide/).
+
+## Instagram login
+
+With **Instagram login**, people sign in on instagram.com with the Instagram account itself (Business or
+Creator), with no Facebook account or business portfolio in between. It is a tile of its own, **Instagram
+(Standalone)** (provider `instagram_standalone`), instead of Unified login or next to it. Use it when Unified login
+doesn't suit you or Meta has Facebook Login unavailable for the app.
+
+1. In the Meta app's **Instagram** use case open **API setup with Instagram login**. Under **Set up Instagram
+   business login → Business login settings** add the redirect URL `https://<your dashboard>/channels/callback/instagram_standalone`,
+   and copy the **Instagram app ID** and **Instagram app secret** (not the Meta app's keys). In the same
+   settings set **Deauthorize callback URL** `https://<your API>/v1/meta/deauthorize` (someone removed the app:
+   their channel turns Needs reconnect) and **Data deletion request URL** `https://<your API>/v1/meta/data-deletion`
+   (their channel loses the sign-in, picture and the comments read under their posts; Meta shows them a status
+   page and a code). On staqly's cloud the API is `https://api.staqly.ai`; on your server it is the dashboard's
+   address with `/api` (`https://<your dashboard>/api/v1/meta/...`).
+2. Set both on the server and restart it:
+
+   ```bash title=".env"
+   PROVIDER_INSTAGRAM_CLIENT_ID=your-instagram-app-id
+   PROVIDER_INSTAGRAM_CLIENT_SECRET=your-instagram-app-secret
+   ```
+
+The **Add channel** grid then shows **Instagram (Standalone)** in place of **Instagram**: **Connect** opens
+instagram.com, asks for publishing, comments and insights, and keeps a 60-day token that staqly renews on its own.
+To offer Unified login next to it, as **Instagram (Professional)** on the left, keep `PROVIDER_INSTAGRAM_CONFIG_ID`
+and set `PROVIDER_INSTAGRAM_UNIFIED_ENABLED=true`. `PROVIDER_INSTAGRAM_ENABLED` turns both tiles on or off.
+
+Before v0.34 Instagram login used the provider `instagram` and the redirect URL `.../channels/callback/instagram`:
+add the new redirect URL at Meta when you upgrade. Channels connected with Instagram login move to
+`instagram_standalone` at the next start and keep publishing, and so do channels of the earlier second tile,
+Instagram (Facebook Business), which become `instagram`. For [comments right away](#comments-right-away), set the
+webhook in **API setup with Instagram
+login** too: Meta signs those calls with the Instagram app's secret, which the server then has.
+
+## The sign-in
+
+The sign-in gives a token that reaches every account the person shared, and with a configuration
+whose tokens never expire it does not run out. The channel turns **Needs reconnect** when the
+person removes the app from their business portfolio or moves the account to another portfolio.
+
+## Limits
+
+| | |
+|---|---|
+| Text | 2,200 characters |
+| Media | at least one file: up to **10** pictures and videos (a carousel), **one video** for a reel, **one file** for a story |
+| Pictures | **JPEG only**, up to 8 MB, at least 320 pixels wide; feed pictures 4:5 to 1.91:1 (the composer flags a picture that doesn't fit) |
+
+## Settings per post
+
+| Setting | What it does |
+|---|---|
+| **Post as** (`post_type`) | `post` (default; several files make a carousel, a single video goes out as a reel), `reel` or `story` (stories take no caption) |
+| **Also show the reel in the feed** (`share_to_feed`) | Reels only; on by default |
+| **Collaborators** (`collaborators`) | Feed posts: up to 3 usernames invited as collaborators; the post shows on their profiles once they accept |
+
+Over the API: `{"post_type": "reel", "share_to_feed": "false"}` in the target's `settings`.
+
+## Comments
+
+A post's [thread](/concepts#threads-comments-under-a-post) goes out as comments under the post, in
+order and after their delays: for example a first comment with hashtags. Comments take text only (photos and videos in a comment are left out and its text goes alone);
+stories have none.
+
+## Comments right away
+
+By default staqly reads the comments under recent posts every 30 minutes. With Meta's webhooks it reads a post's
+comments within seconds of a new one:
+
+1. On the server, set `PROVIDER_META_WEBHOOK_VERIFY_TOKEN` to any random string and restart it.
+2. In [Meta for Developers](https://developers.facebook.com/apps), in the app's **Instagram** use case → **API setup with Unified login** (or with Instagram login) → **Configure webhooks**: **Callback URL**
+   `https://<your dashboard>/api/v1/meta/webhook`, **Verify token** the same string, then **Verify and save**.
+3. Subscribe to the **comments** field (and **live_comments** if you go live), and to **story_insights**: when
+   a story expires Meta sends its final numbers once (views, reach, replies, taps forward and back, exits), which
+   the API no longer gives afterwards. staqly keeps them as the story's **Insights**.
+
+Meta signs every call with the Meta app's secret, which the server already has; a call it can't check is refused.
+
+The same webhook tells staqly when someone takes a permission away in their Facebook settings: under **Webhooks** →
+**Permissions**, with the same callback URL and verify token, subscribe to **instagram_content_publish** and **instagram_manage_comments**. Staqly then checks the
+account's sign-in with Meta right away: without the publishing permission the channel turns *Needs reconnecting* (and
+alerts) before its next post fails; without the comments one its comments turn off, and back on once it returns.
+
+## Unpublishing
+
+Unpublishing deletes the post, reel, story or whole carousel on Instagram, comments other people left included, and the comments of its thread. Meta allows this only for accounts connected through Facebook (Unified login) with `instagram_manage_contents`; an account connected with Instagram login, a channel connected before that permission, or a post Meta won't delete (an ad) shows *Remove by hand* instead: delete it in the Instagram app. Staqly still removes the comments of its thread. In the App, **Unpublish** is greyed out for a post that is only on Instagram (Standalone) channels, and those channels are left out of it for a post that is also elsewhere; the platform catalog says so with `deletes_posts: false` (`GET /v1/providers`).
+
+## Statistics
+
+A published post's **Statistics** (`GET /v1/posts/{id}/metrics`) show its likes and comments and, with
+`instagram_manage_insights` in the configuration, its views, shares and saves. A story's numbers last as
+long as the story (a day). An account connected before the configuration had the permission shows likes and
+comments until it is reconnected.
+
+
+## When publishing fails
+
+| Instagram says | Staqly does |
+|---|---|
+| The sign-in was revoked | Marks the channel **Needs reconnect** and fails the target; reconnect it from the row's menu |
+| Rate limit, Instagram unavailable, a media download that timed out | Retries through the job queue (after 1, 5, then 15 minutes) |
+| A refused picture (format, size, shape), the daily limit, a restricted account | Fails the target with Instagram's reason; retrying would not help, so it does not |
+
+Instagram has no way to ask "did this post go out?", and a new attempt would make a new post. So
+when staqly sent the post but its answer never came, the target fails with "may have published"
+instead of trying again: check the profile before you post it again.

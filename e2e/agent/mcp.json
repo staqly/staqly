@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "staqly": {
+      "type": "http",
+      "url": "http://localhost:3333/mcp",
+      "headers": { "Authorization": "Bearer ${STAQLY_API_KEY}" }
+    }
+  }
+}

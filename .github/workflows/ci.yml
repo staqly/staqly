@@ -1,0 +1,390 @@
+# CI for the staqly monorepo: formatting, lint, types, tests and builds for
+# every part, plus Docker images and a full end-to-end run.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    # A draft runs nothing until it is marked ready for review (each push to a draft would start a full run).
+    types: [opened, synchronize, reopened, ready_for_review]
+  schedule:
+    - cron: "23 1 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Cancel superseded PRs. Each main push keeps its own run: a release checks the run of exactly its commit.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Full runs execute tasks even when their Turbo cache is warm.
+  TURBO_FORCE: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'true' || 'false' }}
+
+jobs:
+  # Pull requests check affected packages; pushes to main, nightly and manual runs check everything, unless
+  # .github/actions/tested proves this exact code already passed.
+  # The workflows themselves are checked here too (a few seconds: a job of their own costs a billed minute):
+  # expressions, permissions, shell in run: steps (actionlint + shellcheck), their security (zizmor), the job
+  # selection's tests.
+  changes:
+    name: What changed, workflows (actionlint)
+    # Nothing runs for a draft; `CI passed` then has nothing to fail on, and marking it ready starts a full run.
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read # .github/actions/tested reads earlier runs and their artifacts
+    outputs:
+      api: ${{ steps.f.outputs.api }}
+      cli: ${{ steps.f.outputs.cli }}
+      dashboard: ${{ steps.f.outputs.dashboard }}
+      admin: ${{ steps.f.outputs.admin }}
+      docs: ${{ steps.f.outputs.docs }}
+      web: ${{ steps.f.outputs.web }}
+      packages: ${{ steps.f.outputs.packages }}
+      sdk_ts: ${{ steps.f.outputs.sdk_ts }}
+      sdk_py: ${{ steps.f.outputs.sdk_py }}
+      e2e: ${{ steps.f.outputs.e2e }}
+      security: ${{ steps.f.outputs.security }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { fetch-depth: 0, persist-credentials: false }
+      # A push whose tree a pull request run already passed (a squash merge of an up-to-date pull request) runs
+      # nothing again; a pull request records its tree for that.
+      - id: tested
+        uses: ./.github/actions/tested
+      - id: f
+        env: { ALREADY_TESTED: "${{ steps.tested.outputs.skip }}" }
+        run: python3 .github/scripts/changes.py
+      - run: make lint-workflows
+      - run: python3 -m unittest discover -s .github/scripts
+
+  # Every job runs the same turbo tasks a developer runs locally
+  # (`pnpm check`), for its own package: format:check, lint, typecheck, test,
+  # build. Generated code is checked to be up to date.
+
+  # ── Go API ────────────────────────────────────────────────────────────────
+  api:
+    name: API (Go) on SQLite
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - id: go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with: { go-version-file: apps/api/go.mod, cache-dependency-path: apps/api/go.sum }
+      - uses: ./.github/actions/setup
+        with: { filter: "@staqly/api" }
+      - name: Read the pinned sqlc module
+        id: sqlc
+        run: |
+          module=$(node -p 'require("./apps/api/package.json").scripts.gen.match(/^go run (\S+) generate$/)[1]')
+          [[ "$module" == github.com/sqlc-dev/sqlc/cmd/sqlc@v* ]]
+          echo "module=$module" >> "$GITHUB_OUTPUT"
+      - name: Cache sqlc binary
+        id: sqlc-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/sqlc
+          key: sqlc-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ steps.sqlc.outputs.module }}
+      - name: Install sqlc on a cache miss
+        if: steps.sqlc-cache.outputs.cache-hit != 'true'
+        env:
+          GOBIN: ${{ runner.temp }}/sqlc
+          SQLC_MODULE: ${{ steps.sqlc.outputs.module }}
+        run: go install "$SQLC_MODULE"
+      - name: Generated queries are up to date (sqlc)
+        working-directory: apps/api
+        env:
+          SQLC: ${{ runner.temp }}/sqlc/sqlc
+        run: '"$SQLC" generate && git diff --exit-code internal/db'
+      - name: gofmt, vet + OpenAPI lint, build
+        run: pnpm turbo run format:check lint build --filter=@staqly/api
+      # internal/httpapi (about 7 of the 8 minutes) runs in the api-httpapi jobs beside this one.
+      - name: Tests (race, incl. OpenAPI contract test), every package but internal/httpapi
+        working-directory: apps/api
+        run: ../../.github/scripts/go-test-shard.sh "other packages"
+
+  api-httpapi:
+    name: API (Go) on SQLite (httpapi ${{ matrix.shard }})
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ["1/2", "2/2"]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with: { go-version-file: apps/api/go.mod, cache-dependency-path: apps/api/go.sum }
+      - name: go test -race on SQLite
+        working-directory: apps/api
+        env: { SHARD: "httpapi ${{ matrix.shard }}" }
+        run: ../../.github/scripts/go-test-shard.sh "$SHARD"
+
+  # The same Go suite on PostgreSQL (cloud mode's database): every test opens a fresh schema
+  # (internal/store/storetest), plus the schema drift check and the SQLite import. internal/httpapi alone takes
+  # about 8 min with -race here, so its tests are split over three runners and a fourth runs every other package.
+  api-postgres:
+    name: API (Go) on PostgreSQL (${{ matrix.shard }})
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ["httpapi 1/3", "httpapi 2/3", "httpapi 3/3", "other packages"]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env: { POSTGRES_USER: staqly, POSTGRES_PASSWORD: staqly, POSTGRES_DB: staqly }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U staqly" --health-interval 2s --health-timeout 2s --health-retries 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with: { go-version-file: apps/api/go.mod, cache-dependency-path: apps/api/go.sum }
+      - name: go test -race on PostgreSQL
+        working-directory: apps/api
+        env:
+          STAQLY_TEST_DATABASE_URL: postgres://staqly:staqly@127.0.0.1:5432/staqly?sslmode=disable
+          SHARD: ${{ matrix.shard }}
+        run: ../../.github/scripts/go-test-shard.sh "$SHARD"
+
+  # ── staqly CLI ────────────────────────────────────────────────────────────
+  cli:
+    name: CLI (Go)
+    needs: changes
+    if: needs.changes.outputs.cli == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        # zizmor: ignore[cache-poisoning] -- goreleaser only checks its config here; release.yml builds without a cache
+        with: { go-version-file: apps/cli/go.mod, cache-dependency-path: apps/cli/go.sum }
+      - uses: ./.github/actions/setup
+        with: { filter: "@staqly/cli" }
+      - run: pnpm turbo run format:check lint test build --filter=@staqly/cli
+      - name: Release config is valid (goreleaser)
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with: { version: "~> v2", workdir: apps/cli, args: check }
+
+  # ── Dashboard, docs site, landing page ────────────────────────────────────
+  # The dashboard and the admin panel share one job (one install); each step runs only when its part changed.
+  dashboard:
+    name: Dashboard, admin panel (Next.js)
+    needs: changes
+    if: needs.changes.outputs.dashboard == 'true' || needs.changes.outputs.admin == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup
+        with: { filter: "@staqly/platform... @staqly/admin...", cache-builds: "true" }
+      - name: "Dashboard: API types are up to date with openapi.yaml"
+        if: needs.changes.outputs.dashboard == 'true'
+        working-directory: apps/platform
+        run: pnpm gen && git diff --exit-code lib/api-types.ts
+      - name: "Dashboard: formatting, lint, types, tests, build, size"
+        if: needs.changes.outputs.dashboard == 'true'
+        run: pnpm turbo run format:check lint typecheck test build size --filter=@staqly/platform
+      - name: "Admin panel: formatting, lint, types, tests, build"
+        if: needs.changes.outputs.admin == 'true'
+        run: pnpm turbo run format:check lint typecheck test build --filter=@staqly/admin
+
+  docs:
+    name: Docs (Fumadocs)
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup
+        with: { filter: "@staqly/docs...", cache-builds: "true" }
+      - name: Formatting, lint, types, build (static export + link check)
+        run: pnpm turbo run format:check lint typecheck build --filter=@staqly/docs
+
+  # The landing page, the shared packages and the TypeScript SDK: each takes well under a minute, so they share
+  # one job (one install, one billed minute instead of three). Each step runs only when its part changed.
+  js:
+    name: Landing page, shared packages, SDK (TypeScript)
+    needs: changes
+    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.packages == 'true' || needs.changes.outputs.sdk_ts == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup
+        with: { filter: "@staqly/web... ./packages/* @staqly/sdk...", cache-builds: "true" }
+      - name: "Landing page: formatting, lint, types, tools' logic (scripts/check-tools.mjs), build (static export + link check)"
+        if: needs.changes.outputs.web == 'true'
+        env: { SITE_URL: "https://staqly.ai" }
+        run: pnpm turbo run format:check lint typecheck test build --filter=@staqly/web
+      - name: "Landing page: SEO files are generated"
+        if: needs.changes.outputs.web == 'true'
+        working-directory: apps/web
+        run: test -s out/robots.txt && test -s out/sitemap.xml && test -s out/llms.txt
+      - name: "Shared packages (packages/*): formatting, lint, types"
+        if: needs.changes.outputs.packages == 'true'
+        run: pnpm turbo run format:check lint typecheck --filter="./packages/*"
+      - name: "SDK (TypeScript): schema types are up to date with openapi.yaml"
+        if: needs.changes.outputs.sdk_ts == 'true'
+        working-directory: sdks/typescript
+        run: pnpm gen && git diff --exit-code src/schema.ts
+      - name: "SDK (TypeScript): formatting, lint, types, tests, build"
+        if: needs.changes.outputs.sdk_ts == 'true'
+        run: pnpm turbo run format:check lint typecheck test build --filter=@staqly/sdk
+
+  # ── SDKs ──────────────────────────────────────────────────────────────────
+  sdk-python:
+    name: SDK (Python ${{ matrix.python }})
+    needs: changes
+    if: needs.changes.outputs.sdk_py == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults: { run: { working-directory: sdks/python } }
+    strategy:
+      fail-fast: false
+      matrix:
+        # Oldest supported (requires-python) and newest stable.
+        python: ["3.10", "3.15"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with: { python-version: "${{ matrix.python }}", enable-cache: true, cache-dependency-glob: sdks/python/uv.lock }
+      - run: uv sync --locked
+      - name: Lint + formatting (ruff)
+        run: uv run ruff check . && uv run ruff format --check .
+      - name: Types (mypy --strict)
+        run: uv run mypy --strict
+      - name: Tests (incl. sync-client codegen check)
+        run: uv run pytest -q
+      - run: uv build
+
+  # ── Docker images + end-to-end ────────────────────────────────────────────
+  # Builds the staqly image once (GHA layer cache) with the e2e tag from
+  # compose.e2e.yml, then runs the e2e package against exactly that image: the
+  # same `pnpm test:e2e` as locally, with E2E_BUILD=0.
+  e2e:
+    name: Docker images + end-to-end
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: changes
+    # Runs when its code changed, next to the api job rather than after it: api (about 10 min, mostly
+    # `go test -race`) and this job (about 10 min) no longer add up on the critical path. A failing api
+    # job doesn't stop this one; the run fails either way.
+    if: needs.changes.outputs.e2e == 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      # The suite's own checks first: seconds, before the image build's two minutes.
+      - uses: ./.github/actions/setup
+        with: { filter: "@staqly/e2e..." }
+      - name: Formatting, lint, types of the e2e suite
+        run: pnpm turbo run format:check lint typecheck --filter=@staqly/e2e
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: staqly image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: staqly-e2e:test
+          cache-from: type=gha,scope=staqly
+          # main writes the layer cache, pull requests only read it (the 10 GB repository limit)
+          cache-to: ${{ github.ref == 'refs/heads/main' && 'type=gha,mode=max,scope=staqly' || '' }}
+      - name: End-to-end
+        run: pnpm turbo run test:e2e --filter=@staqly/e2e
+        env: { E2E_BUILD: "0" }
+
+  # ── Static security analysis ──────────────────────────────────────────────
+  # gosec (Go) and Semgrep (TypeScript/JS, Python, secrets): `make security`, rules and suppressions in the
+  # Makefile. Stands in for CodeQL (codeql.yml), which a private repository can't run without Advanced Security.
+  # With govulncheck, this job checks against data that changes without a commit: a nightly runs it even on code
+  # that already passed (FRESH in .github/scripts/changes.py).
+  security:
+    name: Security scan (gosec, govulncheck, Semgrep)
+    needs: changes
+    if: needs.changes.outputs.security == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      # gosec type-checks the modules: the api jobs' cache key, so their build cache is warm.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with: { go-version-file: apps/api/go.mod, cache-dependency-path: apps/api/go.sum }
+      - name: gosec release binary (the version in the Makefile, checksum from its release)
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/gosec.tar.gz" https://github.com/securego/gosec/releases/download/v2.30.0/gosec_2.30.0_linux_amd64.tar.gz
+          echo "3fcce2c4e802ff4169217874602a7df355e9a37bcb6ffaa34b08f3d5f336cdfb  $RUNNER_TEMP/gosec.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/gosec.tar.gz" -C "$RUNNER_TEMP" gosec
+      - run: make security GOSEC="$RUNNER_TEMP/gosec"
+      - name: Known vulnerabilities in code that is called (govulncheck), API
+        working-directory: apps/api
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+      - name: Known vulnerabilities in code that is called (govulncheck), CLI
+        working-directory: apps/cli
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+
+  # On a pull request, a failed quick job (a few minutes at most) stops the slow ones still running (api,
+  # api-postgres, e2e: about 10 minutes each) instead of letting them finish for a run that fails anyway. Nothing
+  # waits for the quick jobs, so a passing run is not slower. The failed job keeps its result; `passed` fails.
+  stop:
+    name: Stop the slow jobs after a failed quick one
+    needs: [cli, dashboard, docs, js, sdk-python, security]
+    if: failure() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write # cancel this run
+    steps:
+      - env: { GH_TOKEN: "${{ github.token }}" }
+        # A fork's token is read-only: its run simply goes on.
+        run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" || true
+
+  # One check for branch protection: jobs skipped by `changes` count as passed, a failed or
+  # cancelled one fails this. Make "CI passed" the required status check, not the jobs themselves.
+  passed:
+    name: CI passed
+    if: always()
+    needs: [changes, api, api-httpapi, api-postgres, cli, dashboard, docs, js, sdk-python, e2e, security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
+
+  # A failed nightly opens an issue (or comments on the open one), so it doesn't go unnoticed.
+  alert:
+    name: Nightly failure alert
+    needs: [passed]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false, sparse-checkout: .github/actions }
+      - uses: ./.github/actions/nightly-alert

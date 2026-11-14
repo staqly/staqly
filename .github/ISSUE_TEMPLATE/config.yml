@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/staqly/staqly/tree/main/docs
+    about: Setup, MCP, n8n, cloud, backup and troubleshooting guides.
+  - name: Report a security vulnerability
+    url: https://github.com/staqly/staqly/security/advisories/new
+    about: Please report security issues privately, not as public issues.

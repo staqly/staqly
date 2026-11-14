@@ -1,0 +1,161 @@
+---
+title: LinkedIn
+description: Publish to your LinkedIn profile with text, up to 9 pictures or one video, comments and who can see it. What to register in the LinkedIn developer portal.
+---
+
+Staqly publishes to your **LinkedIn profile** through LinkedIn's REST API: it signs in with
+OAuth 2.0, uploads pictures and videos, and posts with `POST /rest/posts`. A published target
+links to the post on linkedin.com. Company pages have their own channel,
+[LinkedIn Page](/channels/linkedin_page), which needs an app LinkedIn has reviewed.
+
+## What you need
+
+A **LinkedIn developer app** with two products that LinkedIn grants at once, registered once per
+server. Its keys go into the server's environment, the same way locally and in the cloud
+(see [Developer apps](/channels/developer-apps)).
+
+<Steps>
+<Step>
+
+### Create the app
+
+In the [LinkedIn developer portal](https://www.linkedin.com/developers/apps), click
+**Create app**. LinkedIn asks for a company page the app belongs to (any page you manage) and a
+logo. Then:
+
+| Where | What |
+|---|---|
+| **Products** | Request **Share on LinkedIn** and **Sign In with LinkedIn using OpenID Connect**; both are granted right away |
+| **Auth → Authorized redirect URLs** | your dashboard's `/channels/callback/linkedin`, for example `http://localhost:8080/channels/callback/linkedin` locally or `https://staqly.example.com/channels/callback/linkedin` |
+
+Copy the **Client ID** and **Primary Client Secret** from the **Auth** tab.
+
+</Step>
+<Step>
+
+### Give staqly the keys
+
+Put them in the server's environment and restart it:
+
+```bash title=".env"
+PROVIDER_LINKEDIN_ENABLED=true
+PROVIDER_LINKEDIN_CLIENT_ID=your-client-id
+PROVIDER_LINKEDIN_CLIENT_SECRET=your-client-secret
+```
+
+- **Docker:** `docker run ... --env-file .env ghcr.io/staqly/staqly:latest`, or `-e PROVIDER_LINKEDIN_CLIENT_ID=...`.
+- **Binary:** export both in your shell, then run `staqly serve` or `staqly service install` (the
+  service keeps `PROVIDER_*` settings).
+
+Until both are set, LinkedIn shows as **soon** in **Channels → Add channel**.
+It shows only with `PROVIDER_LINKEDIN_ENABLED=true`; unset or `false` hides it, and `PROVIDER_LINKEDIN_MAINTENANCE=true` shows it as **soon** while it is under maintenance.
+
+</Step>
+<Step>
+
+### Connect the account
+
+**Connect with LinkedIn** opens linkedin.com, where the person signs in and allows the app.
+Staqly asks for these scopes:
+
+| Scope | Why |
+|---|---|
+| `openid`, `profile` | Read the member's name and picture |
+| `w_member_social` | Publish posts, upload pictures and videos; comments also need the Community Management API |
+
+The channel shows the member's name and picture. Connecting the same account again reconnects the
+existing channel.
+
+</Step>
+</Steps>
+
+## Renewing the sign-in every 60 days
+
+LinkedIn's sign-in lasts **60 days**. LinkedIn lets an app renew it by itself only with *refresh
+tokens*, which it gives to apps approved for its Marketing Developer Platform (see below); the two
+self-serve products above come without them. So someone signs in again within 60 days, and staqly
+makes that one click:
+
+- In the last 14 days the channel's row on **Channels** says **Renew by** with the date and has a
+  **Renew** button (on a phone the **Renew by** line is the button; the **?** beside it says why);
+  **Renew sign-in** is in the row's menu all the time. It goes to LinkedIn and
+  comes straight back: while you are signed in to linkedin.com and the sign-in has not run out yet,
+  LinkedIn skips its permission page. The channel then has 60 more days.
+- 14 days ahead staqly emits [`channel.expiring`](/api/events) once. The bell shows it; in the cloud
+  owners and admins also get an email (**Settings → Notifications**), and an
+  [alert](/automation/alerts) or a webhook with that event tells you anywhere else. Over the API the
+  date is the channel's `renew_by`.
+- The composer warns when a post is scheduled for after that date, already in the date picker.
+- If nobody renews it, the channel turns **Needs reconnect** when the sign-in runs out (the
+  `channel.needs_reconnect` event, one of an alert's defaults) and its posts fail with the reason
+  until someone reconnects it.
+
+### Renewing without a person: refresh tokens
+
+LinkedIn gives [refresh tokens](https://learn.microsoft.com/linkedin/shared/authentication/programmatic-refresh-tokens)
+(valid 365 days) to apps it approved for a Marketing Developer Platform product, such as the
+**Community Management API** that [LinkedIn Page](/channels/linkedin_page) needs. There is no
+setting for it in staqly: when LinkedIn returns a refresh token at sign-in, staqly stores it and
+renews the 60-day sign-in by itself a day before it ends, so a person signs in once a year instead.
+A channel that renews itself has no **Renew by** date. After the server's LinkedIn app gets such a
+product, renew each channel once to pick the refresh token up.
+
+## Limits
+
+| | |
+|---|---|
+| Text | 3,000 characters |
+| Media | up to **9 pictures** (PNG, JPEG, GIF, up to 36,152,320 pixels each) **or one video** per post |
+| Video | uploaded in the parts LinkedIn asks for; staqly waits until LinkedIn has processed it before posting |
+| Daily quota | LinkedIn counts calls per member and per app for 24 hours from midnight UTC. Posts over it wait and go out after midnight UTC |
+
+Hashtags (`#launch`) stay hashtags, and characters LinkedIn treats as formatting (`( ) [ ] * _`
+and others) go out as written.
+
+## Settings per post
+
+| Setting | What it does |
+|---|---|
+| **Who can see it** (`visibility`) | Anyone (`public`, default) or your connections only (`connections`) |
+
+Over the API: `{"visibility": "connections"}` in the target's `settings`.
+
+## Comments
+
+A post's [thread](/concepts#threads-comments-under-a-post) goes out as comments under the post, in
+order and after their delays: for example the link that would otherwise lower the post's reach.
+Comments take text only: photos and videos in a comment are left out and its text goes alone.
+
+LinkedIn lets an app comment only with the `w_member_social_feed` permission of its **Community
+Management API**, which LinkedIn reviews; **Share on LinkedIn** (`w_member_social`) only creates
+posts, so the post goes out and LinkedIn refuses the comments
+(`Not enough permissions to access: partnerApiSocialActions.CREATE`). staqly reads what LinkedIn
+allowed when you connect: on a connection without comments, the composer says so before you schedule,
+the post goes out and its comments show as not sent. Once the app has the Community Management API,
+connect the channel again to turn comments on.
+
+Reading the comments under a post ([audience comments](/dashboard/posts#audience-comments)) needs the same Community Management API.
+
+## Posts per month (cloud)
+
+LinkedIn limits how many posts and video uploads one app can send each day, shared by every
+workspace on staqly's cloud, so each plan includes a monthly share: 300, 600, 1,200 or 2,500 posts
+to LinkedIn (Starter, Plus, Pro, Business), of which 30, 60, 150 or 300 can have a video. Posts to
+a profile and to a [Page](/channels/linkedin_page) count alike, a post with a video counts on both,
+and comments don't count. When one runs out, the post is refused with the reason (*Your LinkedIn
+posts for this period are used up...*) until the 1st of the next month (UTC); see
+[Plans](/plans#how-limits-are-counted). **Settings → Plan & usage** shows both counts. The
+Community Edition has no allowance.
+
+## When publishing fails
+
+| LinkedIn says | Staqly does |
+|---|---|
+| The sign-in expired or was revoked (401) | Marks the channel **Needs reconnect** and fails the target; reconnect it from the row's menu |
+| Daily quota reached (429) | Keeps the target **publishing** with the reason and tries again just after midnight UTC, without using up its retries |
+| LinkedIn unavailable (5xx), media still processing | Retries through the job queue (after 1, 5, then 15 minutes) |
+| Text too long, a refused picture, a missing permission (403) | Fails the target with LinkedIn's reason; retrying would not help, so it does not |
+
+LinkedIn has no way to ask "did this post go out?". When an answer is lost and staqly tries again,
+LinkedIn refuses the copy as a duplicate and names the post that is already there; staqly records
+that post and its link, so a retry never publishes twice.

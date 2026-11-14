@@ -1,0 +1,241 @@
+---
+title: Privacy Policy
+description: What personal data staqly cloud processes, why, for how long, and your rights.
+---
+
+Last updated: 2026-11-04
+
+This policy explains how **staqly, Switzerland** ("staqly", "we", "us") processes
+personal data when you use **staqly cloud** (the hosted dashboard, API and MCP endpoint), the website
+staqly.ai and this documentation site. We follow the Swiss Federal Act on Data Protection (FADP) and, for people in
+the EU/EEA, the GDPR.
+
+## Staqly on your own computer
+
+If you run staqly yourself (`staqly serve` or Docker), your data stays on your machine. The
+software has **no telemetry** and sends nothing to us. Outgoing requests happen only to
+services you configure yourself: the platforms you connect as channels (your posts and media
+go to them when published), webhooks, alerts (Telegram, Slack, Discord, ntfy, email) and the
+endpoints your schedules call. If you set `POSTHOG_KEY` yourself, usage events and error
+reports go to **your own** PostHog project ([Analytics](/self-hosting/analytics)), never to us.
+The rest of this policy is about staqly cloud.
+
+## Who is responsible
+
+Staqly is the controller for account and usage data (section 1 below). For the content
+you and your agents store in a workspace (section 2), **you** decide what goes in and why; we
+process it on your behalf to provide the service.
+
+Contact for privacy questions and requests: [support@staqly.ai](mailto:support@staqly.ai).
+
+## What we process and why
+
+### 1. Account and usage data
+
+| Data | Why | Legal basis |
+|---|---|---|
+| Workspace name, plan, trial and billing period, usage counters | Run your workspace, enforce plan limits, the Starter trial | Contract |
+| Free trial checks: pseudonymised fingerprints of the personal accounts a workspace connects (their platform ids), of the person who connected a shared space (a Slack workspace, a Facebook or LinkedIn Page), and of the payment card (the fingerprint Stripe gives it, never the card number), each with whether the workspace's free trial ended without a payment. See [Free trial checks](#free-trial-checks) | Offer the free trial once per person and per card, and stop the same accounts or card from taking it again and again | Legitimate interest (preventing abuse of the free trial) |
+| Your account: name, email address and picture from Google or the address you sign in with, your passkeys' public keys, the members and roles of your workspaces | Sign you in, invite people, show who did what | Contract |
+| Hashed API keys, email codes, invitation links and session tokens (never stored in plain text) | Sign you in and keep the workspace secure | Contract |
+| Browser sessions: user agent, sign-in time, last use | Show your signed-in devices so you can revoke them | Contract, security |
+| Request logs: IP address, time, path, status, user agent, request ID | Security, abuse prevention, rate limits, troubleshooting | Legitimate interest |
+| Billing data (once payments are available): name, email, country, invoices | Charge for your plan and keep accounting records | Contract, legal obligation |
+| Messages you send us | Answer you | Contract, legitimate interest |
+
+#### Free trial checks
+
+The Starter plan has a free trial. So that it is offered once, staqly cloud keeps fingerprints of the accounts and
+cards used during a trial:
+
+- **What is stored.** A fingerprint is a keyed hash (HMAC, with a secret key only our servers hold) of a platform
+  account id, of the platform id of the person who connected a shared space, or of Stripe's fingerprint of a card.
+  It cannot be turned back into the id or the card; we can only check whether an id or card we are given matches
+  one we have seen. We never store the ids, handles, card numbers or Stripe's card fingerprint themselves. Shared
+  spaces such as a company's Slack workspace or a Discord server are never fingerprinted as such, so colleagues
+  using the same space are not mistaken for one another. Spaces connected without a person (webhooks, bots,
+  Telegram) have no fingerprint.
+- **When it is used.** Only when a workspace on a free trial connects an account or adds a card that a free trial
+  which ended without a payment, in the last 180 days, also used. A card match means no free trial: the plan is
+  charged from the first day, and if the trial had already started, it ends early and the plan is charged. An
+  account match never charges anyone: the trial is paused (no publishing and no new channels; your drafts and
+  settings stay) and you choose whether to start the paid plan.
+- **Your say.** These checks run automatically. If one pauses or ends your trial and you think it is wrong, write to
+  [support@staqly.ai](mailto:support@staqly.ai): a person reviews it and can lift it. You can also object to this
+  processing; we then weigh your reasons against preventing abuse of the trial.
+
+We rely on our legitimate interest in preventing abuse of the free trial, which we have weighed against your
+interests: the data is pseudonymised, used for this purpose only, kept briefly (see
+[How long we keep data](#how-long-we-keep-data)) and never shared or used for anything else.
+
+### 2. Content in your workspace
+
+Collections, posts (text, media, per-channel texts and settings), metadata, media files, the
+connected channels with their sealed credentials, schedules, activity history, webhook and
+alert settings. We process it
+only to provide staqly to you: store it, show it, search it, and send it where you configured
+(the platforms you publish to, webhooks, alerts). We do not use it to train AI models, sell it, or show it to
+other customers.
+
+staqly also stores the public comments people leave on your published posts (their name or handle, text and
+time) for 90 days by default, to show and summarise them. Self-hosted installs keep them on their own server.
+
+Content may contain personal data about other people, for example in generated posts or
+images. You are responsible for having a legal basis for putting it into staqly.
+
+### 3. staqly.ai and this documentation site
+
+staqly.ai and docs.staqly.ai are static sites; docs.staqly.ai is hosted on GitHub Pages, which
+processes connection data (such as IP addresses) to deliver the pages; see
+[GitHub's privacy statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement).
+
+To learn which pages people read and how they find us, both sites send usage events to
+**PostHog** (hosted in the EU): the pages you visit, links and buttons you click, the referring
+site and campaign tags, page load times, and your browser, device type and approximate location
+derived from your IP address. They set **no cookies** and store nothing in your browser. Visits
+are counted with an anonymous identifier that PostHog computes from a hash of the day, your IP
+address, user agent and the site, with a secret that changes daily, so the same visitor cannot be
+recognised on another day or across the two sites. We do not record sessions or what you type.
+Legal basis: legitimate interest in improving the sites. You can block these events with any
+content blocker.
+
+Both sites also load **Google Analytics** (Google Ireland Limited): the pages you visit, how you
+found us (referring site, search, campaign tags), your browser, device type and approximate
+location from your IP address. It sets its own cookies (`_ga`, `_ga_*`, up to two years) to tell
+returning visits apart. Advertising features are off. Legal basis: legitimate interest in
+understanding how people find the sites. You can opt out with Google's
+[opt-out add-on](https://tools.google.com/dlpage/gaoptout), by blocking cookies for staqly.ai, or
+with any content blocker.
+The API playground keeps the API key you enter in your browser only and sends requests directly
+from your browser to the instance you choose.
+
+### 4. Product analytics and error reports in staqly cloud
+
+To see which features are used, where onboarding stalls, why publishing fails and what breaks,
+staqly cloud sends **PostHog** (hosted in the EU) a limited set of usage events and error
+reports:
+
+- **Usage events** from our server, after something happened: for example that you signed in
+  (and with which method), created a workspace, connected a channel (which platform), created,
+  scheduled or published a post (to which platforms, how many channels and media files, how
+  late it went out), that publishing failed (the platform's error message), that you uploaded or
+  edited media, started a checkout, or that your plan changed. They are linked to your account
+  only by its internal id (`usr_...`) and to your workspace by its id; **not** your name, email
+  address, IP address, post text, media, channel names, comments or any other content. Work we
+  do for a workspace (such as publishing at the scheduled time) is recorded for the workspace,
+  not for a person. At most once a day we record that you used the workspace.
+- **Error reports** when something goes wrong: from our server, the error message and technical
+  context (request ID, route, workspace ID); from the dashboard in your browser, the error, the
+  page it happened on (without query strings) and your browser type.
+- **Page views and load times** of the dashboard, **without cookies** or anything stored in
+  your browser and not linked to your account: counted the same anonymous way as on our
+  websites (section 3).
+- **Google Analytics** (Google Ireland Limited) page views of the dashboard: only the page's
+  path (never its query string or fragment, so no codes, tokens or searches) and a generic page
+  title, with your browser, device type and approximate location from your IP address. It sets
+  its cookies (`_ga`, `_ga_*`, up to two years) to tell returning visits apart, and is not linked to
+  your account. Opt out as described in section 3.
+
+We do **not** record sessions, clicks or what you type, and never send access tokens, API keys,
+passwords, cookies or payment details. Revenue figures come from Stripe, not from these events.
+Legal basis: legitimate interest in running a reliable service and improving it. You can block
+the dashboard's events with any content blocker; to object to the server's events, write to
+[support@staqly.ai](mailto:support@staqly.ai).
+
+## Cookies
+
+The dashboard uses only what it needs to work: an HttpOnly **session cookie** (valid for up to
+30 days) and a CSRF token, plus a few display preferences (such as the theme) in your browser's local storage, and
+in staqly cloud Google Analytics' cookies (section 4). No advertising cookies.
+
+staqly.ai and this documentation site set Google Analytics cookies (`_ga`, `_ga_*`); see
+[section 3](#3-staqlyai-and-this-documentation-site) for what they hold and how to opt out.
+
+## Who else processes data
+
+- **Hosting and infrastructure:** the providers that store and run staqly cloud for us, and the
+  email provider that delivers sign-in codes and invitations, under data processing agreements. Ask us at support@staqly.ai for the current list.
+- **Analytics and error reports:** PostHog (EU cloud), for staqly.ai and docs.staqly.ai
+  (section 3) and staqly cloud (section 4); the software you run yourself sends us nothing.
+- **Website analytics:** Google Analytics (Google Ireland Limited), for staqly.ai and
+  docs.staqly.ai only (section 3).
+- **Payments:** Stripe, once payments are available. Stripe receives your card details
+  directly; we never see them.
+- **Services you connect:** when you connect a channel, set up webhooks, alerts or schedule endpoints,
+  staqly sends data to (or fetches from) those services on your instruction. Their own terms and
+  policies apply. When you use the AI tools (the design editor's, the media library's AI videos), your
+  description and the picture you change go to fal.ai or, when fal.ai is not available, Higgsfield, on the server
+  operator's account; staqly keeps them for a day at most unless you keep the result. A server whose operator added a Pixabay key sends your stock photo searches to
+  Pixabay; your browser loads the thumbnails from it, and a photo you add is copied into your library.
+  When you use the assistant or write a post with AI, your messages, the files you attach and what the
+  assistant reads from your workspace to answer go to the language model the server operator set up
+  (through fal.ai, or another provider of their choice); staqly keeps your chats with the assistant until you
+  delete them.
+
+We do not sell personal data. We disclose it to authorities only when the law requires it.
+
+## International transfers
+
+When data is processed outside Switzerland and the EU/EEA, we rely on adequacy decisions or
+on standard contractual clauses recognised under the FADP and GDPR.
+
+## How long we keep data
+
+- **Workspace content** stays until you delete it. Deleting a post, purging it, or deleting
+  the whole workspace removes it from the live system right away; it may remain in our backups
+  until they are rotated out, which happens automatically on a regular schedule.
+- **Workspace exports** (ZIP downloads) are deleted after 24 hours.
+- **Sessions** expire after 30 days or when you sign out or revoke them.
+- **Request logs** are kept only as long as needed for security and troubleshooting, then
+  deleted.
+- **Analytics events and error reports** (sections 3 and 4) are kept in PostHog for at most
+  the retention of our PostHog plan, currently 12 months.
+- **Google Analytics data** (section 3) is kept for 14 months.
+- **Billing records** are kept as long as accounting law requires (in Switzerland, 10 years).
+- **Free trial fingerprints** ([Free trial checks](#free-trial-checks)) are deleted within a day once the workspace
+  pays, and with the workspace when it is deleted. After a free trial that ended without a payment they are kept for
+  180 days, also when that workspace is deleted, and then deleted.
+
+## Security
+
+All traffic is encrypted with HTTPS. API keys, sessions, recovery keys and sign-in links are
+stored only as hashes; channel credentials and alert secrets are encrypted at rest. Workspaces are
+isolated from each other in every query. See [Security](/self-hosting/security) for details.
+
+## Data from Facebook, Instagram and Threads
+
+When you connect a Facebook Page, an Instagram account or a Threads account, staqly keeps what it needs to
+publish for you: the access token Meta issues (encrypted at rest), the account or Page ID, its name and
+profile picture, and the IDs of the posts it publishes and the comments on them. staqly uses them only to
+publish, schedule and show your posts and their comments; it does not sell them or use them for advertising.
+
+To delete this data:
+
+- **In staqly:** open **Channels**, choose the channel and **Remove** it. Its token and account details are
+  deleted from the live system right away (backups as described in [How long we keep data](#how-long-we-keep-data)).
+  Deleting the workspace removes all its channels.
+- **On Meta:** remove staqly from the apps that may use your account: on Facebook **Settings & privacy →
+  Settings → Apps and websites**, on Instagram **Settings → Website permissions → Apps and websites**, on Threads
+  **Settings → Account → Website permissions**. staqly can then no longer use the token; remove the channel in
+  staqly as well to delete what it stored.
+- **By email:** write to [support@staqly.ai](mailto:support@staqly.ai) and we delete it for you within 30 days.
+
+## Your rights
+
+You can ask for access to your personal data, a copy in a portable format, correction,
+deletion, restriction, or object to processing based on legitimate interest. Much of this you
+can do yourself:
+
+- **Export** your data on every plan: **Settings → Data & privacy → Export workspace** (or
+  [the API](/self-hosting/data-export)). On Starter the export does not include uploaded files;
+  on Plus and above it does.
+- **Delete** posts, or the whole workspace: **Settings → Data & privacy → Delete workspace**.
+
+For anything else, write to [support@staqly.ai](mailto:support@staqly.ai). We answer within 30
+days. You can also complain to a supervisory authority: in Switzerland the Federal Data
+Protection and Information Commissioner (FDPIC), or the authority in your EU/EEA country.
+
+## Changes
+
+We may update this policy; the date at the top shows the latest version. We will notify
+workspace owners in advance of material changes.

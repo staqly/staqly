@@ -1,0 +1,149 @@
+---
+title: n8n
+description: Write posts from n8n workflows, publish through your own automation and react to publishing events with signed webhooks.
+---
+
+[n8n](https://n8n.io) is a workflow automation tool. Connect it to staqly when a workflow
+produces posts (a generated caption and image, a digest, release notes) or when a workflow
+should do the publishing itself. n8n talks to staqly in two directions:
+
+- **n8n → staqly**: HTTP Request nodes call the REST API to create posts, connect channels or
+  report results with a *Header Auth* credential, `Authorization: Bearer ...`: the access token
+  staqly prints at start in Staqly Community Edition (`staqly serve token`, Docker: `docker exec staqly server token`),
+  an API key `stk_...` in cloud mode.
+- **staqly → n8n**: a staqly [webhook](/automation/webhooks) posts events (a post published or
+  failed, your own automation asked to publish) to an n8n *Webhook* trigger, signed with HMAC.
+
+## Try the demo workflow
+
+An importable workflow, `integrations/n8n/instagram-avatar-demo.json`, runs the whole loop with a channel on
+your own automation and a mock publisher, no external accounts needed. Run it from a checkout
+of the repository. The example n8n container joins the Docker network `staqly_default` that the
+Compose setup creates; with the [Docker image](/self-hosting/docker) (`docker run`), create it
+once and attach the `staqly` container as `api`:
+
+```bash
+docker network create staqly_default                         # only with docker run
+docker network connect --alias api staqly_default staqly     # only with docker run
+docker compose -f integrations/n8n/compose.yml up -d    # n8n at http://127.0.0.1:5678 (this machine only)
+export STAQLY_API_KEY=$(docker exec staqly server token)    # binary: $(staqly serve token)
+./integrations/n8n/setup-demo.sh                         # collection, channel + webhook; prints the signing secret and a demo token
+```
+
+The workflow calls staqly with the same token: paste it into the **Config** node (`apiToken`) and
+the **Verify & parse** node (`CONFIG.apiToken`).
+
+The workflow **fails closed**: it rejects every staqly event until you paste the webhook
+secret, and its HTTP generate trigger runs only for requests with the demo token in an
+`X-Demo-Token` header. The step-by-step walkthrough is in the
+[Publish through n8n cookbook](/cookbook/publish-through-n8n).
+
+## Build your own flow
+
+<Steps>
+<Step>
+
+### Create posts
+
+Add a *Header Auth* credential in n8n (name `Authorization`, value `Bearer` followed by the
+access token or API key) and use it in every HTTP Request node that calls staqly. Then add an
+HTTP Request node that calls `POST /v1/posts` with JSON: `collection` (id or exact
+name), `content`, `targets` (one `channel_id` per channel) and either `publish_at` with
+`"status": "scheduled"`, `"publish_now": true`, or nothing for a draft a schedule will pick.
+Upload media first with `POST /v1/media` (binary `file` part) and put the ids in `media`.
+
+Send an `Idempotency-Key` header so n8n retries don't create duplicates:
+
+- Derive the key from the trigger's input (an order ID, a row ID, a hash of the prompt), not from
+  `$execution.id`, and keep per-execution values out of the body: the same key with a different
+  body is rejected with `422 idempotency_mismatch`.
+- Turn on **Retry On Fail** in the node's settings. Two executions that send the same key at once
+  get one post; the second gets `409 idempotency_in_progress` and, on its retry, the same post.
+
+</Step>
+<Step>
+
+### Publish through n8n
+
+Add a channel on [your own automation](/channels/your-own-automation) and a staqly webhook
+pointed at an n8n *Webhook* trigger, subscribed to `post.publish_requested`. Verify the
+[signature](/automation/webhooks#verifying-signatures) in a Code node, publish
+`data.target.content` and `data.post.media_items` wherever they should go, then report with
+`POST /v1/posts/{id}/targets/{channel}/result`:
+`{"status":"published","url":"https://...","external_id":"1790"}` or
+`{"status":"failed","error":"API quota exceeded"}`. Nothing reported within the collection's
+processing timeout fails the target; a person can **Retry**, which sends the event again.
+
+An n8n workflow that is inactive answers `404`; staqly retries the delivery with backoff, and
+you can resend a failed one from **Webhooks** (select the webhook, **Retry**) or with
+`POST /v1/webhook-deliveries/{id}/retry`.
+
+</Step>
+<Step>
+
+### React to publishing
+
+Subscribe a webhook to `post.published` and `post.failed` (or `post.*`), optionally filtered by
+collection, to log links, tell a team channel or open a ticket when a platform refused a post.
+`data.post.targets[].external_url` holds the links.
+
+</Step>
+</Steps>
+
+Deliveries are at-least-once and can arrive out of order: use `event.id` (or the
+`X-Staqly-Event-Id` header) to deduplicate side effects that must not repeat, and the event's
+`created_at` to tell which of two events about a post is newer
+([Delivery guarantees](/automation/webhooks#delivery-guarantees)).
+
+## Feed a schedule from n8n
+
+A collection's [schedule](/automation/schedules) can call an n8n *Webhook* trigger when it finds
+nothing to publish (**Call an endpoint that returns posts**). The trigger receives a signed
+request with the `slot`, the `schedule` and its `channels`; answer with
+`{"posts":[{"content":"..."}]}` (*Respond to Webhook* node, within 60 seconds) and the run
+publishes them. See [Posts from your endpoint](/cookbook/posts-from-your-endpoint).
+
+## Networking: pick your setup
+
+Inside a container, `localhost` is the container itself, not your machine. Use the row that
+matches where n8n and staqly run:
+
+| Where n8n runs | n8n → staqly API URL | staqly webhook URL (→ n8n) |
+|---|---|---|
+| **On the staqly Docker network** (e.g. `integrations/n8n/compose.yml`) | `http://api:3333` | `http://n8n:5678/webhook/staqly-publish` |
+| **On the host** (`npx n8n`, desktop app), staqly in Docker | `http://localhost:3333` | `http://host.docker.internal:5678/webhook/staqly-publish` |
+| **In another container / compose project** | `http://host.docker.internal:3333`, or attach n8n to `staqly_default` and use `http://api:3333` | `http://host.docker.internal:5678/webhook/staqly-publish`, or on a shared network `http://<n8n-container>:5678/webhook/staqly-publish` |
+| **On the host**, staqly via `staqly serve` | `http://localhost:3333` | `http://localhost:5678/webhook/staqly-publish`, with `WEBHOOK_ALLOW_LOOPBACK=true` (see below) |
+
+- Any of these addresses works: what lets n8n in is the access token in its *Header Auth*
+  credential, not the address it calls from.
+- `host.docker.internal` works on Docker Desktop. On Linux, start the staqly container with
+  `--add-host host.docker.internal:host-gateway`; for another n8n container on Linux, add the same
+  `extra_hosts: ["host.docker.internal:host-gateway"]` entry.
+- To share a network with an existing n8n container:
+  `docker network connect staqly_default <n8n-container>` (with `docker run`, create the network
+  and attach staqly first, as in the demo above).
+- Webhook and schedule endpoint targets on private networks are allowed by default in the Community Edition
+  (`WEBHOOK_ALLOW_PRIVATE=true`; cloud mode defaults to `false`); loopback targets are not
+  (`WEBHOOK_ALLOW_LOOPBACK=false`). That only matters when the API runs outside Docker
+  (`staqly serve`) and n8n listens on `localhost`.
+- Media URLs inside webhook payloads use `PUBLIC_API_URL`. If n8n should download images from
+  those URLs, set `PUBLIC_API_URL` to an address n8n can reach (e.g. `http://api:3333`).
+
+## Troubleshooting
+
+<Callout title="Code node: Cannot find module 'crypto'">
+Signature verification uses Node's `crypto`, which n8n only allows in Code nodes with
+`NODE_FUNCTION_ALLOW_BUILTIN=crypto` (already set in `integrations/n8n/compose.yml`).
+</Callout>
+
+A `401 unauthorized` from staqly means the *Header Auth* credential is missing or holds an old
+token: print the current one with `docker exec staqly server token` (binary: `staqly serve token`).
+
+## Next steps
+
+<Cards>
+  <Card title="Publish through n8n" href="/cookbook/publish-through-n8n">The demo loop, step by step.</Card>
+  <Card title="Webhooks" href="/automation/webhooks">Payloads, signatures, retries and the network policy.</Card>
+  <Card title="Your own automation" href="/channels/your-own-automation">The contract behind the publish request and the result.</Card>
+</Cards>

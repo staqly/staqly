@@ -1,0 +1,195 @@
+'use client'
+
+import { useQueryClient } from '@tanstack/react-query'
+import { useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
+
+import { outcomeOf, publishToastId } from '@/lib/publish-outcome'
+import { isForeignEvent, qk, refreshEventLists, useFollowWorkspace, useRecentEvents } from '@/lib/queries'
+
+/** How often the dashboard looks for changes made elsewhere (agents, the scheduler, other tabs); paused in background tabs. */
+export const LIVE_INTERVAL_MS = 3000
+
+/**
+ * Post events that change a collection's counts (posts per status). Edits of the text, feedback, replies and
+ * shared previews leave them as they are.
+ */
+const COUNT_EVENTS = new Set([
+  'post.created',
+  'post.updated',
+  'post.deleted',
+  'post.purged',
+  'post.scheduled',
+  'post.unscheduled',
+  'post.publish_requested',
+  'post.published',
+  'post.failed',
+])
+
+/**
+ * True once the page has loaded and the browser is idle. The first poll waits for it: on a slow cold load (a
+ * phone) the 3 s poll would otherwise repeat the events request the page made a moment ago, while it still loads.
+ */
+function useLoaded() {
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    let idle: number | undefined
+    const ready = () => {
+      if (typeof window.requestIdleCallback === 'function') {
+        idle = window.requestIdleCallback(() => setLoaded(true), { timeout: 5000 })
+      } else {
+        setLoaded(true)
+      }
+    }
+
+    if (document.readyState === 'complete') {
+      ready()
+    } else {
+      window.addEventListener('load', ready, { once: true })
+    }
+
+    return () => {
+      window.removeEventListener('load', ready)
+
+      if (idle !== undefined) {
+        window.cancelIdleCallback(idle)
+      }
+    }
+  }, [])
+
+  return loaded
+}
+
+/**
+ * Keeps every open view current without a reload: one small request for the newest events, and when one
+ * appears that this tab hasn't seen, the views it touches refetch (counts, activity, the posts it names, the
+ * channels and schedules, webhook deliveries). Paged post lists refetch themselves from the same request.
+ * Changes this tab made itself are already in the cache, so their events refetch nothing but the activity.
+ * A workspace switch in another tab reloads this one into it (the session is shared).
+ */
+export function LiveUpdates() {
+  const qc = useQueryClient()
+  const loaded = useLoaded()
+  const events = useRecentEvents({ refetchInterval: loaded ? LIVE_INTERVAL_MS : undefined })
+  const seen = useRef<number | undefined>(undefined)
+
+  useFollowWorkspace()
+
+  useEffect(() => {
+    const list = events.data
+
+    if (!list) {
+      return
+    }
+
+    const previous = seen.current
+
+    seen.current = list[0]?.seq ?? 0
+
+    if (previous === undefined || seen.current === previous) {
+      return
+    }
+
+    const fresh = list.filter((e) => e.seq > previous)
+
+    // How a post this tab published (Publish now) or took down (Unpublish) went, once it has.
+    for (const e of fresh) {
+      const done = outcomeOf(e)
+
+      // A publish ends the toast that followed it (publish-undo); unpublishing has none.
+      const id = done && !done.unpublish && e.post_id ? publishToastId(e.post_id) : undefined
+
+      // icon: undefined drops the spinner the publishing toast carried (sonner merges updates into the same id).
+      if (done?.ok) {
+        toast.success(done.unpublish ? 'Unpublished' : 'Published', {
+          id,
+          description: done.title,
+          duration: 5000,
+          icon: undefined,
+        })
+      } else if (done) {
+        toast.error(done.unpublish ? "Couldn't unpublish everywhere" : "Couldn't publish", {
+          id,
+          description: `${done.title}: open it to see why.`,
+          duration: 8000,
+          icon: undefined,
+        })
+      }
+    }
+
+    const others = fresh.filter((e) => isForeignEvent(e))
+    // A full window of new events can hide earlier changes, including posts absent from this window.
+    const missed = fresh.length > 0 && fresh.length === list.length
+
+    if (missed || others.some((e) => e.type.startsWith('collection.') || COUNT_EVENTS.has(e.type))) {
+      void qc.invalidateQueries({ queryKey: qk.collectionsAll })
+      void qc.invalidateQueries({ queryKey: ['collection'] })
+    }
+
+    // The activity feed: only its newest events, not every page it has loaded.
+    void refreshEventLists(qc)
+    // Any event may have been delivered to a webhook, this tab's own too. Only a deliveries list on screen
+    // refetches; the others are just marked stale.
+    void qc.invalidateQueries({ queryKey: ['deliveries'] })
+
+    if (missed || others.some((e) => e.type.startsWith('channel.'))) {
+      void qc.invalidateQueries({ queryKey: qk.channels })
+    }
+
+    if (missed || others.some((e) => e.type.startsWith('schedule.'))) {
+      void qc.invalidateQueries({ queryKey: qk.schedulesAll })
+    }
+
+    if (missed || others.some((e) => e.type.startsWith('webhook.') && e.type !== 'webhook.test')) {
+      void qc.invalidateQueries({ queryKey: qk.webhooks })
+    }
+
+    if (missed || others.some((e) => e.type.startsWith('alert.'))) {
+      void qc.invalidateQueries({ queryKey: qk.alerts })
+    }
+
+    // A payment, plan switch or add-on (Stripe's webhook, another tab): the plan, its limits and the lock banner.
+    if (missed || others.some((e) => e.type.startsWith('workspace.'))) {
+      void qc.invalidateQueries({ queryKey: qk.billing })
+      void qc.invalidateQueries({ queryKey: qk.usage })
+    }
+
+    // A role changed or a person removed: the session's scopes decide which controls show.
+    if (missed || others.some((e) => e.type.startsWith('member.') || e.type.startsWith('invitation.'))) {
+      void qc.invalidateQueries({ queryKey: qk.members })
+      void qc.invalidateQueries({ queryKey: qk.invitations })
+      void qc.invalidateQueries({ queryKey: qk.session })
+    }
+
+    if (missed) {
+      void qc.invalidateQueries({ queryKey: ['post'] })
+      void qc.invalidateQueries({ queryKey: ['post-responses'] })
+      void qc.invalidateQueries({ queryKey: ['post-metrics'] })
+      void qc.invalidateQueries({ queryKey: ['post-feedback'] })
+    } else {
+      for (const id of new Set(others.map((e) => e.post_id).filter(Boolean))) {
+        void qc.invalidateQueries({ queryKey: ['post', id] })
+      }
+    }
+
+    // What staqly reads in the background (comments, the AI's reading of them, the numbers) and reviewers' feedback on a
+    // shared preview: the post open on screen takes it in without a refresh.
+    const postsWith = (...types: string[]) =>
+      new Set(fresh.flatMap((e) => (e.post_id && types.includes(e.type) ? [e.post_id] : [])))
+
+    for (const id of postsWith('post.responses_analyzed', 'post.responses_updated')) {
+      void qc.invalidateQueries({ queryKey: qk.postResponses(id) })
+    }
+
+    for (const id of postsWith('post.metrics_updated')) {
+      void qc.invalidateQueries({ queryKey: qk.postMetrics(id) })
+    }
+
+    for (const id of postsWith('post.feedback_added')) {
+      void qc.invalidateQueries({ queryKey: qk.postFeedback(id) })
+    }
+  }, [events.data, qc])
+
+  return null
+}

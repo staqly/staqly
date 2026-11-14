@@ -1,0 +1,13 @@
+{
+  "$comment": "USD per million tokens of the assistant's language models, counted as a workspace's AI usage when the endpoint reports no cost of its own (OpenAI does not; OpenRouter and fal.ai do). Keys are the model ids AI_ASSISTANT_MODEL takes; a router's \"vendor/model\" id also finds the bare one. AI_PRICES_FILE adds or replaces entries; AI_ASSISTANT_PRICES overrides one endpoint. Standard tier, short context (up to 272K input tokens for GPT-6).",
+  "checked": "2026-10-26",
+  "sources": ["https://developers.openai.com/api/docs/pricing", "https://ai.google.dev/gemini-api/docs/pricing"],
+  "default": "google/gemini-2.5-flash",
+  "models": {
+    "google/gemini-2.5-flash": { "input": 0.3, "cached_input": 0.075, "output": 2.5 },
+    "gpt-6-astra": { "input": 10, "cached_input": 1, "output": 50 },
+    "gpt-6.1-sol": { "input": 2, "cached_input": 0.1, "output": 10 },
+    "gpt-6-sol": { "input": 2, "cached_input": 0.2, "output": 10 },
+    "gpt-6-luna": { "input": 0.1, "cached_input": 0.01, "output": 0.5 }
+  }
+}

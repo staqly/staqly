@@ -1,0 +1,67 @@
+# Self-hosted platforms to connect channels to while developing staqly: part of the dev stack (`make dev`), each
+# behind its own profile, so nothing starts unless asked. `make channels` starts them all and prints how to connect.
+#   - listmonk (profile listmonk): http://localhost:9010 (admin / staqly-dev). Its email goes to mailpit
+#     (http://localhost:8025). In staqly: Add channel -> ListMonk, address http://listmonk:9000 (staqly reaches it on
+#     the compose network; the dev stack allows private addresses), user and token from `make channels`. Its
+#     database answers on 127.0.0.1:55432 (LISTMONK_DB_PORT), off PostgreSQL's default port.
+
+x-listmonk-db: &listmonk-db
+  POSTGRES_USER: listmonk
+  POSTGRES_PASSWORD: listmonk
+  POSTGRES_DB: listmonk
+
+services:
+  listmonk:
+    image: listmonk/listmonk:v6.2.0
+    container_name: staqly-listmonk
+    profiles: [listmonk]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${LISTMONK_PORT:-9010}:9000"
+    # Only env config; install once on an empty database, migrate on a newer image (listmonk's own compose does the same).
+    command: [sh, -c, "./listmonk --install --idempotent --yes --config '' && ./listmonk --upgrade --yes --config '' && ./listmonk --config ''"]
+    environment:
+      LISTMONK_app__address: 0.0.0.0:9000
+      LISTMONK_app__root_url: http://localhost:${LISTMONK_PORT:-9010}
+      LISTMONK_db__host: listmonk-db
+      LISTMONK_db__port: 5432
+      LISTMONK_db__user: listmonk
+      LISTMONK_db__password: listmonk
+      LISTMONK_db__database: listmonk
+      LISTMONK_db__ssl_mode: disable
+      LISTMONK_ADMIN_USER: admin
+      LISTMONK_ADMIN_PASSWORD: staqly-dev
+      TZ: Etc/UTC
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # Pictures uploaded to listmonk's media library (a ListMonk channel puts a post's pictures there).
+    volumes:
+      - staqly-listmonk-uploads:/listmonk/uploads
+    depends_on:
+      listmonk-db:
+        condition: service_healthy
+
+  listmonk-db:
+    image: postgres:17-alpine
+    container_name: staqly-listmonk-db
+    profiles: [listmonk]
+    restart: unless-stopped
+    # Off the default 5432 so it never meets another PostgreSQL on this machine; for psql only (listmonk uses the
+    # compose network).
+    ports:
+      - "127.0.0.1:${LISTMONK_DB_PORT:-55432}:5432"
+    environment: *listmonk-db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U listmonk"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - staqly-listmonk-db:/var/lib/postgresql/data
+
+volumes:
+  staqly-listmonk-db:
+  staqly-listmonk-uploads:

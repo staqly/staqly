@@ -1,0 +1,116 @@
+# Cross-client suite (e2e/cross-client): the TypeScript and Python SDKs, the
+# staqly CLI, curl and MCP against three real `staqly serve` processes built
+# from this checkout (local, cloud, cloud with a tiny rate limit). No Docker,
+# no secrets. Also the shell scripts (seed.sh against the local server, restore.sh with a stub docker)
+# and the n8n demo workflow's verification code. Locally the same: `pnpm --filter @staqly/e2e test:cross-client`
+# after building the SDK (see e2e/README.md).
+name: Cross-client
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/api/**
+      - apps/cli/**
+      - sdks/**
+      - scripts/**
+      - integrations/n8n/**
+      - e2e/cross-client/**
+      - e2e/lib/**
+      - e2e/package.json
+      - e2e/tsconfig.json
+      - .github/**
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - turbo.json
+      - .nvmrc
+  pull_request:
+    # A draft runs once it is marked ready for review.
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - apps/api/**
+      - apps/cli/**
+      - sdks/**
+      - scripts/**
+      - integrations/n8n/**
+      - e2e/cross-client/**
+      - e2e/lib/**
+      - e2e/package.json
+      - e2e/tsconfig.json
+      - .github/**
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - turbo.json
+      - .nvmrc
+  schedule:
+    - cron: "53 1 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cross-client-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cross-client:
+    name: SDKs, CLI, curl and MCP against staqly serve
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read # .github/actions/tested reads earlier runs and their artifacts
+    # The cloud servers run on PostgreSQL, one schema each (e2e/cross-client/lib.ts).
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env: { POSTGRES_USER: staqly, POSTGRES_PASSWORD: staqly, POSTGRES_DB: staqly }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U staqly" --health-interval 2s --health-timeout 2s --health-retries 30
+    env:
+      STAQLY_E2E_DATABASE_URL: postgres://staqly:staqly@127.0.0.1:5432/staqly?sslmode=disable
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      # A push whose tree a pull request run already passed runs nothing again; a pull request records its tree.
+      - id: tested
+        uses: ./.github/actions/tested
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: steps.tested.outputs.skip != 'true'
+        with:
+          go-version-file: apps/cli/go.mod
+          cache-dependency-path: |
+            apps/api/go.sum
+            apps/cli/go.sum
+      # the Python SDK runs from its uv project (sdks/python) through py_worker.py
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        if: steps.tested.outputs.skip != 'true'
+        with: { python-version: "3.13", enable-cache: true, cache-dependency-glob: sdks/python/uv.lock }
+      - uses: ./.github/actions/setup
+        if: steps.tested.outputs.skip != 'true'
+        with: { filter: "@staqly/e2e..." }
+      - name: TypeScript SDK build (the suite imports dist/)
+        if: steps.tested.outputs.skip != 'true'
+        run: pnpm turbo run build --filter=@staqly/sdk
+      - name: Cross-client suite
+        if: steps.tested.outputs.skip != 'true'
+        run: pnpm --filter @staqly/e2e test:cross-client
+
+  # A failed nightly opens an issue (or comments on the open one), so it doesn't go unnoticed.
+  alert:
+    name: Nightly failure alert
+    needs: [cross-client]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false, sparse-checkout: .github/actions }
+      - uses: ./.github/actions/nightly-alert

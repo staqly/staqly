@@ -1,0 +1,82 @@
+---
+title: Example prompts
+description: Copy prompts that get Claude Code, Codex or OpenCode working with staqly, and see which tools they trigger.
+---
+
+Once staqly is [connected](/mcp), you talk to your agent in plain language and it picks the
+right [tools](/mcp/tools). Use these prompts as a starting point; the arrow shows which tool
+the agent will call.
+
+## Try your first prompt
+
+<Steps>
+<Step>
+### Check the connection
+
+Ask *"List my staqly channels."* The agent should call `list_channels`. If it says it has no
+such tool, revisit the setup for [Claude Code](/agents/claude-code) or
+[other clients](/agents/other-mcp-clients).
+</Step>
+<Step>
+### Write something
+
+Ask *"Create a collection called Product updates and draft a post announcing the new calendar."*
+</Step>
+<Step>
+### Put it on the calendar
+
+Open the dashboard at `http://localhost:8080` and look at **Schedule**. Then ask
+*"Schedule that draft for tomorrow at 9 on my X channel."*
+</Step>
+</Steps>
+
+## Writing
+
+- *"Create a collection called Product updates."* → `create_collection`
+- *"Draft a post about the release notes into Product updates for my X and n8n publisher
+  channels."* → `list_channels`, `create_post` with one target per channel
+- *"Add this image to the post."* → `upload_media` with `media_base64`, then `update_post`
+- *"Make the X version shorter."* → `preview_post`, then `update_post` with a target
+  `content` of its own
+- *"Copy yesterday's post into a new draft."* → `duplicate_post`
+
+## Scheduling and publishing
+
+- *"Schedule post_oalirbz67y4m4cqxq5dw for Tuesday 9:00."* → `schedule_post`
+- *"What is scheduled this week?"* → `list_posts` with `publish_after`, `publish_before`
+- *"Publish the draft about the calendar now."* → `publish_post`
+- *"Take Friday's post off the calendar."* → `cancel_post`
+- *"Why did the X post fail? Retry it."* → `get_post`, `retry_target`
+
+## Channels
+
+- *"Which platforms can staqly publish to?"* → `list_providers`
+- *"Add a channel on my own automation called n8n publisher."* → `connect_channel` (OAuth
+  platforms such as X are connected in the dashboard)
+- *"Check that every channel still works."* → `list_channels`, `test_channel`
+
+## Schedules
+
+- *"Publish the next waiting post from Product updates every weekday at 9 in Warsaw time, and
+  ask me for more when it runs out."* → `create_schedule` with `rule`, `pick: next`,
+  `source: agent`
+- *"Is anything asking me for posts?"* → `list_requested_work`
+- *"Run the Weekday mornings schedule now."* → `run_schedule`
+
+## Your own automation
+
+- *"Publish the posts waiting on my own automation and report the links."* →
+  `list_requested_work`, then `report_publish_result` per target
+
+## Finding things
+
+- *"What happened to post_oalirbz67y4m4cqxq5dw?"* → `get_post_history`
+- *"Find posts that mention golden hour."* → `search_posts`
+- *"Is anything stuck in the queue?"* → `list_jobs` with `status: failed`, `retry_job`
+
+## Next steps
+
+<Cards>
+  <Card title="Tools reference" href="/mcp/tools">Every tool and its inputs.</Card>
+  <Card title="Let an agent fill a collection" href="/cookbook/agent-fills-a-collection">The schedule asks, the agent writes.</Card>
+</Cards>

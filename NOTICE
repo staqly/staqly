@@ -1,0 +1,47 @@
+Staqly
+Copyright 2026 Staqly AI
+
+This product includes software developed for the staqly project
+(https://staqly.ai, https://github.com/staqly/staqly).
+
+Licensing:
+* Everything in this repository is licensed under the GNU Affero General Public
+  License, version 3 (AGPL-3.0-only, see LICENSE), except:
+* sdks/typescript, sdks/python and integrations/ are licensed under the Apache
+  License, Version 2.0 (their own LICENSE files), so you can use them in code
+  under any license.
+* Releases up to and including v0.1.0 were published under the Apache License,
+  Version 2.0, and stay available under it.
+
+Contributions are accepted under the Contributor License Agreements in ICLA.md
+(individuals) and CCLA.md (legal entities).
+
+If other attributions are required by dependencies or included code, add them here.
+
+The background job queue uses River (https://github.com/riverqueue/river), Mozilla Public
+License 2.0, unmodified; its source is available at that address.
+
+apps/platform/components/editor is adapted from editorcn
+(https://github.com/shadcn-labs/editorcn), MIT License,
+Copyright (c) Abdullah Mukadam and contributors.
+
+The design editor (apps/platform/components/design) bundles fonts from Fontsource
+(https://fontsource.org): Inter, Montserrat, Poppins, Space Grotesk, Oswald, Playfair Display, DM Serif
+Display, Bebas Neue, Anton, Lobster, Pacifico and Caveat under the SIL Open Font License 1.1, Roboto Slab
+under the Apache License 2.0; their licenses ship in the @fontsource packages. It draws with Konva and
+react-konva (MIT). Its background removal downloads, on use, the InSPyReNet model (MIT) and runs it with
+transformers.js (Apache-2.0) and ONNX Runtime Web (MIT). Its AI tools on the device download, on use, LaMa
+(Carve/LaMa-ONNX, a port of big-lama, Apache-2.0) and Real-ESRGAN general x4v3 (BSD-3-Clause) and run them with
+ONNX Runtime Web.
+
+The video and sound editor (apps/platform/components/timeline) writes MP4 and M4A files with Mediabunny
+(https://mediabunny.dev) by the Mediabunny authors, under the Mozilla Public License 2.0, used unmodified
+(its source: https://github.com/Vanilagy/mediabunny). Its captions from speech download, on use, Whisper base
+(onnx-community/whisper-base; OpenAI's Whisper weights, MIT) and run it with transformers.js.
+
+packages/brand/fonts holds Geist and Geist Mono (https://github.com/vercel/geist-font), Copyright (c)
+2023 Vercel, in collaboration with basement.studio, SIL Open Font License 1.1
+(packages/brand/fonts/OFL.txt), subset to Latin for the docs and staqly.ai.
+
+The platforms' logos in apps/*/public/brand/providers come from svgl (https://svgl.app, MIT); each logo is a
+trademark of its owner, shown only to name the platform a channel publishes to.

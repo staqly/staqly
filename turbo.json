@@ -1,0 +1,25 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "ui": "stream",
+  "globalDependencies": [".nvmrc", "apps/api/openapi.yaml"],
+  "globalEnv": ["SITE_URL", "DOCS_BASE_PATH", "OPENAPI_SPEC", "API_INTERNAL_URL", "NEXT_PUBLIC_*", "NODE_ENV", "TZ", "LANG", "LC_ALL"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "!.next/cache/**", "out/**", "dist/**", "bin/**"]
+    },
+    "test": { "dependsOn": ["^build"], "outputs": [] },
+    "size": { "dependsOn": ["build"], "outputs": [] },
+    "lint": { "dependsOn": ["^build"], "outputs": [] },
+    "typecheck": { "dependsOn": ["^build"], "outputs": [] },
+    "format": { "cache": false },
+    "format:check": { "outputs": [] },
+    "gen": { "cache": false },
+    "test:e2e": { "cache": false },
+    "dev": {
+      "cache": false,
+      "persistent": true,
+      "env": ["NEXT_PUBLIC_APP_URL", "NEXT_PUBLIC_DOCS_URL", "NEXT_PUBLIC_WEB_URL"]
+    }
+  }
+}

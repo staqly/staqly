@@ -1,0 +1,528 @@
+// Package config reads settings from environment variables.
+package config
+
+import (
+	"errors"
+	"fmt"
+	"log/slog"
+	"net"
+	"net/netip"
+	"net/url"
+	"os"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/staqly/staqly/apps/api/internal/app"
+	"github.com/staqly/staqly/apps/api/internal/blob"
+	"github.com/staqly/staqly/apps/api/internal/logctx"
+)
+
+type Config struct {
+	Addr string
+	// DashboardAddr: also serve the embedded dashboard there ("" = no; the
+	// Docker setup runs it as its own container, `staqly serve` sets it).
+	DashboardAddr string
+	// AdminAddr: the admin panel listener (ADMIN_ADDR; "" = off; local and cloud mode).
+	AdminAddr string
+	// CORSOrigins: browser origins allowed to call the API with an API key
+	// (cloud mode only; default the docs playground).
+	CORSOrigins []string
+	DataDir     string
+	// DBPath: the SQLite file (local mode).
+	DBPath string
+	// DatabaseURL: the PostgreSQL database (cloud mode, required there; DATABASE_URL).
+	DatabaseURL  string
+	CookieSecure bool
+	TrustProxy   bool
+	LogLevel     slog.Level
+	LogFormat    string // json (default) | text
+	// SentryDSN: report error-level log lines (5xx, panics, worker
+	// failures) to Sentry; empty = off.
+	SentryDSN         string
+	SentryEnvironment string
+	// StorageCreateBucket: create a missing S3 bucket at startup (S3_CREATE_BUCKET; dev stacks).
+	StorageCreateBucket bool
+	// Obsolete: settings this version no longer reads but which are set (the server warns at start).
+	Obsolete []string
+	App      app.Config
+}
+
+// obsoleteVars: the keyless local mode's guard (peer, Host and Origin checks), gone since local mode
+// requires its access token for every request.
+// The AI_OPENAI_* settings went with the OpenAI provider (AI runs on fal.ai and Higgsfield: AI_FAL_KEY,
+// AI_HIGGSFIELD_API_KEY). Stock photos moved from Unsplash to Pixabay (PIXABAY_API_KEY).
+var obsoleteVars = []string{"LOCAL_TRUSTED_PEERS", "LOCAL_ALLOWED_HOSTS", "LOCAL_ALLOWED_ORIGINS",
+	"AI_OPENAI_API_KEY", "AI_OPENAI_FALLBACK_API_KEY", "AI_OPENAI_MODEL", "AI_OPENAI_BASE_URL", "UNSPLASH_ACCESS_KEY"}
+
+// aiConfig checks the AI keys' shape and reads the operations, the monthly limit and price overrides. A key is
+// never printed in an error.
+func aiConfig(ai *app.AIConfig) error {
+	if k := ai.FalKey; k != "" && (len(k) < 16 || strings.ContainsAny(k, " \t\r\n")) {
+		return errors.New("AI_FAL_KEY does not look like a fal.ai key (from fal.ai/dashboard/keys)")
+	}
+	if k := ai.HiggsfieldKey; k != "" {
+		id, secret, ok := strings.Cut(k, ":")
+		if !ok || id == "" || secret == "" || strings.ContainsAny(k, " \t\r\n") {
+			return errors.New("AI_HIGGSFIELD_API_KEY must be <key id>:<key secret> (from console.higgsfield.ai)")
+		}
+	}
+	var err error
+	if ai.Assistant, err = aiEndpoint("AI_ASSISTANT"); err != nil {
+		return err
+	}
+	if ai.AssistantFallback, err = aiEndpoint("AI_ASSISTANT_FALLBACK"); err != nil {
+		return err
+	}
+	if f := ai.AssistantFallback; f.Model != "" && f.BaseURL == "" && ai.FalKey == "" {
+		return errors.New("AI_ASSISTANT_FALLBACK_MODEL without AI_ASSISTANT_FALLBACK_BASE_URL runs on fal.ai's router: set AI_FAL_KEY")
+	}
+	ai.AssistantBrowserModel = strings.TrimSpace(os.Getenv("AI_ASSISTANT_BROWSER_MODEL"))
+	if strings.ContainsAny(ai.AssistantBrowserModel, " \t/\\") {
+		return errors.New("AI_ASSISTANT_BROWSER_MODEL must be a WebLLM model id (Qwen2.5-3B-Instruct-q4f16_1-MLC)")
+	}
+	if v := strings.TrimSpace(os.Getenv("AI_MEDIA_PROVIDERS")); v != "" {
+		ai.MediaProviders = []string{}
+		for _, name := range strings.Split(v, ",") {
+			name = strings.TrimSpace(name)
+			if (name != app.AIProviderFal && name != app.AIProviderHiggsfield) || slices.Contains(ai.MediaProviders, name) {
+				return errors.New("AI_MEDIA_PROVIDERS must list fal and/or higgsfield, each once, in the order to try them (higgsfield,fal)")
+			}
+			ai.MediaProviders = append(ai.MediaProviders, name)
+		}
+	}
+	for name, u := range map[string]string{"AI_FAL_BASE_URL": ai.FalBaseURL, "AI_HIGGSFIELD_BASE_URL": ai.HiggsfieldBaseURL} {
+		if p, err := url.Parse(u); err != nil || (p.Scheme != "https" && p.Scheme != "http") || p.Host == "" {
+			return fmt.Errorf("%s must be an http(s) URL", name)
+		}
+	}
+	if ai.Operations, err = app.ParseAIOperations(os.Getenv("AI_OPERATIONS")); err != nil {
+		return err
+	}
+	if ai.TokenPrices, err = app.LoadTokenPrices(strings.TrimSpace(os.Getenv("AI_PRICES_FILE"))); err != nil {
+		return err
+	}
+	if ai.Prices, err = app.ParseAIPrices(os.Getenv("AI_PRICES")); err != nil {
+		return err
+	}
+	return nil
+}
+
+// aiEndpoint reads an OpenAI-compatible model: <prefix>_MODEL, _BASE_URL, _API_KEY and _PRICES.
+func aiEndpoint(prefix string) (app.AIEndpoint, error) {
+	e := app.AIEndpoint{Model: strings.TrimSpace(os.Getenv(prefix + "_MODEL")),
+		BaseURL: strings.TrimRight(strings.TrimSpace(os.Getenv(prefix+"_BASE_URL")), "/"),
+		APIKey:  strings.TrimSpace(os.Getenv(prefix + "_API_KEY"))}
+	if e.BaseURL != "" {
+		if p, err := url.Parse(e.BaseURL); err != nil || (p.Scheme != "https" && p.Scheme != "http") || p.Host == "" {
+			return e, fmt.Errorf("%s_BASE_URL must be an http(s) URL, the base of an OpenAI-compatible API (https://api.openai.com/v1)", prefix)
+		}
+		if e.Model == "" {
+			return e, fmt.Errorf("%s_MODEL is required with %s_BASE_URL: the model id that endpoint knows", prefix, prefix)
+		}
+	}
+	if strings.ContainsAny(e.APIKey, " \t\r\n") {
+		return e, fmt.Errorf("%s_API_KEY has spaces or line breaks", prefix)
+	}
+	if v := strings.TrimSpace(os.Getenv(prefix + "_PRICES")); v != "" {
+		in, out, ok := strings.Cut(v, ",")
+		pin, err1 := strconv.ParseFloat(strings.TrimSpace(in), 64)
+		pout, err2 := strconv.ParseFloat(strings.TrimSpace(out), 64)
+		if !ok || err1 != nil || err2 != nil || pin < 0 || pout < 0 {
+			return e, fmt.Errorf("%s_PRICES must be <input>,<output> in USD per million tokens (0.30,2.50)", prefix)
+		}
+		e.Prices = &[2]float64{pin, pout}
+	}
+	return e, nil
+}
+
+func env(k, def string) string {
+	if v := os.Getenv(k); v != "" {
+		return v
+	}
+	return def
+}
+
+// Settings parsed as booleans, positive integers and durations, here or where they are read
+// (Service.Env, httpapi). checkEnv refuses a value they would not take, so none silently means its
+// default. Booleans are what strconv.ParseBool accepts (1/0, t/f, true/false in any case).
+var (
+	boolVars = []string{"AUTH_DEV_SIGNIN", "COOKIE_SECURE", "DASHBOARD_EXPOSED", "NOTIFY_ALLOW_LOOPBACK",
+		"NOTIFY_ALLOW_PRIVATE", "PROVIDER_DEFAULT_ENABLED", "RATE_LIMIT_DISABLED", "S3_CREATE_BUCKET", "S3_FORCE_PATH_STYLE", "STRIPE_MANAGED_PAYMENTS",
+		"TRUST_PROXY", "WEBHOOK_ALLOW_LOOPBACK", "WEBHOOK_ALLOW_PRIVATE"}
+	positiveIntVars = []string{"JOB_CONCURRENCY", "MAIL_SMTP_PORT", "MAX_UPLOAD_MB", "NOTIFY_CONCURRENCY", "NOTIFY_MAX_ATTEMPTS",
+		"LINKEDIN_DAILY_API_CALLS", "YOUTUBE_DAILY_UPLOADS", "NOTIFY_MAX_FAILS", "RATE_LIMIT_AUTH_BURST", "RATE_LIMIT_AUTH_PER_MINUTE", "RATE_LIMIT_BURST", "RATE_LIMIT_PER_MINUTE"}
+	positiveDurVars = []string{"NOTIFY_DISABLED_GRACE", "NOTIFY_POLL_INTERVAL", "NOTIFY_RETRY_BASE", "SESSION_TTL",
+		"WEBHOOK_LEASE", "WEBHOOK_RETRY_BASE", "WEBHOOK_RETRY_MAX"}
+	nonNegativeDurVars = []string{"PROCESSING_TIMEOUT"} // 0 = never
+)
+
+// checkEnv validates the settings above; unset or empty means the default.
+func checkEnv() error {
+	bools := slices.Clone(boolVars)
+	for _, kv := range os.Environ() { // each platform's PROVIDER_<ID>_ENABLED and PROVIDER_<ID>_MAINTENANCE
+		k, _, _ := strings.Cut(kv, "=")
+		if strings.HasPrefix(k, "PROVIDER_") && (strings.HasSuffix(k, "_ENABLED") || strings.HasSuffix(k, "_MAINTENANCE")) {
+			bools = append(bools, k)
+		}
+	}
+	for _, k := range bools {
+		if v := os.Getenv(k); v != "" {
+			if _, err := strconv.ParseBool(v); err != nil {
+				return fmt.Errorf("%s must be true or false (got %q)", k, v)
+			}
+		}
+	}
+	for _, k := range positiveIntVars {
+		if v := os.Getenv(k); v != "" {
+			if n, err := strconv.Atoi(v); err != nil || n <= 0 {
+				return fmt.Errorf("%s must be a whole number above 0 (got %q)", k, v)
+			}
+		}
+	}
+	for _, k := range append(positiveDurVars, nonNegativeDurVars...) {
+		v := os.Getenv(k)
+		if v == "" {
+			continue
+		}
+		d, err := time.ParseDuration(v) // "0" parses too
+		if err != nil || d < 0 || d == 0 && !slices.Contains(nonNegativeDurVars, k) {
+			return fmt.Errorf("%s must be a positive duration such as 90s, 15m or 720h (got %q)", k, v)
+		}
+	}
+	// A lease no longer than the longest attempt (timeout_ms is at most 60 s) would send a delivery still in flight again.
+	if v := os.Getenv("WEBHOOK_LEASE"); v != "" {
+		if d, _ := time.ParseDuration(v); d <= time.Minute {
+			return fmt.Errorf("WEBHOOK_LEASE must be longer than 1m, the longest delivery attempt (got %q)", v)
+		}
+	}
+	return nil
+}
+
+func envBool(k string, def bool) bool {
+	if v, err := strconv.ParseBool(os.Getenv(k)); err == nil {
+		return v
+	}
+	return def
+}
+
+// webhookConcurrency: deliveries in flight at once, 4 locally and 16 in the cloud.
+func webhookConcurrency(local bool) int {
+	if local {
+		return 4
+	}
+	return 16
+}
+
+func envDur(k string, def time.Duration) time.Duration {
+	if v, err := time.ParseDuration(os.Getenv(k)); err == nil {
+		return v
+	}
+	return def
+}
+
+// corsOrigins: CORS_ALLOWED_ORIGINS (comma/space separated, "none" to turn it
+// off), default https://docs.staqly.ai for the API playground. Local mode
+// never answers cross-origin browser calls.
+func corsOrigins(local bool) []string {
+	if local {
+		return nil
+	}
+	v := env("CORS_ALLOWED_ORIGINS", "https://docs.staqly.ai")
+	if v == "none" {
+		return nil
+	}
+	return list(v)
+}
+
+func list(v string) []string {
+	return strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ' ' })
+}
+
+// ParseMode normalizes STAQLY_MODE: empty means local; anything other than
+// local or cloud is an error (a typo must not silently pick a mode).
+func ParseMode(v string) (string, error) {
+	switch m := strings.ToLower(strings.TrimSpace(v)); m {
+	case "", app.ModeLocal:
+		return app.ModeLocal, nil
+	case app.ModeCloud:
+		return app.ModeCloud, nil
+	default:
+		return "", fmt.Errorf("STAQLY_MODE must be local or cloud (got %q)", v)
+	}
+}
+
+// Load reads the environment. Settings whose safe default differs by mode
+// (bind address, cookie Secure flag, private webhook targets) are resolved
+// here; invalid values refuse to start rather than fall back silently.
+// gaID is a GA4 measurement id (GOOGLE_ANALYTICS_ID).
+var gaID = regexp.MustCompile(`^G-[A-Z0-9]{4,20}$`)
+
+func Load() (Config, error) {
+	mode, err := ParseMode(os.Getenv("STAQLY_MODE"))
+	if err != nil {
+		return Config{}, err
+	}
+	local := mode == app.ModeLocal
+	if err := checkEnv(); err != nil {
+		return Config{}, err
+	}
+	if id := os.Getenv("GOOGLE_ANALYTICS_ID"); id != "" && !gaID.MatchString(id) {
+		return Config{}, errors.New("GOOGLE_ANALYTICS_ID must be a GA4 measurement id such as G-ABC123XYZ")
+	}
+	if k := os.Getenv("NOTIFY_SECRET_KEY"); k != "" && len(k) < app.MinNotifySecretKeyLen {
+		return Config{}, fmt.Errorf("NOTIFY_SECRET_KEY must be at least %d bytes (e.g. `openssl rand -hex 32`)", app.MinNotifySecretKeyLen)
+	}
+	// Local mode listens on loopback only by default (defense in depth: every request needs the access
+	// token anyway); the Docker image sets ADDR=:3333 and publishes the port on 127.0.0.1.
+	addr := ":3333"
+	if local {
+		addr = "127.0.0.1:3333"
+	}
+	dashAddr := os.Getenv("DASHBOARD_ADDR")
+	dashboardPort := "8080"
+	if _, p, err := net.SplitHostPort(dashAddr); err == nil {
+		dashboardPort = p
+	}
+	dataDir := env("DATA_DIR", "./data")
+	// Cloud mode runs on PostgreSQL and never falls back to SQLite; local mode is SQLite only.
+	databaseURL := os.Getenv("DATABASE_URL")
+	switch {
+	case !local && databaseURL == "":
+		return Config{}, fmt.Errorf("cloud mode needs DATABASE_URL (postgres://user:password@host:5432/staqly); " +
+			"an existing cloud database on SQLite moves over with `server import-sqlite <workspace.db>`")
+	case local && databaseURL != "":
+		return Config{}, fmt.Errorf("DATABASE_URL is for cloud mode (STAQLY_MODE=cloud); local mode keeps its data in SQLite (DATABASE_PATH)")
+	}
+	processingTimeout := envDur("PROCESSING_TIMEOUT", time.Hour)
+	secretKey, err := app.LoadSecretKey(dataDir, os.Getenv("STAQLY_SECRET_KEY"))
+	if err != nil {
+		return Config{}, err
+	}
+	c := Config{
+		Addr:              env("ADDR", addr),
+		DashboardAddr:     dashAddr,
+		AdminAddr:         strings.TrimSpace(os.Getenv("ADMIN_ADDR")),
+		CORSOrigins:       corsOrigins(local),
+		DataDir:           dataDir,
+		DBPath:            env("DATABASE_PATH", filepath.Join(dataDir, "workspace.db")),
+		DatabaseURL:       databaseURL,
+		CookieSecure:      envBool("COOKIE_SECURE", !local),
+		TrustProxy:        envBool("TRUST_PROXY", false),
+		SentryDSN:         os.Getenv("SENTRY_DSN"),
+		SentryEnvironment: env("SENTRY_ENVIRONMENT", "production"),
+		App: app.Config{
+			Mode:              mode,
+			GoogleAnalyticsID: os.Getenv("GOOGLE_ANALYTICS_ID"),
+			PostHog: app.PostHogConfig{Key: os.Getenv("POSTHOG_KEY"), Host: strings.TrimRight(env("POSTHOG_HOST", "https://eu.i.posthog.com"), "/"),
+				Environment: env("POSTHOG_ENVIRONMENT", "production")},
+			// AI tools on the server's own provider accounts (ai.go); aiConfig reads the rest.
+			AI: app.AIConfig{
+				FalKey:            strings.TrimSpace(os.Getenv("AI_FAL_KEY")),
+				FalBaseURL:        strings.TrimRight(env("AI_FAL_BASE_URL", "https://queue.fal.run"), "/"),
+				HiggsfieldKey:     strings.TrimSpace(os.Getenv("AI_HIGGSFIELD_API_KEY")),
+				HiggsfieldBaseURL: strings.TrimRight(env("AI_HIGGSFIELD_BASE_URL", "https://api.higgsfield.ai"), "/"),
+			},
+			Stock:              app.StockConfig{PixabayKey: strings.TrimSpace(os.Getenv("PIXABAY_API_KEY"))},
+			LocalTokenPath:     filepath.Join(dataDir, app.LocalTokenFile),
+			UploadDir:          env("UPLOAD_DIR", filepath.Join(dataDir, "uploads")),
+			SetupToken:         os.Getenv("SETUP_TOKEN"),
+			PublicURL:          env("PUBLIC_API_URL", "http://localhost:3333"),
+			PublicDashboardURL: os.Getenv("PUBLIC_DASHBOARD_URL"),
+			PublicMediaURL:     strings.TrimRight(os.Getenv("PUBLIC_MEDIA_URL"), "/"),
+			SecretKey:          secretKey,
+			AdminEmails:        adminEmails(os.Getenv("ADMIN_EMAILS")),
+			AdminEmail:         strings.ToLower(strings.TrimSpace(os.Getenv("ADMIN_EMAIL"))),
+			AdminEnabled:       strings.TrimSpace(os.Getenv("ADMIN_ADDR")) != "",
+			DashboardPort:      env("DASHBOARD_PORT", dashboardPort),
+			// A dashboard listening beyond loopback can't vouch for "this computer".
+			DashboardExposed: envBool("DASHBOARD_EXPOSED", dashAddr != "" && !LoopbackOnly(dashAddr)),
+			SessionTTL:       envDur("SESSION_TTL", 30*24*time.Hour),
+			// How long a target on your own automation waits for a result (0 = never); a collection can shorten it.
+			ProcessingTimeout:      processingTimeout,
+			ProcessingTimeoutNever: processingTimeout == 0,
+			Webhook: app.WebhookConfig{
+				// Local: n8n etc. usually live on the Docker network or LAN.
+				// Cloud: tenants must not reach the operator's private network.
+				AllowPrivate:  envBool("WEBHOOK_ALLOW_PRIVATE", local),
+				AllowLoopback: envBool("WEBHOOK_ALLOW_LOOPBACK", false),
+				RetryBase:     envDur("WEBHOOK_RETRY_BASE", 15*time.Second),
+				RetryMax:      envDur("WEBHOOK_RETRY_MAX", time.Hour),
+				Lease:         envDur("WEBHOOK_LEASE", 2*time.Minute),
+				// Deliveries in flight (2 per workspace): a cloud instance serves many workspaces, so a few
+				// with hanging receivers must not take every slot.
+				Concurrency: webhookConcurrency(local),
+			},
+			// Cloud billing; on when the key and the webhook secret are set. Prices are found by lookup key
+			// (staqly_<plan>_<month|year>); STRIPE_PRICE_<PLAN>_<MONTHLY|YEARLY> overrides one with a price id.
+			Billing: app.BillingConfig{
+				SecretKey:     os.Getenv("STRIPE_SECRET_KEY"),
+				WebhookSecret: os.Getenv("STRIPE_WEBHOOK_SECRET"),
+				Prices:        stripePrices(),
+				// Stripe Managed Payments: Stripe is the merchant of record (tax, invoices, disputes).
+				ManagedPayments: envBool("STRIPE_MANAGED_PAYMENTS", false),
+				// Tests only: a Stripe stand-in (e2e/ui/lib/stripe.ts). Refused with a live key below.
+				APIBase: strings.TrimRight(os.Getenv("STRIPE_API_BASE"), "/"),
+			},
+			// Only for test and demo servers: the plan a new workspace's trial gives (default starter).
+			TrialPlan: os.Getenv("TRIAL_PLAN"),
+		},
+	}
+	c.App.LinkedInDailyAPICalls, _ = strconv.ParseInt(env("LINKEDIN_DAILY_API_CALLS", "400"), 10, 64)
+	c.App.YouTubeDailyUploads, _ = strconv.ParseInt(env("YOUTUBE_DAILY_UPLOADS", "90"), 10, 64)
+	if mb, err := strconv.ParseInt(os.Getenv("MAX_UPLOAD_MB"), 10, 64); err == nil && mb > 0 {
+		c.App.MaxUploadBytes = mb << 20
+	}
+	if local {
+		c.App.LocalToken = strings.TrimSpace(os.Getenv("STAQLY_LOCAL_TOKEN"))
+		if t := c.App.LocalToken; t != "" && (!strings.HasPrefix(t, app.LocalTokenPrefix) || len(t) < 32) {
+			return Config{}, fmt.Errorf("STAQLY_LOCAL_TOKEN must start with "+app.LocalTokenPrefix+" and be at least 32 characters (or leave it unset: a token is made in DATA_DIR/%s)", app.LocalTokenFile)
+		}
+	}
+	for _, k := range obsoleteVars {
+		if os.Getenv(k) != "" {
+			c.Obsolete = append(c.Obsolete, k)
+		}
+	}
+	if !local {
+		c.App.DevSignIn = envBool("AUTH_DEV_SIGNIN", false)
+		c.App.EmailSignIn = (os.Getenv("MAIL_SMTP_HOST") != "" && os.Getenv("MAIL_FROM") != "") || c.App.DevSignIn
+		if c.App.Google, err = googleConfig(c.App.PublicDashboardURL, c.App.EmailSignIn); err != nil {
+			return Config{}, err
+		}
+	}
+	if err := aiConfig(&c.App.AI); err != nil {
+		return Config{}, err
+	}
+	if b := c.App.Billing; b.APIBase != "" {
+		// The secret key goes to this address with every call: a real account's key must never leave for it.
+		if u, err := url.Parse(b.APIBase); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+			return Config{}, errors.New("STRIPE_API_BASE must be an http(s) URL")
+		}
+		if !strings.HasPrefix(b.SecretKey, "sk_test_") {
+			return Config{}, errors.New("STRIPE_API_BASE is for tests: it needs a STRIPE_SECRET_KEY starting with sk_test_")
+		}
+	}
+	if c.App.Blob, err = storage(c.App.UploadDir, dataDir); err != nil {
+		return Config{}, err
+	}
+	c.StorageCreateBucket = envBool("S3_CREATE_BUCKET", false)
+	if c.LogLevel, err = logctx.ParseLevel(os.Getenv("LOG_LEVEL")); err != nil {
+		return Config{}, err
+	}
+	if c.LogFormat, err = logctx.ParseFormat(os.Getenv("LOG_FORMAT"), "json"); err != nil {
+		return Config{}, err
+	}
+	return c, nil
+}
+
+// LoopbackOnly reports whether addr (host:port) binds to loopback only.
+func LoopbackOnly(addr string) bool {
+	host := addr
+	if i := strings.LastIndex(addr, ":"); i >= 0 {
+		host = addr[:i]
+	}
+	host = strings.Trim(host, "[]")
+	if host == "localhost" {
+		return true
+	}
+	ip, err := netip.ParseAddr(host)
+	return err == nil && ip.IsLoopback()
+}
+
+// googleConfig: cloud mode signs people in with Google, with an email code, or both. With neither (no
+// Google client and no mail server) it refuses to start; AUTH_DEV_SIGNIN=true counts as email sign-in.
+func googleConfig(dashboardURL string, emailSignIn bool) (*app.GoogleConfig, error) {
+	id, secret := os.Getenv("GOOGLE_CLIENT_ID"), os.Getenv("GOOGLE_CLIENT_SECRET")
+	if id == "" && secret == "" {
+		if emailSignIn {
+			return nil, nil
+		}
+		return nil, app.ErrAccountsMisconfigured
+	}
+	if id == "" || secret == "" {
+		return nil, fmt.Errorf("sign-in with Google needs both GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET")
+	}
+	redirect := os.Getenv("GOOGLE_REDIRECT_URL")
+	if redirect == "" {
+		if dashboardURL == "" {
+			return nil, fmt.Errorf("sign-in with Google needs the dashboard's public address: set PUBLIC_DASHBOARD_URL (https://staqly.example.com) " +
+				"or GOOGLE_REDIRECT_URL (https://staqly.example.com/api/v1/auth/google/callback)")
+		}
+		redirect = strings.TrimRight(dashboardURL, "/") + "/api/v1/auth/google/callback"
+	}
+	if u, err := url.Parse(redirect); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+		return nil, fmt.Errorf("GOOGLE_REDIRECT_URL: %q is not an http(s) URL", redirect)
+	}
+	return &app.GoogleConfig{ClientID: id, ClientSecret: secret, RedirectURL: redirect,
+		Issuer: env("GOOGLE_ISSUER", "https://accounts.google.com")}, nil
+}
+
+// priceID: what a real Stripe price id looks like (price_ and letters/digits). A copied placeholder such as
+// "price_..." is not one.
+var priceID = regexp.MustCompile(`^price_[A-Za-z0-9]+$`)
+
+// stripePrices reads the optional STRIPE_PRICE_<PLAN>_<MONTHLY|YEARLY> overrides, keyed "<plan>_<month|year>".
+// A value that isn't a price id (a placeholder left from .env.example) is ignored with a warning, so the
+// price is found by its lookup key.
+func stripePrices() map[string]string {
+	out := map[string]string{}
+	for _, p := range app.Plans {
+		for env, iv := range map[string]string{"MONTHLY": app.IntervalMonth, "YEARLY": app.IntervalYear} {
+			name := "STRIPE_PRICE_" + strings.ToUpper(p.ID) + "_" + env
+			id := strings.TrimSpace(os.Getenv(name))
+			switch {
+			case id == "":
+			case !priceID.MatchString(id):
+				slog.Warn("config: ignoring "+name+": not a Stripe price id (leave it unset to use lookup keys)", "value", id)
+			default:
+				out[p.ID+"_"+iv] = id
+			}
+		}
+	}
+	return out
+}
+
+// storage picks where media files live: STORAGE_DRIVER=disk (default, UPLOAD_DIR) or s3 (any S3-compatible
+// bucket: AWS S3, Cloudflare R2, MaxIOFS...). s3 with missing settings refuses to start.
+func storage(uploadDir, dataDir string) (blob.Store, error) {
+	switch d := env("STORAGE_DRIVER", "disk"); d {
+	case "disk":
+		return blob.NewDisk(uploadDir), nil
+	case "s3":
+		cfg := blob.S3Config{
+			Endpoint:     os.Getenv("S3_ENDPOINT"),
+			Region:       os.Getenv("S3_REGION"),
+			Bucket:       os.Getenv("S3_BUCKET"),
+			AccessKey:    os.Getenv("S3_ACCESS_KEY_ID"),
+			SecretKey:    os.Getenv("S3_SECRET_ACCESS_KEY"),
+			PathStyle:    envBool("S3_FORCE_PATH_STYLE", false),
+			Prefix:       os.Getenv("S3_PREFIX"),
+			PublicURL:    os.Getenv("S3_PUBLIC_URL"),
+			TempDir:      filepath.Join(dataDir, "tmp"),
+			SignEndpoint: os.Getenv("S3_SIGN_ENDPOINT"),
+		}
+		if missing := cfg.Missing(); len(missing) > 0 {
+			sort.Strings(missing)
+			return nil, fmt.Errorf("STORAGE_DRIVER=s3 needs %s (https://docs.staqly.ai/self-hosting/storage)", strings.Join(missing, ", "))
+		}
+		return blob.NewS3(cfg)
+	default:
+		return nil, fmt.Errorf("STORAGE_DRIVER must be disk or s3 (got %q)", d)
+	}
+}
+
+// adminEmails splits ADMIN_EMAILS: trimmed, lowercase, empties dropped.
+func adminEmails(v string) []string {
+	var out []string
+	for _, e := range strings.Split(v, ",") {
+		if e = strings.ToLower(strings.TrimSpace(e)); e != "" {
+			out = append(out, e)
+		}
+	}
+	return out
+}

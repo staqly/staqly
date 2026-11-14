@@ -1,0 +1,166 @@
+.PHONY: help dashboard release up dev dev-tunnel site channels dev-down stripe-secret pull open down logs ps build test check test-e2e lint-openapi lint-workflows security gen backup restore seed mcp-stdio recovery-key token connect workspaces set-plan
+
+help: ## Show targets
+	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n", $$1, $$2}'
+
+up: ## compose.yml alone with the released image (contributors; users run the image with docker run, see the docs), opens the dashboard signed in
+	@docker compose pull --quiet staqly || { echo "Released image not available, building locally"; docker compose build; }
+	docker compose up -d --wait
+	@$(MAKE) --no-print-directory open
+
+DEV := docker compose -f compose.yml -f compose.dev.yml -f compose.channels.yml
+
+dev: ## Build from this checkout with the dev stack (debug logs, mailpit :8025, Stripe CLI with COMPOSE_PROFILES=stripe)
+	$(DEV) up -d --build --wait
+	@$(MAKE) --no-print-directory open
+
+# The dev stack on public https addresses through a named Cloudflare tunnel, for platforms that call back over
+# https and download media themselves (Instagram). TUNNEL is a cloudflared config whose ingress serves
+# localhost:8080 (the dashboard) and localhost:$MAXIOFS_PORT (MaxIOFS, default 9000) on two hostnames (a third for localhost:3333 sets PUBLIC_API_URL); media links are signed for the
+# second, while staqly itself reads MaxIOFS on the compose network (through Cloudflare, HEAD requests for .png/.jpg
+# keys sometimes arrive as GET and fail their signature). The dashboard is public meanwhile, so the dev sign-in (readable email codes) is off.
+# For this run the session cookie is Secure and the visitor's address comes from the X-Forwarded-For entry Cloudflare
+# adds (COOKIE_SECURE, TRUST_PROXY): without it every visitor would share one address and one sign-in rate limit.
+TUNNEL_FILE = $(shell echo $(TUNNEL))
+TUNNEL_LOG := $(patsubst %/,%,$(or $(TMPDIR),/tmp))/staqly-tunnel.log
+
+dev-tunnel: ## Dev stack behind a named Cloudflare tunnel (Instagram tests): make dev-tunnel TUNNEL=~/.cloudflared/<name>.yml
+	@test -n "$(TUNNEL)" || { echo "Usage: make dev-tunnel TUNNEL=~/.cloudflared/<name>.yml (hostnames for localhost:8080 and localhost:MAXIOFS_PORT)"; exit 1; }
+	@app=$$(awk '/hostname:/{h=$$NF} /service:.*:8080/{print h; exit}' $(TUNNEL_FILE)); \
+	port=$$( (grep -E '^MAXIOFS_PORT=' .env 2>/dev/null || echo MAXIOFS_PORT=9000) | tail -1 | cut -d= -f2); \
+	media=$$(awk -v p=":$$port" '/hostname:/{h=$$NF} /service:/ && index($$0, p){print h; exit}' $(TUNNEL_FILE)); \
+	test -n "$$app" -a -n "$$media" || { echo "$(TUNNEL) needs one hostname for localhost:8080 and one for localhost:$$port (MAXIOFS_PORT)"; exit 1; }; \
+	api=$$(awk '/hostname:/{h=$$NF} /service:.*:3333/{print h; exit}' $(TUNNEL_FILE)); \
+	pkill -f "cloudflared tunnel --no-autoupdate --config $(TUNNEL_FILE)" || true; \
+	nohup cloudflared tunnel --no-autoupdate --config $(TUNNEL_FILE) run > $(TUNNEL_LOG) 2>&1 & \
+	for i in $$(seq 30); do [ "$$(curl -s -o /dev/null -w '%{http_code}' https://$$media)" != 530 ] && break; sleep 1; done; \
+	PUBLIC_DASHBOARD_URL=https://$$app PUBLIC_API_URL=$${api:+https://$$api} AUTH_DEV_SIGNIN=false COOKIE_SECURE=true TRUST_PROXY=true S3_SIGN_ENDPOINT=https://$$media $(DEV) up -d --build --wait && \
+	echo "Dashboard: https://$$app  API: $${api:+https://$$api}  Media: https://$$media  Tunnel log: $(TUNNEL_LOG)  (make dev-down stops both)"
+
+pull: ## Download the released image (STAQLY_VERSION=v0.2.0 for a specific release)
+	docker compose pull staqly
+
+
+site: ## Landing page (http://localhost:8070) and docs (http://localhost:8090) from this checkout, linked to each other and the dev dashboard; Ctrl+C stops them
+	NEXT_PUBLIC_APP_URL=http://localhost:8080 NEXT_PUBLIC_DOCS_URL=http://localhost:8090 NEXT_PUBLIC_WEB_URL=http://localhost:8070 \
+		pnpm turbo run dev --filter=@staqly/web --filter=@staqly/docs
+
+channels: ## Self-hosted platforms for channels in the dev stack (compose.channels.yml: listmonk) and how to connect them
+	$(DEV) --profile listmonk up -d --wait listmonk
+	@scripts/dev-listmonk.sh
+
+dev-down: ## Stop the dev stack (data volume kept) and a dev-tunnel
+	$(DEV) --profile stripe --profile listmonk down
+	@pkill -f "cloudflared tunnel --no-autoupdate --config" || true
+
+stripe-secret: ## Print the webhook signing secret of the Stripe CLI (put it in .env as STRIPE_WEBHOOK_SECRET)
+	@$(DEV) run --rm --no-deps stripe listen --print-secret
+
+# Tags the pushed origin/main (never local work), only after a full nightly/manual CI run went green; the tag triggers
+# .github/workflows/release.yml (binaries + ghcr.io/staqly/staqly:VERSION and :latest).
+release: ## Tag origin/main as VERSION (make release VERSION=v0.2.0), also while its CI still runs; release.yml publishes once it passes
+	@echo "$(VERSION)" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$$' || { echo "usage: make release VERSION=v<major>.<minor>.<patch>" >&2; exit 2; }
+	@git fetch --quiet --tags origin main
+	@! git rev-parse -q --verify "refs/tags/$(VERSION)" >/dev/null || { echo "tag $(VERSION) already exists" >&2; exit 1; }
+	@ci=$$(gh run list --workflow ci.yml --branch main --commit "$$(git rev-parse origin/main)" --event push --json status,conclusion --jq '.[0] | if . == null then "" elif .status != "completed" then "running" else .conclusion end' 2>/dev/null); \
+	  case "$$ci" in success|running) ;; *) echo "CI of the push of $$(git rev-parse --short origin/main) to main is '$${ci:-not found}'; not releasing." >&2; exit 1;; esac
+	git tag -a "$(VERSION)" origin/main -m "release $(VERSION)"
+	git push --quiet origin "$(VERSION)"
+
+open: ## Open the dashboard in this computer's browser, signed in with the access token (local mode)
+	@port=$$(docker port staqly 8080/tcp 2>/dev/null | head -n1 | sed 's/.*://'); \
+	  if tok=$$(docker exec staqly server token 2>/dev/null); then link="http://localhost:$${port:-8080}/#token=$$tok"; \
+	  else link=$$(docker exec staqly server connect-link 2>/dev/null); fi; \
+	  [ -n "$$link" ] && echo "Dashboard: $$link" && \
+	  if command -v open >/dev/null; then open "$$link"; elif command -v xdg-open >/dev/null; then xdg-open "$$link"; fi; true
+
+down: ## Stop containers (data volume is kept)
+	docker compose down
+
+logs: ## Follow logs
+	docker compose logs -f
+
+ps: ## Show container status
+	docker compose ps
+
+build: ## Build the image from this checkout
+	docker compose build
+
+dashboard: ## Build the dashboard and admin panel (static exports) into apps/api/web and apps/api/admin for the Go binaries
+	pnpm install --frozen-lockfile
+	pnpm turbo run build --filter=@staqly/platform
+	find apps/api/web -mindepth 1 ! -name .gitkeep -delete
+	cp -R apps/platform/out/. apps/api/web/
+	pnpm turbo run build --filter=@staqly/admin
+	find apps/api/admin -mindepth 1 ! -name .gitkeep -delete
+	cp -R apps/admin/out/. apps/api/admin/
+
+check: ## Formatting, lint, types, unit tests and bundle size of every package (the same as pnpm check)
+	pnpm check
+
+test: ## Unit and integration tests of every package (turbo)
+	pnpm turbo run test
+
+test-%: ## Tests of one package: test-api, test-cli, test-dashboard, test-sdk, test-sdk-python
+	pnpm turbo run test --filter=@staqly/$*
+
+test-e2e: ## Full Docker end-to-end test (compose.e2e.yml + e2e/)
+	pnpm turbo run test:e2e
+
+lint-openapi: ## Validate the OpenAPI document
+	pnpm --filter @staqly/api run lint:openapi
+
+ACTIONLINT_IMAGE := rhysd/actionlint:1.7.12
+ZIZMOR_IMAGE := ghcr.io/zizmorcore/zizmor:1.32.0@sha256:3014cc8f68f663935f69b3c3e0e41f5ce102b268d97db13db0f62208747f860d
+
+lint-workflows: ## Lint the GitHub Actions workflows (actionlint + shellcheck, zizmor for security; in Docker, CI runs the same)
+	docker run --rm -v "$(CURDIR):/repo" -w /repo $(ACTIONLINT_IMAGE) -color
+	docker run --rm -v "$(CURDIR):/repo" -w /repo $(ZIZMOR_IMAGE) --offline --no-progress .
+
+# Static security analysis of our own code (CodeQL needs GitHub Advanced Security in a private repository).
+# gosec leaves out the rules that flag any name or variable: G104 (unchecked errors: a lint), G101
+# (credential-like names; Semgrep's p/secrets checks values), G204/G304 (any variable command or path; the
+# taint rules G702/G703 follow request input into them). Findings are fixed or suppressed on their line:
+# `// #nosec G### -- reason`, `nosemgrep: rule-id -- reason`.
+# CI passes GOSEC=<the checksummed release binary> (ci.yml, same version) instead of building it every run.
+GOSEC ?= go run github.com/securego/gosec/v2/cmd/gosec@v2.30.0
+GOSEC_EXCLUDE := G104,G101,G204,G304
+SEMGREP_IMAGE := semgrep/semgrep:1.182.0@sha256:4a34048c04fef049f71665047f074cffb00cc3d89482f965a5cd151d589237af
+SEMGREP_RULES := p/javascript p/typescript p/react p/nextjs p/python p/secrets
+
+security: ## Static security scan: gosec (Go), Semgrep (TS/JS, Python; secrets in every file); CI runs the same
+	cd apps/api && $(GOSEC) -quiet -exclude=$(GOSEC_EXCLUDE) ./...
+	cd apps/cli && $(GOSEC) -quiet -exclude=$(GOSEC_EXCLUDE) ./...
+	docker run --rm -u "$$(id -u):$$(id -g)" -e HOME=/tmp -v "$(CURDIR):/src" -w /src $(SEMGREP_IMAGE) \
+		semgrep scan --metrics=off --error --quiet $(addprefix --config ,$(SEMGREP_RULES))
+
+gen: ## Regenerate sqlc queries, dashboard API types and the TypeScript SDK schema
+	pnpm turbo run gen
+
+backup: ## Back up the stopped Compose install (container staqly, volume staqly_staqly-data) into ./backups/<timestamp>
+	./scripts/backup.sh
+
+restore: ## Restore the Compose install: make restore BACKUP=backups/<timestamp>
+	./scripts/restore.sh $(BACKUP)
+
+seed: ## Load demo data into the running instance
+	./scripts/seed.sh
+
+mcp-stdio: ## Run the MCP STDIO server in the staqly container
+	docker exec -i staqly mcp-stdio
+
+recovery-key: ## Print a new recovery key: make recovery-key [WS=ws_...]
+	docker exec staqly server recovery-key $(WS)
+
+token: ## Print local mode's access token (agents, SDKs, curl): make token [ROTATE=1] (a new one; every browser is signed out)
+	@docker exec staqly server token $(if $(ROTATE),--rotate)
+
+connect: ## Print a one-time sign-in link for another browser (a phone): make connect [WS={WORKSPACE_ID}]
+	@docker exec staqly server connect-link $(WS)
+
+workspaces: ## List workspaces and their plans (cloud mode)
+	docker exec staqly server workspaces
+
+set-plan: ## Change a workspace's plan by hand (cloud mode): make set-plan WS=ws_... PLAN=pro
+	docker exec staqly server set-plan $(WS) $(PLAN)
+

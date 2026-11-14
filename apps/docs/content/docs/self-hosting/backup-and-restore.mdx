@@ -1,0 +1,417 @@
+---
+title: Backup & restore
+description: Back up your staqly database, files and keys together, and restore them when you need to.
+---
+
+Everything staqly knows (posts, channels, schedules, history, settings and uploaded files) lives in
+one data directory. Back it up regularly, and always before an [upgrade](/self-hosting/upgrades).
+Database-only backups can run while staqly keeps serving requests. A full backup of the
+database, files and keys requires stopping every writer until all copies finish; restore also
+requires a stop.
+
+With `STORAGE_DRIVER=s3` the uploaded files are in a bucket, not in the data directory: back the
+bucket up with your provider's tools. See [Media storage](/self-hosting/storage#backups).
+
+## What to back up
+
+| File | What it is |
+|---|---|
+| `workspace.db` | The SQLite database, the job queue included (scheduled posts and pending retries). Use the backup command, or copy it only from a cleanly stopped install after checking the WAL. |
+| `uploads/` | Uploaded media, one folder per workspace (`uploads/workspaces/<id>/`). Their `thumbs/` folders are a cache staqly rebuilds; you can skip them. |
+| `secret.key` | Decrypts channel credentials and developer app secrets. Only there if you haven't set `STAQLY_SECRET_KEY`. **Without it every channel has to be reconnected.** |
+| `notify_secret.key` | Decrypts alert secrets. Only there if you haven't set `NOTIFY_SECRET_KEY`. **Without it every alert's token, webhook URL or password has to be entered again.** |
+| `access_token` | The Community Edition's [access token](/local-vs-cloud#the-access-token). Optional: without it a restored install makes a new token and your agents need the new one. |
+
+They are in `~/.local/share/staqly` with the binary (or your `--data` directory), and in the
+`staqly-data` volume at `/data` with the [Docker image](/self-hosting/docker).
+
+<Callout type="warn" title="Never copy workspace.db from a running server">
+Under WAL the latest commits may live only in `workspace.db-wal`, and a file copy taken
+mid-write can be torn. Use the backup command below.
+</Callout>
+
+## Back up
+
+**Settings → Backups** in the dashboard shows the backup commands for your install (binary or
+Docker), ready to copy. On [Staqly Cloud](#staqly-cloud-workspaces) it lists the workspace's backups instead.
+
+<Tabs items={["Binary", "Docker"]}>
+<Tab value="Binary">
+
+`staqly serve backup` copies the **database only**, so archive the uploads next to it.
+Stop staqly before taking a full backup and leave it stopped until the files and keys are
+archived. For a service, use `staqly service stop`; for a foreground process, stop it with Ctrl-C.
+
+<Steps>
+<Step>
+
+**Back up the database**
+
+```bash
+umask 077
+mkdir -p ~/staqly-backups/2026-10-13
+staqly serve backup ~/staqly-backups/2026-10-13/workspace.db
+```
+
+The database-only command also works while `staqly serve` is running, but a full backup needs
+the server stopped throughout both steps. Add `--data` (e.g.
+`staqly serve --data ~/staqly-data backup ~/staqly-backups/2026-10-13/workspace.db`) if you don't use
+the default data directory.
+
+</Step>
+<Step>
+
+**Archive uploads and the keys**
+
+```bash
+cd ~/.local/share/staqly
+tar czf ~/staqly-backups/2026-10-13/uploads.tar.gz --exclude='uploads/workspaces/*/thumbs' \
+  uploads $(ls secret.key notify_secret.key access_token 2>/dev/null)
+```
+
+Take the database first and the uploads second (see
+[Why the order matters](#why-the-order-matters)).
+After both succeed, start staqly again (`staqly service start` for a service).
+
+</Step>
+<Step>
+
+**Store it off the machine**
+
+Copy the backup folder somewhere else, encrypted.
+
+</Step>
+</Steps>
+
+</Tab>
+<Tab value="Docker">
+
+These commands use the container `staqly` from [Run with Docker](/self-hosting/docker); no
+checkout is needed.
+
+<Steps>
+<Step>
+
+**Back up the database**
+
+```bash
+umask 077
+mkdir -p ~/staqly-backups/2026-10-13 && cd ~/staqly-backups/2026-10-13
+docker stop -t 30 staqly
+docker run --rm --volumes-from staqly:ro alpine sh -ec \
+  '[ ! -s /data/workspace.db-wal ] || { echo "Nonempty WAL: start and stop staqly cleanly first" >&2; exit 1; }' && \
+  docker cp staqly:/data/workspace.db ./staqly-backup.db
+chmod 600 ./staqly-backup.db
+```
+
+Keep every container using this data volume stopped through both steps. The WAL check refuses
+a database left with uncheckpointed writes after a forced stop: start staqly, let it recover,
+then stop it cleanly before trying again. Copy the database only after that check succeeds.
+
+</Step>
+<Step>
+
+**Archive the uploads**
+
+```bash
+docker run --rm --volumes-from staqly:ro -v "$PWD":/out \
+  -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" alpine sh -ec '
+    umask 077
+    cd /data
+    files="uploads"
+    for key in secret.key notify_secret.key access_token; do
+      if [ -f "$key" ]; then files="$files $key"; fi
+    done
+    tar czf /out/staqly-uploads.tar.gz --exclude="uploads/workspaces/*/thumbs" $files
+    chown "$HOST_UID:$HOST_GID" /out/staqly-uploads.tar.gz
+  '
+docker start staqly
+```
+
+A throwaway container mounts the stopped install's data volume read-only and archives
+`uploads/`, the key files and the local access token when present. Keep any keys supplied
+through environment variables separately, encrypted. Start staqly again after the archive
+finishes. See [Why the order matters](#why-the-order-matters).
+
+</Step>
+<Step>
+
+**Store it off the machine**
+
+Copy the backup folder somewhere else, encrypted.
+
+</Step>
+</Steps>
+
+</Tab>
+</Tabs>
+
+## Restore
+
+Restoring **replaces all current data** with the backup.
+
+<Tabs items={["Binary", "Docker"]}>
+<Tab value="Binary">
+
+<Steps>
+<Step>
+
+**Stop staqly**
+
+Press Ctrl-C. If it runs in the background, stop it with `staqly service stop`.
+
+</Step>
+<Step>
+
+**Put the backup in place**
+
+```bash
+set -e
+umask 077
+cd ~/.local/share/staqly
+
+# 1. Unpack the whole backup next to the current data. A damaged backup stops here.
+rm -rf .restore-new && mkdir .restore-new
+cp ~/staqly-backups/2026-10-13/workspace.db .restore-new/workspace.db
+tar xzf ~/staqly-backups/2026-10-13/uploads.tar.gz -C .restore-new
+
+# 2. Set the current data aside, then move the backup into place.
+mkdir .restore-old
+for f in workspace.db workspace.db-wal workspace.db-shm uploads; do
+  [ ! -e "$f" ] || mv "$f" .restore-old/
+done
+for f in secret.key notify_secret.key access_token; do
+  [ ! -e "$f" ] || cp -p "$f" .restore-old/
+done
+mv .restore-new/* .
+rmdir .restore-new
+chmod 600 workspace.db
+```
+
+Run it as one script: `set -e` stops at the first failure. If step 1 fails (a damaged or incomplete
+backup), nothing was changed: start staqly again and use another backup. The `-wal` and `-shm`
+files are set aside with the old database: stale WAL files must not be replayed onto the restored
+one.
+
+</Step>
+<Step>
+
+**Start staqly again**
+
+```bash
+staqly serve            # or `staqly service start` for the background service
+```
+
+Pending migrations run automatically on start. The data you replaced is in `.restore-old`:
+once the restored install works, delete it (`rm -rf ~/.local/share/staqly/.restore-old`). To go
+back instead, stop staqly and move those files over the restored ones.
+
+</Step>
+</Steps>
+
+</Tab>
+<Tab value="Docker">
+
+<Steps>
+<Step>
+
+**Stop staqly**
+
+```bash
+docker stop staqly
+```
+
+</Step>
+<Step>
+
+**Put the backup in place**
+
+From the backup folder (with `staqly-backup.db` and `staqly-uploads.tar.gz`):
+
+```bash
+cd ~/staqly-backups/2026-10-13
+docker run --rm --volumes-from staqly -v "$PWD":/backup:ro alpine sh -ec '
+  umask 077
+  cd /data
+
+  # 1. Unpack the whole backup next to the current data. A damaged backup stops here.
+  rm -rf .restore-new && mkdir .restore-new
+  cp /backup/staqly-backup.db .restore-new/workspace.db
+  tar xzf /backup/staqly-uploads.tar.gz -C .restore-new
+
+  # 2. Set the current data aside, then move the backup into place.
+  mkdir .restore-old
+  for f in workspace.db workspace.db-wal workspace.db-shm uploads; do
+    [ ! -e "$f" ] || mv "$f" .restore-old/
+  done
+  for f in secret.key notify_secret.key access_token; do
+    [ ! -e "$f" ] || cp -p "$f" .restore-old/
+  done
+  mv .restore-new/* .
+  rmdir .restore-new
+  chown -R 10001:10001 /data
+  chmod 600 workspace.db'
+```
+
+A throwaway container first unpacks the whole backup into `.restore-new` in the data volume. If
+that fails (a damaged or incomplete backup), nothing was changed: `docker start staqly` and use
+another backup. Only then it sets the old database aside with its `-wal` and `-shm` files (stale
+WAL files must not be replayed onto the restored database) and the old `uploads/`, moves the
+backup into place together with `secret.key`, `notify_secret.key` and `access_token` (the uploads
+archive carries them) and gives everything back to the staqly user (uid 10001).
+
+</Step>
+<Step>
+
+**Start staqly again**
+
+```bash
+docker start staqly
+```
+
+Pending migrations run automatically on start. The data you replaced is in `/data/.restore-old`
+in the volume: once the restored install works, delete it
+(`docker run --rm --volumes-from staqly alpine rm -rf /data/.restore-old`). To go back instead, stop staqly and move those
+files over the restored ones.
+
+</Step>
+</Steps>
+
+</Tab>
+</Tabs>
+
+Sessions and API keys come back as they were at backup time. The access token is the
+`access_token` file: restored with it, agents keep working; otherwise the install keeps the token
+it has (or makes a new one).
+
+## Schedule backups
+
+Run the backup from cron (or a systemd timer), then ship the backups off the machine.
+
+<Tabs items={["Binary", "Docker"]}>
+<Tab value="Binary">
+
+For an install managed by `staqly service install`, save the steps as a script. It stops the
+service for the full backup and starts it again on exit:
+
+```bash title="~/.local/bin/staqly-backup"
+#!/bin/sh
+set -eu
+umask 077
+out="$HOME/staqly-backups/$(date -u +%Y%m%dT%H%M%SZ)"
+mkdir -p "$out"
+"$HOME/.local/bin/staqly" service stop
+trap '"$HOME/.local/bin/staqly" service start' EXIT
+"$HOME/.local/bin/staqly" serve backup "$out/workspace.db"
+cd "$HOME/.local/share/staqly"
+tar czf "$out/uploads.tar.gz" --exclude='uploads/workspaces/*/thumbs' uploads $(ls secret.key notify_secret.key access_token 2>/dev/null)
+```
+
+Make it executable (`chmod +x ~/.local/bin/staqly-backup`) and run it every night at 3:00:
+
+```text title="crontab -e"
+0 3 * * *  $HOME/.local/bin/staqly-backup >> $HOME/staqly-backups/backup.log 2>&1
+```
+
+</Tab>
+<Tab value="Docker">
+
+Save the backup steps as a script:
+
+```bash title="~/.local/bin/staqly-backup"
+#!/bin/sh
+set -eu
+umask 077
+out="$HOME/staqly-backups/$(date -u +%Y%m%dT%H%M%SZ)"
+mkdir -p "$out"
+docker stop -t 30 staqly >/dev/null
+trap 'docker start staqly >/dev/null' EXIT
+docker run --rm --volumes-from staqly:ro -v "$out":/out \
+  -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" alpine sh -ec '
+    umask 077
+    cd /data
+    if [ -s workspace.db-wal ]; then
+      echo "Nonempty WAL: start and stop staqly cleanly first" >&2
+      exit 1
+    fi
+    cp workspace.db /out/staqly-backup.db
+    files="uploads"
+    for key in secret.key notify_secret.key access_token; do
+      if [ -f "$key" ]; then files="$files $key"; fi
+    done
+    tar czf /out/staqly-uploads.tar.gz --exclude="uploads/workspaces/*/thumbs" $files
+    chown "$HOST_UID:$HOST_GID" /out/staqly-backup.db /out/staqly-uploads.tar.gz
+  '
+```
+
+Make it executable (`chmod +x ~/.local/bin/staqly-backup`) and run it every night at 3:00:
+
+```text title="crontab -e"
+0 3 * * *  $HOME/.local/bin/staqly-backup >> $HOME/staqly-backups/backup.log 2>&1
+```
+
+</Tab>
+</Tabs>
+
+## How backups work
+
+### A consistent snapshot
+
+The database-only command (`staqly serve backup` or `server backup` in the container) runs
+SQLite's **`VACUUM INTO`**: a transactionally consistent, compacted database copy that can run
+while the server serves requests. It does not snapshot the uploaded files or keys.
+
+### Why the order matters
+
+Media files are written before their database rows and are never modified in place, but
+permanent deletion and retention remove them. With a running server, a file can disappear
+after the database snapshot and before the uploads archive, leaving a restored row without
+its file. Stop all staqly processes and workers before taking the database and files together;
+keep them stopped until both copies finish. A cleanly stopped Docker install can copy its
+database directly after checking that no nonempty SQLite WAL remains.
+
+### Backups contain secrets
+
+The database holds webhook signing secrets (in plain text — they are needed to sign), hashed
+API keys and sessions, sealed channel credentials and encrypted alert secrets; `secret.key` and
+`notify_secret.key` decrypt them. Run the backup commands with `umask 077` as above, so only you can read the
+copies, and keep it that way: store backups encrypted, and don't commit them or put them on
+shared drives.
+
+## Staqly Cloud workspaces
+
+On [Staqly Cloud](/local-vs-cloud#staqly-cloud), workspace admins on a paid plan get backups in **Settings → Backups**:
+**Create backup** builds a ZIP of the whole workspace (collections, posts, channels without
+credentials, schedules, events and media), and each ready backup has a **Download** button for 24 hours. These are the
+workspace exports from [Data export & privacy](/self-hosting/data-export)
+(`POST /v1/workspace/export`, `GET /v1/workspace/exports`). On the Starter plan the tab points
+to the data-only export in **Settings → Data & privacy** (no media files) instead.
+These downloads are your own copy of the workspace.
+
+## From a checkout (Compose)
+
+If you develop staqly from the repository with [Docker Compose](/self-hosting/docker-compose),
+Stop the Compose install first (`docker stop -t 30 staqly`). `make backup` (`scripts/backup.sh`)
+refuses a running container, another running container on its volume, a nonempty WAL, or an
+install with `STORAGE_DRIVER=s3` (the default of `make dev`: its media is in the bucket, which the
+script cannot copy).
+It copies the database and archives the files against the Compose volume
+`staqly_staqly-data` and writes `backups/<timestamp>/workspace.db` and `uploads.tar.gz`
+(uploads without the `thumbs` cache, plus `secret.key`, `notify_secret.key` and `access_token` if
+present), all owner-only. Start the container again afterwards (`docker start staqly`).
+`make restore BACKUP=backups/<timestamp>` (`scripts/restore.sh`) restores one; it asks for
+confirmation (`FORCE=1` skips it). It reads the whole backup before it changes anything: a
+`workspace.db` that is not a SQLite database, is cut off, or fails SQLite's integrity check (run
+when `sqlite3` is installed on your machine) is refused before the container is stopped. It puts
+the previous data back if the swap fails, so a damaged backup leaves the install as it was and
+running. If the swap was interrupted and the previous data is still in `/data/.restore-old`, the
+container is left stopped and the script says so: move those files back before you start it.
+`STAQLY_CONTAINER` and `STAQLY_VOLUME` select another container or volume.
+
+## Next steps
+
+<Cards>
+  <Card title="Upgrades" href="/self-hosting/upgrades">Back up, then install a new version.</Card>
+  <Card title="Data export & privacy" href="/self-hosting/data-export">Export a workspace as a ZIP instead of a full backup.</Card>
+  <Card title="Operator CLI" href="/self-hosting/operator-cli">All server commands.</Card>
+</Cards>

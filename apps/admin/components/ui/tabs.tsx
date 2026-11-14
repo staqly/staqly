@@ -1,0 +1,79 @@
+'use client'
+
+import { cva, type VariantProps } from 'class-variance-authority'
+import { cn } from 'cn'
+import { Tabs as TabsPrimitive } from 'radix-ui'
+import * as React from 'react'
+
+function Tabs({ className, orientation = 'horizontal', ...props }: React.ComponentProps<typeof TabsPrimitive.Root>) {
+  return (
+    <TabsPrimitive.Root
+      data-slot="tabs"
+      data-orientation={orientation}
+      className={cn('group/tabs flex gap-2 data-horizontal:flex-col', className)}
+      {...props}
+    />
+  )
+}
+
+const tabsListVariants = cva(
+  'group/tabs-list inline-flex w-fit items-center justify-center rounded-lg p-[3px] text-muted-foreground group-data-horizontal/tabs:min-h-8 group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col data-[variant=line]:rounded-none',
+  {
+    variants: {
+      variant: {
+        default: 'bg-muted dark:bg-white/[0.06]',
+        line: 'gap-1 bg-transparent',
+      },
+    },
+    defaultVariants: {
+      variant: 'default',
+    },
+  },
+)
+
+function TabsList({
+  className,
+  variant = 'default',
+  ...props
+}: React.ComponentProps<typeof TabsPrimitive.List> & VariantProps<typeof tabsListVariants>) {
+  return (
+    <TabsPrimitive.List
+      data-slot="tabs-list"
+      data-variant={variant}
+      className={cn(tabsListVariants({ variant }), className)}
+      {...props}
+    />
+  )
+}
+
+function TabsTrigger({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
+  return (
+    <TabsPrimitive.Trigger
+      data-slot="tabs-trigger"
+      className={cn(
+        "relative inline-flex flex-1 items-center justify-center gap-1.5 self-stretch rounded-md border border-transparent px-1.5 py-0.5 pointer-coarse:min-h-10 pointer-coarse:px-3 text-sm font-medium whitespace-nowrap text-foreground/70 transition-all group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 has-data-[icon=inline-end]:pr-1 has-data-[icon=inline-start]:pl-1 dark:text-muted-foreground dark:hover:text-foreground group-data-[variant=default]/tabs-list:data-active:shadow-sm group-data-[variant=line]/tabs-list:data-active:shadow-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        'group-data-[variant=line]/tabs-list:bg-transparent group-data-[variant=line]/tabs-list:data-active:bg-transparent dark:group-data-[variant=line]/tabs-list:data-active:border-transparent dark:group-data-[variant=line]/tabs-list:data-active:bg-transparent',
+        // Dark: a clearly lighter pill on the muted list (not near-black, not faint); light: the white pill as before.
+        'data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:text-foreground/75 dark:hover:text-foreground dark:data-active:border-foreground/25 dark:data-active:bg-foreground/20 dark:data-active:text-foreground dark:data-active:shadow-none',
+        'after:absolute after:bg-foreground after:opacity-0 after:transition-opacity group-data-horizontal/tabs:after:inset-x-0 group-data-horizontal/tabs:after:bottom-0 group-data-horizontal/tabs:after:h-0.5 group-data-vertical/tabs:after:inset-y-0 group-data-vertical/tabs:after:-right-1 group-data-vertical/tabs:after:w-0.5 group-data-[variant=line]/tabs-list:data-active:after:opacity-100',
+        // Line tabs (sections of a page or drawer): muted until active, then full colour, semibold and underlined on
+        // the bar's bottom edge, so the current section reads at a glance in both themes.
+        'group-data-[variant=line]/tabs-list:text-muted-foreground group-data-[variant=line]/tabs-list:data-active:text-foreground dark:group-data-[variant=line]/tabs-list:text-muted-foreground dark:group-data-[variant=line]/tabs-list:data-active:text-foreground group-data-[variant=line]/tabs-list:after:rounded-full group-data-[variant=line]/tabs-list:focus-visible:ring-offset-0',
+        className,
+      )}
+      {...props}
+    />
+  )
+}
+
+function TabsContent({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Content>) {
+  return (
+    <TabsPrimitive.Content
+      data-slot="tabs-content"
+      className={cn('flex-1 text-sm outline-none', className)}
+      {...props}
+    />
+  )
+}
+
+export { Tabs, TabsList, TabsTrigger, TabsContent, tabsListVariants }

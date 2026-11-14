@@ -1,0 +1,361 @@
+import { act, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+import { AiPanel, discardAiRun, expandPlacement } from '@/components/design/ai-panel'
+import { newDesign, newImage, newText, type Page } from '@/components/design/doc'
+import type { PanelCtx } from '@/components/design/panels'
+import * as raster from '@/components/design/raster'
+import type { DesignStore } from '@/components/design/store'
+import { allowanceNote, madeBy } from '@/lib/ai'
+import { api as client, type AIJob, type AIOperation, type AIStatus } from '@/lib/api'
+
+import { mockApi, renderWithProviders } from './utils'
+
+function op(id: AIOperation['id'], over: Partial<AIOperation> = {}): AIOperation {
+  const image = id !== 'generate' && id !== 'text_to_video'
+
+  return {
+    id,
+    kind: id.endsWith('video') ? 'video' : 'image',
+    prompt: 'required',
+    image,
+    mask: id === 'erase' || id === 'inpaint',
+    provider: 'fal',
+    model: 'fal-ai/x',
+    fallback: '',
+    ...over,
+  }
+}
+
+function status(ops: AIOperation[], used = 0): AIStatus {
+  return {
+    configured: ops.length > 0,
+    providers: ops.length ? ['fal'] : [],
+    operations: ops,
+    usage: { period: '2026-10', used_usd: used, limit_usd: 10 },
+  }
+}
+
+function job(over: Partial<AIJob> = {}): AIJob {
+  return {
+    id: 'aij_1',
+    operation: 'generate',
+    kind: 'image',
+    status: 'queued',
+    provider: 'fal',
+    model: 'fal-ai/flux/schnell',
+    fallback_from: '',
+    error: null,
+    result: null,
+    media_id: '',
+    estimated_cost_usd: 0.006,
+    duration_ms: 0,
+    created_at: '2026-10-26T10:00:00Z',
+    finished_at: '',
+    ...over,
+  }
+}
+
+/** A panel context over a 1080 x 1350 page; add and updatePage are spies (nothing changes the page by itself). */
+function ctxWith(page: Page, selected: string[] = []) {
+  const design = newDesign(1080, 1350)
+
+  design.pages[0] = page
+
+  const add = vi.fn<PanelCtx['add']>()
+  const updatePage = vi.fn<PanelCtx['updatePage']>()
+  const ctx = {
+    store: { design } as unknown as DesignStore,
+    page,
+    updatePage,
+    selected,
+    onSelect: vi.fn<PanelCtx['onSelect']>(),
+    add,
+    showPage: vi.fn<PanelCtx['showPage']>(),
+  } as PanelCtx
+
+  return { ctx, add, updatePage }
+}
+
+afterEach(() => {
+  discardAiRun()
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+})
+
+describe('the AI panel', () => {
+  it('says what is selected and offers the on-device photo tools when the server offers no picture tools', async () => {
+    mockApi({ 'GET /v1/ai': status([op('text_to_video')]) })
+    const d = newDesign()
+    const pic = newImage(d, '/api/v1/media/med_1', 800, 600, { mediaId: 'med_1' })
+    const page = { ...d.pages[0]!, elements: [pic] }
+    const first = renderWithProviders(<AiPanel ctx={ctxWith(page).ctx} />)
+
+    expect(await screen.findByText('Nothing selected')).toBeInTheDocument()
+    expect(screen.getByText('Making pictures is not offered on this server.')).toBeInTheDocument()
+    first.unmount()
+
+    renderWithProviders(<AiPanel ctx={ctxWith(page, [pic.id]).ctx} />)
+
+    expect(await screen.findByText('Photo selected')).toBeInTheDocument()
+    // Removing an object and upscaling still work, on this device; server tools it lacks are not listed.
+    expect(screen.getByRole('radio', { name: /Remove an object.*On this device/ })).toBeEnabled()
+    expect(screen.getByRole('radio', { name: /Upscale.*On this device/ })).toBeEnabled()
+    expect(screen.queryByRole('radio', { name: /Change it/ })).not.toBeInTheDocument()
+  })
+
+  it('says when the allowance is used up and keeps only the on-device tools', async () => {
+    mockApi({ 'GET /v1/ai': status([op('generate'), op('erase', { prompt: 'none' }), op('upscale')], 10) })
+    const d = newDesign()
+    const pic = newImage(d, '/api/v1/media/med_1', 800, 600, { mediaId: 'med_1' })
+    const { ctx } = ctxWith({ ...d.pages[0]!, elements: [pic] }, [pic.id])
+
+    renderWithProviders(<AiPanel ctx={ctx} />)
+
+    expect(await screen.findByText(/AI allowance is used up; it starts again on/)).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /New picture/ })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('radio', { name: /Remove an object.*On this device/ }))
+    expect(screen.getByRole('button', { name: 'Paint the area' })).toBeInTheDocument()
+  })
+
+  it('in a drawer over a post, an on-device tool opens the photo in the full editor in a new tab', async () => {
+    mockApi({ 'GET /v1/ai': status([]) })
+    const d = newDesign()
+    const pic = newImage(d, '/api/v1/media/med_1', 800, 600, { mediaId: 'med_1' })
+    const { ctx } = ctxWith({ ...d.pages[0]!, elements: [pic] }, [pic.id])
+
+    renderWithProviders(<AiPanel ctx={{ ...ctx, inDrawer: true }} />)
+
+    await userEvent.click(await screen.findByRole('radio', { name: /Upscale.*On this device/ }))
+    const open = screen.getByRole('link', { name: 'Open in the full editor' })
+
+    expect(open).toHaveAttribute('href', '/media/edit?ids=med_1')
+    expect(open).toHaveAttribute('target', '_blank')
+    expect(screen.queryByRole('button', { name: /Upscale/ })).not.toBeInTheDocument()
+  })
+
+  it('shows the tools for what is selected: a new picture with nothing, the photo tools with a photo', async () => {
+    mockApi({ 'GET /v1/ai': status([op('generate'), op('edit'), op('erase', { prompt: 'none' }), op('upscale')]) })
+    const d = newDesign(1080, 1350)
+    const pic = newImage(d, '/api/v1/media/med_1', 800, 600, { mediaId: 'med_1' })
+    const page = { ...d.pages[0]!, elements: [pic] }
+
+    const first = renderWithProviders(<AiPanel ctx={ctxWith(page).ctx} />)
+
+    // Nothing selected: the new picture form is open, no photo tools.
+    expect(await screen.findByRole('button', { name: 'Make the picture' })).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /Remove an object/ })).not.toBeInTheDocument()
+    first.unmount()
+
+    renderWithProviders(<AiPanel ctx={ctxWith(page, [pic.id]).ctx} />)
+
+    expect(await screen.findByRole('radio', { name: 'Change it' })).not.toBeChecked()
+    // Edit an area is not offered here, so it is not listed; making a new picture stays at hand below.
+    expect(screen.queryByRole('radio', { name: /Edit an area/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'New picture' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('radio', { name: 'Remove an object' }))
+    // Painting comes first; it has no prompt.
+    expect(screen.getByRole('button', { name: 'Paint the area' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove it' })).toBeDisabled()
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+  })
+
+  it('rewrites a selected text, and changes the page only when the new text is used', async () => {
+    const api = mockApi({
+      'GET /v1/ai': status([op('assistant', { kind: 'text' })]),
+      'POST /v1/ai/text': { text: 'Less is more.' },
+    })
+    const d = newDesign()
+    const text = { ...newText(d, 'heading'), text: 'Simplicity is the ultimate sophistication.' }
+    const { ctx, updatePage } = ctxWith({ ...d.pages[0]!, elements: [text] }, [text.id])
+
+    renderWithProviders(<AiPanel ctx={ctx} />)
+
+    expect(await screen.findByText('Text selected')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Shorter' }))
+    expect(await screen.findByText('Less is more.')).toBeInTheDocument()
+    expect(api.find('POST', '/v1/ai/text')[0]!.body).toMatchObject({
+      text: 'Simplicity is the ultimate sophistication.',
+    })
+    expect(updatePage).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Use it' }))
+    expect(updatePage).toHaveBeenCalledTimes(1)
+  })
+
+  it('runs a request, previews the result and changes the page only when it is kept', async () => {
+    let polls = 0
+    const api = mockApi({
+      'GET /v1/ai': status([op('generate')]),
+      'POST /v1/ai/jobs': { status: 202, body: job() },
+      'GET /v1/ai/jobs/aij_1': () => {
+        polls++
+
+        return polls < 2
+          ? job({ status: 'running' })
+          : job({
+              status: 'succeeded',
+              provider: 'higgsfield',
+              fallback_from: 'fal',
+              result: { mime_type: 'image/png', width: 1024, height: 1280 },
+            })
+      },
+      'POST /v1/ai/jobs/aij_1/accept': {
+        status: 201,
+        body: { id: 'med_ai', width: 1024, height: 1280, mime_type: 'image/png', original_name: 'AI generate.png' },
+      },
+    })
+    const { ctx, add, updatePage } = ctxWith(newDesign(1080, 1350).pages[0]!)
+
+    renderWithProviders(<AiPanel ctx={ctx} />)
+    await userEvent.type(await screen.findByRole('textbox'), 'A lighthouse at dawn')
+    await userEvent.click(screen.getByRole('button', { name: 'Make the picture' }))
+
+    const sent = api.find('POST', '/v1/ai/jobs')[0]!
+    const form = sent.body as FormData
+
+    expect(form.get('operation')).toBe('generate')
+    expect(form.get('prompt')).toBe('A lighthouse at dawn')
+    // The page's shape (4:5), about 1.3 megapixels.
+    expect([form.get('width'), form.get('height')]).toEqual(['1075', '1344'])
+    expect(sent.headers['Idempotency-Key']).toMatch(/^[0-9a-f]{32}$/)
+
+    expect(await screen.findByRole('img', { name: 'What AI made' }, { timeout: 5000 })).toHaveAttribute(
+      'src',
+      '/api/v1/ai/jobs/aij_1/result',
+    )
+    expect(screen.getByText('Made by Higgsfield; fal.ai was not available.')).toBeInTheDocument()
+    expect(add).not.toHaveBeenCalled()
+    expect(updatePage).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Use it' }))
+    await waitFor(() => expect(add).toHaveBeenCalledTimes(1))
+    expect(add.mock.calls[0]![0]).toMatchObject({ type: 'image', mediaId: 'med_ai', src: '/api/v1/media/med_ai' })
+    expect(api.find('DELETE', '/v1/ai/jobs/aij_1')).toHaveLength(0)
+  })
+
+  it('discards a running request: the job is cancelled and the page stays as it was', async () => {
+    const api = mockApi({
+      'GET /v1/ai': status([op('generate')]),
+      'POST /v1/ai/jobs': { status: 202, body: job() },
+      'GET /v1/ai/jobs/aij_1': job({ status: 'running' }),
+      'DELETE /v1/ai/jobs/aij_1': { status: 204 },
+    })
+    const { ctx, add, updatePage } = ctxWith(newDesign().pages[0]!)
+
+    renderWithProviders(<AiPanel ctx={ctx} />)
+    await userEvent.type(await screen.findByRole('textbox'), 'A cat')
+    await userEvent.click(screen.getByRole('button', { name: 'Make the picture' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
+
+    await waitFor(() => expect(api.find('DELETE', '/v1/ai/jobs/aij_1')).toHaveLength(1))
+    expect(await screen.findByRole('button', { name: 'Make the picture' })).toBeInTheDocument()
+    expect(add).not.toHaveBeenCalled()
+    expect(updatePage).not.toHaveBeenCalled()
+  })
+
+  it('discards a job whose creation finishes after the editor was closed', async () => {
+    mockApi({ 'GET /v1/ai': status([op('generate')]) })
+    let finish!: (value: AIJob) => void
+    const start = vi.spyOn(client, 'startAiJob').mockImplementation(() => new Promise((resolve) => (finish = resolve)))
+    const discard = vi.spyOn(client, 'discardAiJob').mockResolvedValue(undefined)
+    const { ctx, add } = ctxWith(newDesign().pages[0]!)
+    const view = renderWithProviders(<AiPanel ctx={ctx} />)
+
+    await userEvent.type(await screen.findByRole('textbox'), 'A lighthouse')
+    await userEvent.click(screen.getByRole('button', { name: 'Make the picture' }))
+    await waitFor(() => expect(start).toHaveBeenCalledTimes(1))
+    act(discardAiRun)
+    view.unmount()
+    await act(async () => finish(job()))
+
+    await waitFor(() => expect(discard).toHaveBeenCalledWith('aij_1'))
+    expect(add).not.toHaveBeenCalled()
+  })
+
+  it('does not start a paid job if the editor closes while its picture is being prepared', async () => {
+    mockApi({
+      'GET /v1/ai': status([op('edit')]),
+      'GET /v1/media/med_1': {},
+    })
+    let finish!: (blob: Blob) => void
+    const prepare = vi.spyOn(raster, 'downscale').mockImplementation(() => new Promise((resolve) => (finish = resolve)))
+
+    vi.stubGlobal(
+      'createImageBitmap',
+      vi
+        .fn<typeof createImageBitmap>()
+        .mockResolvedValue({ width: 800, height: 600, close: vi.fn<() => void>() } as ImageBitmap),
+    )
+
+    const start = vi.spyOn(client, 'startAiJob').mockResolvedValue(job())
+    const d = newDesign()
+    const pic = newImage(d, '/api/v1/media/med_1', 800, 600, { mediaId: 'med_1' })
+    const { ctx, add } = ctxWith({ ...d.pages[0]!, elements: [pic] }, [pic.id])
+    const view = renderWithProviders(<AiPanel ctx={ctx} />)
+
+    await userEvent.click(await screen.findByRole('radio', { name: 'Change it' }))
+    await userEvent.type(screen.getByRole('textbox'), 'Make the sky blue')
+    await userEvent.click(screen.getByRole('button', { name: 'Change the photo' }))
+    await waitFor(() => expect(prepare).toHaveBeenCalledTimes(1))
+    act(discardAiRun)
+    view.unmount()
+    await act(async () => finish(new Blob(['image'], { type: 'image/png' })))
+
+    expect(start).not.toHaveBeenCalled()
+    expect(add).not.toHaveBeenCalled()
+  })
+
+  it('shows why a request failed and offers to try again', async () => {
+    mockApi({
+      'GET /v1/ai': status([op('generate')]),
+      'POST /v1/ai/jobs': { status: 202, body: job() },
+      'GET /v1/ai/jobs/aij_1': job({
+        status: 'failed',
+        error: { code: 'ai_refused', message: 'fal.ai refused the request: prompt was flagged' },
+      }),
+    })
+    const { ctx } = ctxWith(newDesign().pages[0]!)
+
+    renderWithProviders(<AiPanel ctx={ctx} />)
+    await userEvent.type(await screen.findByRole('textbox'), 'Something')
+    await userEvent.click(screen.getByRole('button', { name: 'Make the picture' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('prompt was flagged')
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+  })
+})
+
+describe('AI helpers', () => {
+  it('grows a picture to the page shape, centred, within 4096 px', () => {
+    expect(expandPlacement(1000, 1000, { width: 1920, height: 1080 })).toEqual({
+      x: 389,
+      y: 0,
+      w: 1000,
+      h: 1000,
+      cw: 1778,
+      ch: 1000,
+    })
+    expect(expandPlacement(1000, 1250, { width: 1080, height: 1350 })).toEqual({
+      x: 250,
+      y: 313,
+      w: 1000,
+      h: 1250,
+      cw: 1500,
+      ch: 1875,
+    })
+    const big = expandPlacement(4000, 1000, { width: 1, height: 1 })
+
+    expect(Math.max(big.cw, big.ch)).toBeLessThanOrEqual(4096)
+    expect(big.cw).toBe(big.ch)
+  })
+
+  it('names who made a result and the allowance once half is used', () => {
+    expect(madeBy({ provider: 'fal', fallback_from: '' } as AIJob)).toBe('Made by fal.ai.')
+    expect(allowanceNote(status([op('generate')], 2))).toBe('')
+    expect(allowanceNote(status([op('generate')], 7.5))).toBe(
+      "This workspace has used 75% of this month's AI allowance.",
+    )
+  })
+})

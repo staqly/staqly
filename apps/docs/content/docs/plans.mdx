@@ -1,0 +1,373 @@
+---
+title: Plans & limits
+description: Starter, Plus, Pro and Business on Staqly Cloud, priced per user, monthly or yearly (20 % off or more), the 7-day free trial, and what happens when a workspace hits a limit.
+---
+
+Plans set how much each workspace may use on [Staqly Cloud](/local-vs-cloud#staqly-cloud): channels, storage, posts
+to X and so on. Prices are in euros, **include VAT** (Stripe works out the VAT part from your billing
+address; a business with a valid EU VAT ID under reverse charge pays the same amount) and are
+**per user**: every member of the workspace is a seat billed at the plan's price,
+whatever their role. All usage limits are shared by the workspace and do not multiply with seats. Collections and schedules have no count limit; created posts do. If you run
+**Staqly Community Edition** on your own computer or server (`staqly serve` or the Docker image),
+plans don't apply to you: its plan is **Community Edition**, with no limits (usage is still shown
+for information).
+
+## Plan comparison
+
+| | Starter | Plus | Pro | Business |
+|---|---|---|---|---|
+| Per user, billed monthly | €15 / month | €29 / month | €59 / month | €99 / month |
+| Per user, billed yearly | €12 / month (€144 a year) | €23 / month (€276) | €47 / month (€564) | €79 / month (€948) |
+| New posts per month | 300 | 1,500 | 5,000 | 15,000 |
+| Collections and schedules | Unlimited | Unlimited | Unlimited | Unlimited |
+| Connected channels | 5 | 15 | 40 | 100 |
+| Posts to X per month | 50 | 100 | 250 | 500 |
+| Posts to LinkedIn per month | 100 | 300 | 600 | 900 |
+| LinkedIn posts with a video per month | 5 | 15 | 30 | 60 |
+| People | Per user | Per user | Per user | Per user |
+| Alerts | 3 | 10 | 25 | 50 |
+| Webhooks | 3 | 10 | 25 | 50 |
+| Active API keys | 2 | 10 | 25 | 50 |
+| Storage | 2 GB | 10 GB | 30 GB | 100 GB |
+| Max file size | 25 MB | 100 MB | 100 MB | 100 MB |
+| Workspace data export (ZIP of collections, posts, channels, schedules, events) | Yes, without files | Yes, with files | Yes, with files | Yes, with files |
+| Backups and activity log export | No | Yes | Yes | Yes |
+| Shared AI allowance per month (estimated provider cost, USD) | $1 | $2 | $5 | $10 |
+| Fresh X statistics reads per month | 100 | 200 | 500 | 1,000 |
+
+Signed webhooks, MCP, the REST API, the SDKs and the full history are on every plan, and so are the AI tools (the
+[assistant](/dashboard/assistant) and the [design editor's AI](/dashboard/design-editor#ai-tools)): the assistant, image and video generation share the monthly AI allowance above. New requests reserve their
+estimated cost before running and stop with `402 ai_limit_reached` if there is not enough left. The allowance
+renews on the 1st in UTC, does not roll over, and does not trigger automatic overage charges. Manual editing
+continues to work. Every
+plan can [export its data](/self-hosting/data-export) (**Settings → Data & privacy**): on
+Starter the workspace ZIP is data only (`includes_media: false`), with media files listed by id,
+name and type but not included. The ZIP with the media files, backups (**Settings → Backups**)
+and the activity log export come with Plus and above: on Starter
+`GET /v1/events/export` answers `402 plan_limit_exceeded` (limit `data_export`). The Community Edition
+always has everything.
+
+The compare page on staqly.ai lists the same limits side by side.
+
+## The Starter trial
+
+1. A new workspace has no plan yet and doesn't open until it has one: the last welcome step offers
+   **Starter free for 7 days**. The trial is Stripe's: you add a card at checkout, nothing is
+   charged until it ends, and you can cancel anytime before. Only Starter has a trial; Plus, Pro and
+   Business are paid from the first day.
+2. Each workspace gets the trial **once**, and one workspace per owner at a time: a workspace you
+   add while another of yours is still in its trial is charged on the day you choose its plan (the plan
+   picker says so under the button, before Stripe opens). `GET /v1/billing` reports it as `trial`:
+   `available`, `used`, `other_workspace` or `none`.
+3. A workspace you add (**New workspace**) opens on the welcome steps, the plan last; cancelling Stripe's
+   checkout brings you back to that step.
+4. **One free trial per card and per person.** A trial that ends without ever being paid for
+   (cancelled, or the first charge never went through) is remembered for 180 days by the card it was
+   started with and by who its channels belong to.
+   - **The card.** A card that such a trial used gets no new trial: when it is already on file, the
+     plan picker says *No free trial: this card was already used for one* before Stripe opens, and
+     Checkout charges the plan at once. When the card only shows up in Checkout, the trial ends as soon
+     as Stripe reports it and the card is charged then; the dashboard says why (*No free trial for
+     this card*), and `GET /v1/billing` reports `trial_revoked: "card"`.
+   - **The accounts.** Connecting channels never charges anyone. A personal account (an X or Bluesky
+     account, a LinkedIn member, a YouTube channel...) counts as itself. A space many people share
+     (a Slack workspace, a Facebook or LinkedIn Page, a Google Business location) counts as the person
+     who connected it, never the space, so colleagues are never taken for one another; a space connected
+     with no person behind it (a Discord or Telegram bot, a webhook) doesn't count. When a workspace in
+     its trial connects (or reconnects) one personal account of such a trial, or the people behind two of
+     its shared spaces, its trial is **paused**: posts aren't published and new channels can't be
+     connected (**402 `trial_already_used`**), while drafts and settings stay. The dashboard explains it
+     with **Start paid plan now** (the trial ends and the card is charged:
+     `POST /v1/billing/start-paid-plan`) and **This isn't right? Contact us**; `GET /v1/billing` reports
+     `trial_review: "channels"`.
+   - Removing and adding an account again in the same workspace, brand-new accounts, a workspace
+     that paid, and a trial still running in another workspace are never affected. Once a workspace
+     has paid, its accounts and card no longer count against anyone. Staqly support can lift a pause
+     that was a mistake.
+   - What is kept: a keyed hash (HMAC with the server's secret key) of each personal account's platform
+     id (or its handle where the platform gives no id), of the platform id of the person who connected
+     a shared space, and of Stripe's card fingerprint, each with its kind, the workspace and when its
+     trial ended unpaid. Never the ids, the handles or anything about the card itself. Installs without
+     billing, and local mode, keep none of it.
+5. Choose a plan any time: **Settings → Plan & usage → Choose a plan**, the user menu, or
+   `POST /v1/billing/checkout` with the plan and interval.
+   - Leaving the trial for another plan ends the trial at once: the new plan is charged right away and
+     starts when the payment goes through. If it doesn't, nothing changes (the trial keeps running) and
+     the dashboard opens a payment page that says why, with the next step on Stripe's own pages:
+     - **Your bank asks you to confirm the payment** (3-D Secure, common for European cards): **Confirm
+       the payment** opens Stripe's invoice page in a new tab, where you confirm it with your bank and pay.
+       Come back to the dashboard tab and the new plan shows once Stripe has the payment.
+     - **The card was declined** (for example not enough funds, or an expired card): **Update your card**
+       opens the billing portal; then choose the plan again. You can also pay on Stripe's invoice page with
+       another card.
+
+     Card details and confirmations never go through staqly. Over the API, `POST /v1/billing/checkout`
+     answers `402 payment_failed` with `details.reason` (`authentication_required`, `card_declined`,
+     `insufficient_funds`, ...) and `details.pay_url` (Stripe's invoice page), and
+     `GET /v1/billing/pending-payment` reads the same later.
+   - **Promotion codes:** Stripe Checkout has its own code box for a first plan. To switch plans with a
+     code, or apply one to the plan you have, use **Have a promotion code?** on the plan page (or send
+     `promotion_code` to `POST /v1/billing/checkout`). The code is checked with Stripe before it is applied
+     (`POST /v1/billing/promotion-code`; codes are case sensitive: `SPRING20`, not `spring20`), and the plans it covers show their discounted price; a code that is
+     unknown, used up or made for other plans is refused with the reason. One discount at a time: while
+     the subscription has one, the plan page shows it with its end date instead of **Have a promotion code?**,
+     and another code (or the same one again) is refused until it ends.
+6. Until a plan starts, and after one ends (a trial cancelled for want of a card, an unpaid renewal,
+   a cancellation, a trial ended for its card whose charge didn't go through), the workspace is **locked**:
+   - the dashboard shows only that, with **Go to billing** (Settings → Plan & usage) for owners and
+     admins; paying there opens it again as soon as Stripe confirms;
+   - the API still answers reads (`GET` requests, read-only MCP tools, the workspace export);
+   - every change (new posts, publishing, channels, schedules and so on) answers
+     **402 `plan_expired`**, and schedules stop running;
+   - your data stays; paying for a plan lifts the suspension when Stripe confirms.
+
+The same applies when a paid period ends unpaid. `GET /v1/workspace/usage` shows
+`plan_expires_at` (end of the trial or paid period, `null` = no end) and `suspended`.
+
+There is no free plan. Workspaces created before the plans above were on a free plan; they are
+now an ended Starter period (read-only) until a plan is paid for.
+
+## Welcome emails
+
+Staqly Cloud emails a workspace's **owners** twice, once each:
+
+| Email | When | What it says |
+|---|---|---|
+| *Your free trial has started* | The Starter trial starts (about a minute after Stripe's checkout). | The plan, the day the trial ends, that the card is charged then unless you cancel before, and three first steps: connect a channel, write your first post, look at the calendar. |
+| *You are on Starter* (or Plus, Pro, Business) | The workspace pays for a plan the first time: at the end of the trial, or at once without one. | The plan, monthly or yearly billing, and where invoices, the card and the plan are (**Settings → Plan & usage**). The first steps too when the workspace had no trial. |
+
+Nothing else sends them again: not a change of plan, a renewal, a failed payment put right, or a new
+subscription after a cancellation (Stripe sends the receipts). A trial that ends within its first minute (**Start
+paid plan now**, a card that gets no trial) is announced by the second email only. A plan the operator sets
+(`server set-plan`, the admin panel) sends none. These emails are about your account, so they have no
+unsubscribe link; what you choose under [Your notifications](/dashboard/notifications) doesn't change them.
+
+On a cloud server without Stripe the server-side trial sends the first email when the workspace is created; it
+says the workspace becomes read-only when the trial ends. A server without mail (`MAIL_SMTP_HOST`, `MAIL_FROM`)
+sends neither, and Staqly Community Edition has no plans and sends none.
+
+## Payment emails
+
+When a payment fails, Staqly Cloud emails the workspace's **owners**:
+
+| Email | When | What it says |
+|---|---|---|
+| *The payment for Starter failed* (or Plus, Pro, Business) | Stripe could not charge the card and the subscription becomes `past_due`. Once per failure: not again while Stripe retries, again if a later payment fails. | That Stripe tries the card again over the next days, the day the workspace becomes read-only if it stays unpaid, and a link to **Settings → Plan & usage** to update the card. |
+| *Your staqly workspace is read-only* | Stripe ended the subscription because the payment kept failing. Once per subscription. | That the posts and settings stay, and how to open the workspace again: choose a plan in **Settings → Plan & usage**. |
+
+A payment that goes through after all sends nothing (Stripe sends the receipt), and neither does a
+subscription you cancel yourself. A renewal that isn't paid does not extend the plan: the workspace stays
+open for 3 days of grace after the paid period, then it is read-only until the invoice is paid.
+`GET /v1/billing` says so: `subscription_status` is `past_due` while Stripe retries, and `ended_for` is
+`payment_failed` once the subscription ended for it. Like the welcome emails, these have no unsubscribe
+link and need mail on the server.
+
+When the payment that failed is for an extra seat or an add-on charged in the middle of a paid period,
+the plan itself is paid: the email and Plan & usage say that, and name no day, because Stripe ends the
+subscription (and the workspace becomes read-only) when its retries of that invoice run out.
+`GET /v1/billing/details` tells the two apart in `subscription.past_due_for` (`renewal` or `extra`).
+
+When Stripe ends a subscription because a payment kept failing, staqly voids the subscription's other
+open invoices, so a card added later is not charged for a plan that has ended.
+
+## How limits are counted
+
+- Limits apply **per workspace**: every API key of a workspace shares its plan.
+- **Seats** are the workspace's members, whatever their role, and each one is billed at the plan's
+  price per user (a team of three on Plus pays 3 × €29 = €87 a month). An invitation adds a seat
+  once it is accepted and the rest of the period is charged at once; removing someone (or someone
+  leaving) takes it away and the unused rest is credited at once (see [credits](#credits)), so a person pays for
+  exactly the days they were a member; during the Starter trial seats are free and the first charge uses the
+  seats at the trial's end. No plan caps the seats. Agents and API keys are not seats and cost
+  nothing.
+- **Posts to X** are counted because X charges for every post sent through its API: each post and
+  thread reply needs one unit (a post with a live link needs 14; X channels remove
+  or defang links by default). The plan's posts reset every month. **Extra posts** come in
+  one-time bundles, **Settings → Plan & usage → Buy more** (next to X): 200 for €10, 1,000 for €40 or
+  4,000 for €150, incl. VAT. They are used after the included ones and expire at the end of the
+  billing period (bought during the free trial: a month after the purchase). When both run out, publishing to X answers **402 `x_posts_exhausted`** (and a
+  post scheduled for later fails with the reason). `GET /v1/billing/x-posts` shows what's left.
+- **Posts to LinkedIn** are counted because LinkedIn limits how many posts and video uploads all
+  of staqly's workspaces together can send each day, so each plan includes a fair share: every post
+  to a LinkedIn profile or Page needs one unit, and a post with a video also counts on
+  the video allowance. Comments don't count. The allowances reset every month and can't be bought
+  on top. When one is used up, publishing to LinkedIn answers **402 `linkedin_posts_exhausted`** or
+  **`linkedin_videos_exhausted`** (and a post scheduled for later fails with the reason).
+  `GET /v1/workspace/usage` shows both counts. Daily shared-capacity safeguards also apply; see below.
+- Channels, alerts, webhooks, API keys and storage are counted from what currently exists; a
+  disabled channel still counts.
+- **New posts / month** counts every created post, including drafts, duplicates and posts made by agents or
+  schedules, per calendar month in UTC. Editing an existing post does not count again; deleting one does not
+  refund its allowance. Publishing one post to several channels counts once here, but each X or LinkedIn
+  target consumes that platform's allowance. Thread replies consume X credits separately.
+
+X and LinkedIn allowances are reserved when a worker starts publishing, so concurrent posts cannot
+spend the same remaining allowance. Usage includes these in-progress reservations. A terminal rejection or an explicit capacity deferral
+returns a fresh reservation. Other retryable failures and uncertain outcomes (such as a lost response)
+keep it reserved; the post may already be live. Retrying that target uses its original reservation, including across a month boundary.
+Changing a retry to need more units requires restoring its original content or creating a new post.
+Scheduled posts cancelled before publishing do not reserve an allowance.
+
+## Shared platform capacity
+
+Monthly allowances are not a guarantee that everything can be sent on the same day. Cloud publishing,
+replies, reposts and statistics refreshes also share the operator's daily API capacity:
+
+- LinkedIn: by default, 400 API calls per day for the service, at most 40 per workspace. Video preparation and
+  polling count too; 40 calls is not 40 guaranteed posts. The counter resets at midnight UTC.
+- YouTube: by default, 90 upload starts per day for the service, at most 9 per workspace. It resets at midnight
+  Pacific Time, including daylight-saving changes. These are upload attempts, not successful videos.
+- X statistics: 100 / 200 / 500 / 1,000 fresh single-post reads per workspace per UTC calendar month.
+  Cached Analytics views do not consume reads. Extra X publishing bundles do not increase this allowance.
+
+No workspace may exceed its own daily cap; this is not a guaranteed reservation, and the shared pool can fill first. Failed calls and retries still consume daily
+capacity. Jobs report the reason when capacity is unavailable; monthly allowances never override provider
+restrictions. The operator must check the actual approved quotas and leave room for account connections,
+token refreshes and other activity. See [configuration](/self-hosting/configuration#shared-publishing-capacity).
+Local installs have no staqly capacity caps, but their providers' limits and bills still apply.
+
+## Available now and planned
+
+Every plan includes the design, video and audio editors, publishing analytics, top posts, posting-time insights,
+and the assistant when AI is configured. Platform statistics depend on the connected network and collected
+metrics; staqly does not promise continuous background refreshes on every network.
+
+<ComingSoon>
+Automatic AI performance summaries and recommendations (planned for Plus and above), scheduled reports
+(Pro and above), and client-ready report exports (Business). These are not available today, have no promised
+release date, and their plan allocation may change. Future AI insights are intended to use the same allowance.
+</ComingSoon>
+
+## Checking usage
+
+- Dashboard: **Settings → Plan & usage** ([details](/dashboard/plan-and-usage)): the plan, the
+  usage, add-ons, the card and the invoices.
+- API: `GET /v1/plans` lists the plans with `price_month`, `price_year` (per user, in `currency`: `eur`) and their limits
+  (`-1` = unlimited); `GET /v1/workspace/usage` returns the current plan, the period (`2026-10`)
+  and usage (including `seats`), plus `posts_by_status` and `webhook_deliveries`.
+
+## What happens when you hit a limit
+
+A request over a limit fails with **HTTP 402** and machine-readable `details`:
+
+```json
+{
+  "error": {
+    "code": "plan_limit_exceeded",
+    "message": "The Starter plan allows 5 channels; upgrade the workspace plan to continue.",
+    "details": { "limit": "channels", "max": 5, "used": 5, "plan": "starter" }
+  }
+}
+```
+
+`details.limit` is one of `posts_per_month`, `channels`, `alerts`, `webhooks`,
+`api_keys`, `storage_bytes`, `max_upload_bytes` or `data_export`.
+
+## Changing a workspace's plan
+
+A workspace changes plan when its account owner pays with a card: the plan picker (**Settings → Plan & usage → Choose a plan** or **Change plan**, or the user menu)
+has a **Monthly / Yearly** switch and one card per plan. Yearly prices are twelve whole-euro
+months at 20 % off, rounded down, so the saving is 20 % or a little more.
+
+Paying and managing the subscription are for a signed-in person, like members and invitations: the
+app's session. An API key gets 403 on `POST /v1/billing/checkout`, `/v1/billing/portal`,
+`/v1/billing/start-paid-plan`, `/v1/billing/credits/checkout` and on adding or removing an add-on,
+whatever its scopes, so a leaked key or an agent can't spend the card on file. Keys still read
+billing (`GET /v1/billing`, `/v1/billing/addons`, `/v1/billing/x-posts`).
+
+- Without a subscription, a card opens Stripe Checkout (`POST /v1/billing/checkout` with
+  `{"plan":"plus","interval":"year"}`, account owner). When Stripe confirms the payment, the
+  workspace moves to that plan until the end of the paid period plus 3 days of grace.
+- With a subscription, a card switches it to that plan or interval; the plan changes when Stripe's
+  event arrives.
+  - **An upgrade** (a higher plan) charges the difference for the rest of the period to the card on
+    file right away, and the higher plan starts once that payment goes through. If it doesn't, the
+    workspace stays on its current plan, nothing is charged, and the dashboard opens the same payment
+    page as when leaving the trial (step 5 above): confirm the payment with your bank, or change the
+    card, on Stripe's pages. The API answers 402 `payment_failed`. Stripe drops an unpaid change after
+    about a day; choose the plan again then.
+  - **Monthly to yearly**, on the same plan or another, works like an upgrade: the year is charged
+    to the card on file right away, less the unused rest of the month, and yearly billing starts
+    once that payment goes through. If it doesn't, the workspace stays on its plan, billed monthly.
+  - **A lower plan** on the same interval starts at once; the unused difference is
+    [credited](#credits) at once.
+  - **Yearly to monthly**, on the same plan or a lower one, starts at once; the unused rest of the
+    year is [credited](#credits) at once. With a higher plan it is an upgrade (above).
+- **Manage subscription** opens the Stripe customer portal (`POST /v1/billing/portal`) to change
+  the card, download invoices or cancel. When a subscription is canceled or stays unpaid, the
+  plan ends and the workspace is suspended until it pays again. `GET /v1/billing` shows the
+  subscription status.
+
+Every plan change is recorded as a `workspace.plan_changed` [event](/api/events#other-events)
+with the reason (for example `stripe:active`).
+
+### Credits
+
+A lower plan, a removed add-on and a removed seat leave unused time that was already paid for. Stripe
+invoices that credit right away, and the invoice's negative total becomes the workspace's **balance**
+at Stripe. The balance pays the next invoices by itself, a later upgrade's included, so nothing waits
+for the renewal. Credits are not paid back to the card.
+
+## Add-ons
+
+An add-on is one more item on the subscription, on any plan (**Settings → Plan & usage → Add-ons**,
+`GET /v1/billing/addons`). **Add** (`POST /v1/billing/addons/{id}`) charges the rest of the billing
+period to the card on file and adds the add-on once that payment goes through; if it doesn't, the
+subscription stays as it was and the API answers 402 `payment_failed`, like an upgrade. **Remove**
+(`DELETE /v1/billing/addons/{id}`) takes it off now and [credits](#credits) the unused rest. An
+add-on still waiting for its payment is cancelled the same way: its invoice is voided and nothing
+stays due. While a plan change or an add-on waits for its payment, Plan & usage says so and links to
+what to do.
+
+Add-ons come with a paid plan: during the free trial **Add** is off and the API answers 409
+(`details.reason` is `trialing`); choose a plan, or start the paid plan, first. Only the add-ons the
+list shows can be added (another id answers 404). An add-on the subscription holds more than once (a
+quantity set in Stripe) adds that many times what it raises.
+
+An add-on is billed like the plan, monthly or yearly. Changing the plan's interval moves the add-ons
+to it in the same step: monthly to yearly charges their year with the plan's, yearly to monthly
+credits their unused rest. An add-on that isn't sold in the new interval stops the change (409
+`not_available`): remove it first.
+
+### Defining an add-on in Stripe
+
+Operators of a cloud server sell add-ons by making them in Stripe; staqly reads them from there (the
+list is cached for 10 minutes):
+
+1. **A product** with the metadata `staqly_kind` = `addon` and `staqly_addon` = an id of your choice
+   (`ai_pack`). Its name, description and marketing features are shown in the app.
+2. **Its prices**, recurring and in EUR, with the lookup keys `staqly_addon_<id>_month` and
+   `staqly_addon_<id>_year` (`staqly_addon_ai_pack_month`). An interval without a price is not sold;
+   a product without any is not offered.
+3. **A feature** (Stripe Entitlements) attached to the product, whose metadata says what it raises:
+   `staqly_limit_<limit>` = `+N` (added to the plan's limit) or `unlimited`.
+
+| Metadata key | Counts in | Example |
+|---|---|---|
+| `staqly_limit_ai_monthly_cents` | US cents of the monthly AI allowance | `+500`: $5 more a month |
+| `staqly_limit_channels`, `staqly_limit_alerts`, `staqly_limit_webhooks`, `staqly_limit_api_keys` | pieces | `+10` |
+| `staqly_limit_posts_per_month`, `staqly_limit_x_posts_per_period`, `staqly_limit_linkedin_posts_per_period`, `staqly_limit_linkedin_videos_per_period` | posts | `+500` |
+| `staqly_limit_storage_gb` | GB | `+50` |
+| `staqly_limit_max_upload_mb` | MB | `+100` |
+| `staqly_enable` | a capability | `data_export` |
+
+So an add-on for more AI is a product `staqly_addon` = `ai_pack` with a feature carrying
+`staqly_limit_ai_monthly_cents` = `+500`: a Starter workspace that adds it has $6 a month instead of
+$1 (`GET /v1/ai` reports `usage.limit_usd`), and $1 again once it is removed. Several features add
+up; a value that is not `+N` or `unlimited` is ignored. The Stripe webhook endpoint must send
+`entitlements.active_entitlement_summary.updated`, which is how staqly learns that a workspace's
+features changed.
+
+The plans and their prices live in `apps/api/internal/app/plans.go`. Their limits live in the
+database: a default per limit, a value per plan where it differs, and a value per workspace where the
+operator set one (it replaces the plan's; Stripe add-ons still add to it). Operators edit them in the
+admin panel (**Limits**, and a workspace's **Limits** tab); every change goes to the admin audit log.
+The feature list shown with each plan is made from its limits.
+
+## Next steps
+
+<Cards>
+  <Card title="Plan & usage" href="/dashboard/plan-and-usage">Plan, usage, card and invoices in the dashboard.</Card>
+  <Card title="Community Edition vs Staqly Cloud" href="/local-vs-cloud">When plans apply and when they don't.</Card>
+  <Card title="Limits" href="/limits">Every limit, not only the plan's.</Card>
+</Cards>

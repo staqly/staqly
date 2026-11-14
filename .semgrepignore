@@ -1,0 +1,4 @@
+# Semgrep (make security) skips what git ignores, also where it cannot ask git (a worktree in Docker).
+:include .gitignore
+out/
+build/

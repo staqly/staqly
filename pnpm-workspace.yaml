@@ -1,0 +1,30 @@
+packages:
+  - apps/*
+  - sdks/*
+  - e2e
+  - packages/*
+# Packages whose install scripts may run (pnpm blocks the rest).
+allowBuilds:
+  # posthog-js's polyfills: the install step only prints a banner.
+  core-js: false
+  esbuild: true
+
+# Refuse packages published less than a day ago.
+minimumReleaseAge: 1440
+
+# Vitest runs on the root Node 26; the SDK intentionally checks its public Node 20 API surface.
+peerDependencyRules:
+  allowedVersions:
+    'vitest@5>@types/node': '20'
+
+# fumadocs-openapi renders a Unicode ellipsis (U+2026) in its schema breadcrumb and the playground's object
+# preview, with no option to change it; the docs never show that character, so the patch makes it "...".
+# Re-check (and drop or redo with `pnpm patch`) when bumping fumadocs-openapi.
+patchedDependencies:
+  fumadocs-openapi@12.6.0: apps/docs/patches/fumadocs-openapi@12.6.0.patch
+
+overrides:
+  # shadcn's development CLI: patched Windows service-name command injection.
+  'systeminformation@<5.33.16': 5.33.19
+  # Patched globparts amplification in development tooling (ESLint and shadcn).
+  'minimatch@10.2.6': 11.0.1

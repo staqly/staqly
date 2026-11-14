@@ -1,0 +1,253 @@
+---
+title: Posts
+description: Browse every post by collection, write and edit posts in the composer, customize them per channel and follow each channel's result.
+---
+
+**Posts** is where the content lives. The page has two panes: the collections on the left,
+the open collection's posts on the right. Open it from **Posts** in the sidebar (or the phone
+tab bar) or the command palette (<Kbd>⌘</Kbd> <Kbd>K</Kbd>). Old bookmarks to `/collections`
+land here.
+
+The left pane lists every collection with its colour dot and post count; the open one is
+highlighted. **New** at the top creates a collection, **Show archived** at the bottom includes
+archived ones. The header of the right pane names the collection, with **Settings** (see
+[Collections](/dashboard/collections)) and **New post**. On a phone the pane becomes a strip of
+chips over the posts.
+
+## Write a post
+
+<Steps>
+<Step>
+
+### Open the composer
+
+Click **New post**. The composer opens as a drawer: the channels, tags and collection on top,
+the title and the editor under them, and the time and the buttons in the footer.
+
+Or ask the [assistant](/dashboard/assistant) to write it for you.
+
+</Step>
+<Step>
+
+### Fill it in
+
+| Part | Notes |
+|---|---|
+| **Channels** | *Pick where the post goes*: a list of every connected channel with its avatar, platform and handle (under its group's name when there are several groups). Disabled channels and channels that need reconnecting are listed but can't be picked. |
+| **Tags** | Optional, to find and filter posts later. Every channel shares them: platforms with tags of their own (YouTube, Dev.to, Hashnode, Medium, WordPress) get them as their tags, your own automation in `tags`, the others as hashtags at the end of the text. |
+| **Collection** | New posts only; the open collection is preselected. |
+| **Title** | Required, up to 300 characters, shared by every channel. Platforms with a title (YouTube, Reddit, Pinterest, blogs, newsletters) publish it; elsewhere it names the post in the lists. |
+| **Text for** | With two channels or more: **All channels** holds the text every channel shares; one more tab per picked channel gives that channel a text of its own (**Use the shared text** goes back). |
+| **Editor** | A rich text editor: bold and italic become Unicode letters, lists become lines with a bullet, so the post stays plain text that every platform shows the same. **Upload** adds pictures and videos from your device; **From library** picks files already in [Media](/dashboard/media) (files in Deleted can't be added: restore them first). **Design** opens the [design editor](/dashboard/design-editor) in a drawer over the post for a new graphic, and the pencil on an attached picture edits it there; **Save and use in the post** puts the picture in the post (or the comment) and closes the drawer. **Video** opens the [video editor](/dashboard/video-editor) in a new tab for a new video, and what you save there is added to the post. Under the text, one character counter per picked channel shows the platform's limit and turns red when the text is too long. A channel that removes links or shows them as plain text (X) gets a red line naming it and the links it found, and its count is of the text it will receive. |
+| **Add comment** | Under the text: each comment is a reply published under the post after it (a thread), with its own text, media and a wait after the one before (up to 25 comments, each up to a day later). Platforms that take replies (X) publish them; your own automation receives them with the post. |
+| **Settings** tab | Next to **Post** when a picked channel's platform has options: one folded card per channel with the platform's settings, such as who can reply or a community on X. A Slack workspace or a Discord server is one channel, so each post picks the Slack or Discord channels it goes to here (up to 10; Slack also has **Post as**: the app or yourself). As soon as you pick such a channel the post gets **#random** or **#general** when there is one, folded card or not; with neither, pick them yourself before saving. |
+| **Footer** | The time chip (with **×** to clear it), **Save draft**, **Publish now** and **Schedule**. **Schedule** opens a calendar to pick the day and time (presets such as **Tomorrow 09:00**; times are in the browser's time zone; a post started from a calendar slot has that time picked already) and **Repeat** (every day to every month: once published, the post is scheduled again that much later); its own **Schedule** sends the post for that time. On a scheduled post, **Save changes** keeps the time and the calendar button next to it (**Schedule for later**) moves it. Leave the time empty for a draft, or for a post a schedule will pick. |
+
+</Step>
+<Step>
+
+### Save, schedule or publish
+
+**Save draft** keeps it; **Schedule** (with a time) or **Publish now** (without) sends it out.
+A scheduled post needs at least one channel. When the picked time has passed, a red notice above
+the buttons says so and **Publish now** waits: pick a future time, or clear the time (**×** on its
+chip) to publish now.
+
+**When a stream starts:** with a channel whose platform says when you go live (Kick today), the
+schedule menu also lists **When … goes live**. The post then waits without a time ("When Jane on
+Kick goes live" in the list) and goes out on all its channels the moment that stream starts, once.
+Picking a time instead, or **×** on its chip, ends the wait.
+
+Closing the composer with changes you haven't saved (Esc or **×**) asks **Discard your
+changes?** first; files you attached or removed count as changes. Enter in the title or another
+one-line field never sends the post: only the buttons do.
+
+**Edited elsewhere:** when a teammate or an agent saves the post you have open, the composer
+shows their version as long as you changed nothing. If you already changed something, your
+fields stay as they are and saving asks **This post was changed elsewhere**: **Save my version**
+replaces theirs, **Load their version** drops your changes, **Keep editing** leaves both for now.
+
+A repeating post shows its next occurrence on the calendar as soon as it is published. To stop
+it, open that next copy and set **Repeat** to **Don't repeat**, or delete it. See
+[Repeating posts](/concepts#repeating-posts).
+
+</Step>
+</Steps>
+
+Agents and scripts create posts the same way: MCP `create_post`, `POST /v1/posts`, the CLI
+`staqly posts create` or an SDK. See [Concepts](/concepts#posts).
+
+## The list
+
+Posts are listed newest first. On a wide screen each row has columns: the post (its first line
+and the start of the rest), the status, when it goes out or went out (a dash for a draft), its
+channels (hover or focus them for every channel's name), when and by whom it was created (a person, or the API key of an agent or automation),
+and the open comments from a [preview](/dashboard/share-a-preview). Narrow screens keep the title,
+the time under it and the status. **Load more** at the end loads the next page.
+
+**Filter** next to **New post** holds **Search posts** (words of the content), status, channel
+and tag; the filters in use show as chips under the title, each with × to take it off, and
+**Clear all** resets them.
+
+The list has a section per state, each with its count: **Needs attention** (failed posts, only
+when there are some), **Upcoming** (scheduled posts and posts going out right now), **Drafts** (posts
+with no time yet) and **Published**. A status filter shows only its section. When nothing is
+scheduled and there are no drafts, Upcoming says **Nothing coming up**.
+
+Each row has its actions on the right: **Preview and feedback**, **Duplicate** and **Delete**
+(on hover; always on touch screens), and a menu with **Edit**, **Publish now** (with the same
+seconds-long Undo as in the post), **Cancel schedule**, **Open on** a platform, **Insights** and
+**Copy link** and **Archive** (see [Archive](#archive)).
+
+### Archive
+
+**Archive** in a row's menu (needs `posts:write`) takes an old post out of the list and the
+[calendar](/dashboard/schedule) without deleting it: a draft, a published post or a failed one stays as it
+is, with its numbers and comments. The **Show archived** switch at the top of the list (and the same switch in the
+calendar's toolbar) brings archived posts back into view, marked *Archived*; **Unarchive** in their menu
+returns one for good. A scheduled or publishing post can't be archived (cancel its schedule first), and an
+archived post that is scheduled again shows like any other. The collection's counts leave archived posts
+out. Over the API: `POST /v1/posts/{id}/archive` and `/unarchive`, and `include_archived=true` on the
+list; over MCP `archive_post`, `unarchive_post` and `include_archived` on `list_posts`.
+
+### Many posts at once
+
+Tick a row's checkbox (it appears on hover, or replaces the channel avatars on a narrow screen);
+**Shift**+click ticks the range up to it, **Cmd/Ctrl+A** ticks every loaded post and **Esc**
+clears. A bar at the bottom acts on all of them: **Duplicate**, **Move** to another collection,
+**Tags** (add or remove), **Cancel schedule**, **Archive** (or **Unarchive** when every ticked post is archived) and **Delete** (after a confirmation). Posts an
+action doesn't apply to (a published post can't move or change tags; only scheduled ones come off
+the schedule; posts that went out are never deleted) are skipped, and the message says how many. The API does the same with
+[`POST /v1/posts/delete`](/api/reference), MCP with `delete_posts`.
+
+| Status | Meaning |
+|---|---|
+| **Draft** | Not scheduled. A schedule with *The next waiting post* picks drafts in creation order. |
+| **Scheduled** | Has a time and at least one channel; it publishes then. |
+| **Publishing** | Its channels are being published, or your own automation is working on it. |
+| **Published** | Every channel confirmed. |
+| **Failed** | At least one channel failed; the others may have gone out. |
+
+## The post
+
+Click a post to open it in the composer: the status badge, the collection and the time in the
+header, a row of icons next to them (hover for their names), and the sections **Post**,
+**Settings** (when a channel has platform options) and **Insights** (once it was sent off):
+
+| Icon | Does |
+|---|---|
+| Globe, **Open post** | Opens the published post on its platform; with several channels, a menu picks one. Shown once something is published |
+| Eye, **Preview and feedback** | A link to a read-only preview anyone can comment on, and the comments people left (the badge counts them). See [Share a preview](/dashboard/share-a-preview) |
+| Copy, **Duplicate** | A new draft with the same content, media, per-channel texts and settings, tags and comments, without its time; it opens straight away |
+| Undo, **Unpublish** | For a published post: asks which channels (all by default), then takes the post down from them. The post stays in the list as history. See [Unpublish](#unpublish) |
+| Trash, **Delete** | Asks first. Only for a post that hasn't gone out: once it is published, publishing or published on any of its channels, it stays as history (rows and the bar at the bottom leave it out too). **Duplicate** it to post it again |
+
+A direct link such as `/posts/post_oalirbz67y4m4cqxq5dw` opens the same view.
+
+**Insights** has a section per target: its status and when it went out or failed (with the number of
+tries), and once published the link to the post on the platform, its numbers in one line and its audience
+comments; a failed one shows the platform's error and a **Retry now** button that sends to that channel
+alone; a target on your own automation shows how long it has waited of the collection's limit while
+**Publishing**. With several channels and a failure, a line on top counts what was sent and what failed,
+with **Retry N failed now** and, from six channels, **Failed only**. **Refresh numbers and comments** reads
+numbers and comments now.
+
+A draft or scheduled post is edited in place; the footer has **Save changes** (and **Publish
+now**) once it is scheduled. Editing a scheduled post keeps its time. A post that was sent and failed on
+some channels says so at the top (**Show channels** opens Insights) instead of a time to change: the time
+it was sent at is history. Its footer has only **Save changes**, for the text a retry sends; failed
+channels are retried one by one, or all at once, in Insights, so the channels it went out on never get it
+twice. A post that is publishing or published is read-only: **Duplicate** copies its content, media, tags,
+metadata and channels into a new draft.
+
+### Unpublish
+
+**Unpublish** (needs `posts:publish`) deletes the post on the channels you pick. A job does it; **Insights**
+shows each channel as *Published*, then *Unpublishing* (while the job runs), *Unpublished* (with when), *Unpublish failed* (with the reason;
+unpublish again to retry) or *Remove by hand* (with a link to the post). Thread parts go first, newest first.
+
+| Channel | What happens |
+|---|---|
+| X, Facebook, Threads, YouTube, LinkedIn, LinkedIn Page, Bluesky, Mastodon, Slack, Discord, Discord webhook, Reddit, Tumblr, Pinterest, Moltbook | Deleted through the platform's API |
+| Telegram | Deleted while Telegram still allows it (about 48 hours), otherwise by hand |
+| Instagram | Deletes the post and its thread's comments when the account is connected through Facebook; with Instagram login, delete the post by hand ([details](/channels/instagram#unpublishing)) |
+| Every other channel | *Remove by hand*, with a link to the post |
+
+Just before taking a channel down, staqly reads its numbers and comments one last time. **Insights**
+then keeps them as the post's history, says when it was unpublished and has no refresh button: nothing is read
+from the platform any more.
+
+### Numbers
+
+**Insights** (in the post, or **Insights** in a row's menu) reads each published channel's numbers from its platform when the last
+ones are older than ten minutes, and **Refresh numbers and comments** reads them now. Each channel shows when its
+numbers were read.
+
+| Platform | Numbers |
+|---|---|
+| X | Views, likes, reposts, replies, quotes and bookmarks of the post (public metrics; no reconnecting needed) |
+| YouTube | Views, likes and comments of the video (counts the channel hides stay empty); watch time, average view, shares and subscribers gained when the channel was connected with YouTube Analytics |
+| Facebook Page | Reactions (as likes), comments and shares of the post; views and reach of a feed post |
+| Instagram | Likes and comments; views, shares and saves with the insights permission. A story keeps its final numbers (views, reach, replies, taps forward and back, exits) when it expires, with [Meta's webhooks](/channels/instagram#comments-right-away) on |
+| Threads | Views, likes, replies, reposts, quotes and shares |
+| Slack | Reactions (per emoji, with who reacted) and the replies in the message's thread, added up over every Slack channel the post went to |
+| LinkedIn Page | Impressions, clicks, likes, comments and reposts |
+| Pinterest | Impressions, saves, pin clicks and outbound (link) clicks of the pin, over its lifetime |
+| TikTok | Views, likes, comments and shares of the video, once it is public (a channel connected before needs reconnecting once) |
+| Bluesky | Likes, reposts, replies and quotes |
+| Mastodon | Favourites, boosts and replies |
+| Dev.to | Reactions (as likes), comments and views of the article (views come from your own list of articles) |
+| Reddit | Score and comments |
+| Tumblr | Notes (likes, reblogs and replies together) |
+| Whop | Views, likes and comments of the forum post |
+| [Your own automation](/channels/your-own-automation) | What your automation sends with `PUT /v1/posts/{id}/targets/{channel}/metrics` (or the MCP tool `report_post_metrics`) |
+| Others | *Numbers: this platform doesn't share them with staqly* (their APIs don't give a post's numbers). Dribbble still says whether the shot is there: one deleted on Dribbble is marked **Deleted** like on the platforms above |
+
+If a platform can't be reached, the last numbers stay and the channel says why.
+
+Facebook also shows the **reactions by type**: like, love, haha, wow, sad and angry.
+
+### Audience comments
+
+Under **Insights** each published channel shows its comments: what people answered under it, with an AI
+reading of it; **Audience comments** on top reads all channels together: how many comments are positive, neutral or negative, a short summary, the
+themes and the questions people asked. Filter the comments by sentiment; **Refresh numbers and comments** reads them now.
+
+staqly reads the comments of posts published in the last 7 days every 30 minutes (on Instagram, Facebook and
+Threads within seconds when the server has [Meta's webhooks](/self-hosting/configuration) on, and that post's numbers
+a minute after a new comment or Facebook reaction, also on a post that keeps getting them), and at once when you press **Refresh numbers and comments** (any published post, however old).
+The AI reading follows about half a minute after new comments arrive, and as soon as the model answers when you press **Refresh numbers and comments**. It uses the workspace's AI allowance: when
+that is used up the comments are kept, the channel says so, and they are analysed once it renews.
+
+| Platform | Comments |
+|---|---|
+| Facebook Page, Instagram, Threads, Bluesky, Mastodon, Reddit, Dev.to | Read |
+| YouTube | Read: the comment threads and their first replies |
+| Slack | Read: one page of replies per thread |
+| X | Read: replies of the last 7 days (recent search); needs a paid X API plan |
+| LinkedIn | Needs the app approved for the Community Management API |
+| Kick | Chat replies to the post's message, as they come (Kick's webhook; see [Kick](/channels/kick#webhook)) |
+| Whop | Read: the comments and their first replies |
+| Others | *Not available for this platform* |
+
+Facebook needs the `pages_read_user_content` permission, approved for the Meta app through App Review; without
+it Meta may hide commenters' names or text. Threads needs `threads_read_replies`, so a profile connected before
+needs one reconnect. Comments are kept for 90 days by default (`RETENTION_RESPONSES_DAYS`). The same data is
+available from `GET /v1/posts/{id}/responses`, the MCP tool `get_post_responses` and `staqly posts responses`.
+
+**Delete** removes the post and keeps its events in the activity log. Erasing the history too,
+with media no other post uses, is a purge over the API (`POST /v1/posts/{id}/purge`, admin). See
+[Data export & privacy](/self-hosting/data-export#purge-a-post).
+
+## On a phone
+
+The collections pane becomes a chip strip, the list becomes cards, the composer and the post
+sheet fill the screen with their buttons inline. See [Phones & tablets](/dashboard/phones-and-tablets).
+
+## Next steps
+
+<Cards>
+  <Card title="Schedule" href="/dashboard/schedule">The calendar: drag to reschedule, add a post into a slot.</Card>
+  <Card title="Channels" href="/dashboard/channels">Connect the accounts posts go to.</Card>
+  <Card title="Collections" href="/dashboard/collections">Settings, schedules and the danger zone.</Card>
+</Cards>

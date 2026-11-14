@@ -1,0 +1,100 @@
+# Real n8n suite (e2e/n8n/run.mjs): the dev stack built from this checkout
+# (compose.yml + compose.dev.yml, what `make dev` starts) and a real n8n from
+# integrations/n8n/compose.yml on its network; workflows are imported over
+# n8n's API and every side effect is checked over the staqly REST API.
+# No secrets. Locally: `make dev`, then `pnpm --filter @staqly/e2e test:n8n`.
+name: n8n
+
+on:
+  push:
+    branches: [main]
+    # n8n talks to the REST API only (no dashboard page): frontend changes don't affect it, and the image they
+    # are built into is checked by ci.yml's Docker end-to-end job.
+    paths:
+      - apps/api/**
+      - e2e/n8n/**
+      - e2e/package.json
+      - integrations/n8n/**
+      - .github/**
+      - Dockerfile
+      - .dockerignore
+      - compose*.yml
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - turbo.json
+      - .nvmrc
+  schedule:
+    - cron: "41 2 * * *" # nightly, catches new n8n behaviour without a push
+  workflow_dispatch:
+    inputs:
+      scenarios:
+        description: Scenarios separated by spaces (empty = all), e.g. "demo signature"
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: n8n-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  n8n:
+    name: staqly + real n8n
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Results directory
+        # results.json lands in $TMPDIR/staqly-n8n-e2e/<run>/
+        run: echo "TMPDIR=$RUNNER_TEMP" >>"$GITHUB_ENV"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # the image compose.yml names (ghcr.io/staqly/staqly:latest), built from this
+      # checkout with the layer cache, so compose does not build it again
+      - name: staqly image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: ghcr.io/staqly/staqly:latest
+          cache-from: type=gha,scope=staqly
+          cache-to: type=gha,mode=max,scope=staqly
+      - name: Dev stack (make dev without the browser)
+        run: docker compose -f compose.yml -f compose.dev.yml up -d --no-build --wait
+      - uses: ./.github/actions/setup
+        with: { filter: "@staqly/e2e" }
+      - name: n8n suite
+        env: { SCENARIOS: "${{ inputs.scenarios }}" }
+        run: |
+          # shellcheck disable=SC2086 # word splitting on purpose: one argument per scenario name
+          pnpm --filter @staqly/e2e test:n8n $SCENARIOS
+      - name: staqly logs
+        if: failure()
+        run: docker compose -f compose.yml -f compose.dev.yml logs --no-color staqly | tail -n 300
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: n8n-results
+          path: ${{ runner.temp }}/staqly-n8n-e2e/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Stop the dev stack
+        if: always()
+        run: docker compose -f compose.yml -f compose.dev.yml down -v
+
+  # A failed nightly opens an issue (or comments on the open one), so it doesn't go unnoticed.
+  alert:
+    name: Nightly failure alert
+    needs: [n8n]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false, sparse-checkout: .github/actions }
+      - uses: ./.github/actions/nightly-alert

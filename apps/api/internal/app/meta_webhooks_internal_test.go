@@ -1,0 +1,174 @@
+package app
+
+import (
+	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"maps"
+	"strings"
+	"testing"
+
+	"github.com/staqly/staqly/apps/api/internal/db"
+	"github.com/staqly/staqly/apps/api/internal/providers"
+)
+
+func metaSign(secret, body string) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(body))
+	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
+}
+
+// A signed comment event about a published Instagram post queues a read of its comments; an unsigned one, or one
+// about a post that isn't ours, queues nothing.
+func TestMetaWebhookQueuesACommentsRead(t *testing.T) {
+	s, p, _, _, chans := publishedOn(t, "fakemetaig")
+	ctx := context.Background()
+	env := map[string]string{"PROVIDER_META_WEBHOOK_VERIFY_TOKEN": "tok", "PROVIDER_META_CLIENT_SECRET": "meta-secret"}
+	s.Getenv = func(k string) string { return env[k] }
+	if _, err := s.DB.Exec(`UPDATE channels SET provider = 'instagram' WHERE id = ?`, chans[0]); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.VerifyMetaWebhook("subscribe", "tok", "123"); err != nil || got != "123" {
+		t.Fatalf("verify: %q %v", got, err)
+	}
+	if _, err := s.VerifyMetaWebhook("subscribe", "wrong", "123"); err == nil {
+		t.Fatal("a wrong verify token must be refused")
+	}
+	// The fake published the post as "post" (fakeRemovable): Instagram names it as value.media.id.
+	body := `{"object":"instagram","entry":[{"id":"1784","changes":[{"field":"comments","value":{"id":"c1","text":"nice","media":{"id":"post"}}}]}]}`
+	if _, err := s.HandleMetaWebhook(ctx, []byte(body), metaSign("other", body)); err == nil {
+		t.Fatal("a body signed with another secret must be refused")
+	}
+	n, err := s.HandleMetaWebhook(ctx, []byte(body), metaSign("meta-secret", body))
+	if err != nil || n != 1 {
+		t.Fatalf("queued %d, %v", n, err)
+	}
+	page, err := s.ListJobs(ctx, p, JobFilter{Kind: "read_responses"})
+	if err != nil || len(page.Data) != 1 {
+		t.Fatalf("jobs %+v %v", page.Data, err)
+	}
+	// The event changed the post's numbers too (a comment count; on Facebook a reaction): one check, a minute later.
+	checks, err := s.ListJobs(ctx, p, JobFilter{Kind: "check_target"})
+	if err != nil || len(checks.Data) != 1 {
+		t.Fatalf("numbers checks %+v %v", checks.Data, err)
+	}
+	// A second event in the burst moves the same check out instead of adding one.
+	if _, err := s.HandleMetaWebhook(ctx, []byte(body), metaSign("meta-secret", body)); err != nil {
+		t.Fatal(err)
+	}
+	if checks, err = s.ListJobs(ctx, p, JobFilter{Kind: "check_target"}); err != nil || len(checks.Data) != 1 {
+		t.Fatalf("a burst makes one numbers check: %+v %v", checks.Data, err)
+	}
+	other := `{"object":"page","entry":[{"changes":[{"field":"feed","value":{"item":"comment","post_id":"999_1"}}]}]}`
+	if n, err := s.HandleMetaWebhook(ctx, []byte(other), metaSign("meta-secret", other)); err != nil || n != 0 {
+		t.Fatalf("someone else's post: %d %v", n, err)
+	}
+}
+
+// story_insights keeps an expired Instagram story's final numbers, and staqly asks the API for them no more.
+func TestMetaWebhookKeepsStoryInsights(t *testing.T) {
+	s, p, post, _, chans := publishedOn(t, "fakemetastory")
+	ctx := context.Background()
+	env := map[string]string{"PROVIDER_META_WEBHOOK_VERIFY_TOKEN": "tok", "PROVIDER_META_CLIENT_SECRET": "meta-secret"}
+	s.Getenv = func(k string) string { return env[k] }
+	if _, err := s.DB.Exec(`UPDATE channels SET provider = 'instagram' WHERE id = ?`, chans[0]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.Exec(`UPDATE post_targets SET settings = '{"post_type":"story"}', published_at = '2020-01-01T00:00:00Z' WHERE post_id = ?`, post.ID); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"object":"instagram","entry":[{"id":"1784","changes":[{"field":"story_insights","value":{"media_id":"post","views":120,"reach":90,"replies":2,"taps_forward":30,"taps_back":4,"exits":7}}]}]}`
+	if _, err := s.HandleMetaWebhook(ctx, []byte(body), metaSign("meta-secret", body)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.PostMetrics(ctx, p, post.ID, true)
+	if err != nil || len(got) != 1 || got[0].Metrics == nil {
+		t.Fatalf("metrics %+v %v", got, err)
+	}
+	m := got[0].Metrics
+	if *m.Impressions != 120 || *m.Reach != 90 || *m.Replies != 2 || *m.TapsForward != 30 || *m.TapsBack != 4 || *m.Exits != 7 || got[0].Error != "" {
+		t.Fatalf("story numbers %+v (error %q)", m, got[0].Error)
+	}
+	// The post open on screen hears of them once; the same numbers again are no news.
+	if _, err := s.HandleMetaWebhook(ctx, []byte(body), metaSign("meta-secret", body)); err != nil {
+		t.Fatal(err)
+	}
+	if ev := eventsOfType(t, s, p, "post.metrics_updated"); len(ev) != 1 || ev[0].item != post.ID {
+		t.Fatalf("post.metrics_updated %+v", ev)
+	}
+}
+
+// fakeMetaPermissions is a Meta platform whose token check finds the comments permission gone.
+type fakeMetaPermissions struct{ providers.Base }
+
+func (f *fakeMetaPermissions) Refresh(_ context.Context, _ providers.App, c providers.Credentials) (providers.Credentials, error) {
+	out := maps.Clone(c)
+	out["no_comments"] = "true"
+	return out, nil
+}
+
+// A permission taken away or given back queues a token check of the channels it may touch, and only those: a Page connected by
+// that person, an Instagram account named in it. The check turning comments off turns the channel's comments off.
+func TestMetaWebhookPermissionRevokedChecksTheChannel(t *testing.T) {
+	s, p, _ := publishTest(t)
+	ctx := context.Background()
+	env := map[string]string{"PROVIDER_META_WEBHOOK_VERIFY_TOKEN": "tok", "PROVIDER_META_CLIENT_SECRET": "meta-secret", "PROVIDER_META_CLIENT_ID": "cid"}
+	s.Getenv = func(k string) string { return env[k] }
+	for _, id := range []string{"facebook", "instagram"} {
+		orig, _ := providers.Get(id)
+		providers.Register(&fakeMetaPermissions{providers.NewBase(id, id, providers.AuthOAuth2, providers.Limits{MaxChars: 280})}, providers.StatusAvailable)
+		t.Cleanup(func() { providers.Register(orig.Provider, orig.Status) })
+	}
+	for id, c := range map[string]providers.Credentials{
+		"chn_fb1": {"authorized_by": "u1", "page_id": "p1"}, "chn_fb2": {"authorized_by": "u2", "page_id": "p2"}, "chn_ig1": {"user_id": "ig1"},
+	} {
+		sealed, err := s.seal(c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		provider := map[bool]string{true: "facebook", false: "instagram"}[strings.HasPrefix(id, "chn_fb")]
+		if err := s.W.CreateChannel(ctx, db.CreateChannelParams{ID: id, WorkspaceID: p.WorkspaceID, Provider: provider, Name: id,
+			Status: "connected", Credentials: sealed, Settings: "{}", CreatedAt: s.now(), UpdatedAt: s.now()}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	send := func(body string) int {
+		t.Helper()
+		n, err := s.HandleMetaWebhook(ctx, []byte(body), metaSign("meta-secret", body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if n := send(`{"object":"permissions","entry":[{"id":"u1","changes":[{"field":"pages_manage_posts","value":{"verb":"granted"}}]},
+		{"id":"u1","changes":[{"field":"user_posts","value":{"verb":"revoked"}}]}]}`); n != 1 {
+		t.Fatalf("granted: %d checks queued, want chn_fb1", n)
+	}
+	if n := send(`{"object":"permissions","entry":[{"id":"u9","changes":[{"field":"instagram_manage_comments","value":{"verb":"revoked","target_ids":["ig1"]}},
+		{"field":"pages_manage_engagement","value":{"verb":"revoked"}}]},
+		{"id":"u1","changes":[{"field":"pages_manage_engagement","value":{"verb":"revoked","target_ids":["p1"]}}]}]}`); n != 2 {
+		t.Fatalf("revoked: %d checks queued, want chn_fb1 and chn_ig1", n)
+	}
+	s.RunDueJobsOnce(ctx)
+	for id, want := range map[string]int64{"chn_fb1": 0, "chn_fb2": 1, "chn_ig1": 0} {
+		row, err := s.Q.GetChannelByID(ctx, id)
+		if err != nil || row.Comments != want || row.Status != "connected" {
+			t.Fatalf("%s: comments %d status %q, want comments %d: %v", id, row.Comments, row.Status, want, err)
+		}
+	}
+}
+
+// PROVIDER_META_WEBHOOK_VERIFY_TOKEN turns the webhook on; META_WEBHOOK_VERIFY_TOKEN, its name before, still does.
+func TestMetaVerifyTokenNames(t *testing.T) {
+	s, _, _ := publishTest(t)
+	for _, key := range []string{"PROVIDER_META_WEBHOOK_VERIFY_TOKEN", "META_WEBHOOK_VERIFY_TOKEN"} {
+		s.Getenv = func(k string) string { return map[string]string{key: "tok"}[k] }
+		if !s.MetaWebhookEnabled() {
+			t.Fatalf("%s did not turn it on", key)
+		}
+		if got, err := s.VerifyMetaWebhook("subscribe", "tok", "c"); err != nil || got != "c" {
+			t.Fatalf("%s: %q %v", key, got, err)
+		}
+	}
+}

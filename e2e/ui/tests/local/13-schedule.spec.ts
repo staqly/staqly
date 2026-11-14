@@ -1,0 +1,282 @@
+import type { Page } from '@playwright/test'
+
+import { dayKey, daysAhead, freshCollection, getPost, titleOf } from '../../lib/data.js'
+import { dismissToasts, expect, postOpen, ready, test } from '../../lib/fixtures.js'
+import { pickChannels } from '../../lib/pick.js'
+
+/** HTML5 drag and drop through the real events with one shared DataTransfer, as a mouse drag produces. */
+async function drag(page: Page, from: ReturnType<Page['locator']>, to: ReturnType<Page['locator']>) {
+  const dt = await page.evaluateHandle(() => new DataTransfer())
+
+  await from.dispatchEvent('dragstart', { dataTransfer: dt })
+  await to.dispatchEvent('dragover', { dataTransfer: dt })
+  // No dragend: after the drop the entry has already moved to its new cell.
+  await to.dispatchEvent('drop', { dataTransfer: dt })
+}
+
+const entry = (page: Page, id: string) => page.locator(`[data-testid="schedule-entry"][data-post-id="${id}"]`)
+
+/** Picks a view, a layout or archived posts in the schedule's view menu. */
+async function pickView(page: Page, name: string) {
+  await page.getByTestId('schedule-view-menu').click()
+  await page.getByRole('menuitemradio', { name, exact: true }).click()
+}
+
+/** Walks the week view forward until the day is on screen (a post two days ahead may be next week). */
+async function showWeekOf(page: Page, day: Date) {
+  const key = dayKey(day)
+
+  // A view change is asynchronous; do not mistake the outgoing month's grid for the week.
+  await expect(page.getByTestId('schedule-view-menu')).toContainText('Week')
+  await expect(page.getByTestId('schedule-grid')).toBeVisible()
+  await expect(page.locator('[data-testid^="schedule-slot-"]').first()).toBeVisible()
+
+  const first = page.locator('[data-testid^="schedule-slot-"]').first()
+
+  for (let i = 0; i < 3 && (await page.getByTestId(`schedule-slot-${key}-12`).count()) === 0; i++) {
+    const shown = await first.getAttribute('data-testid')
+
+    await page.getByRole('button', { name: 'Next week' }).click()
+    // Look again only once the next week is on screen, or a slow render walks past the day.
+    await expect(first).not.toHaveAttribute('data-testid', shown!)
+  }
+
+  await expect(page.getByTestId(`schedule-slot-${key}-12`)).toBeVisible()
+}
+
+test.describe('the schedule', () => {
+  test('the view menu can reopen immediately after a selection and return keyboard focus', async ({ page }) => {
+    await page.goto('/schedule')
+    await ready(page, 'Schedule')
+    // Keep closing animations alive long enough to exercise reopening during their lifetime.
+    await page.addStyleTag({
+      content: '[data-slot="dropdown-menu-content"][data-state="closed"] { animation-duration: 1s !important }',
+    })
+    const trigger = page.getByTestId('schedule-view-menu')
+
+    for (let i = 0; i < 3; i++) {
+      await pickView(page, 'List')
+      await expect(page).toHaveURL(/list=1/)
+      await expect(page.getByTestId('schedule-list')).toBeVisible()
+      await trigger.click()
+      await expect(trigger).toHaveAttribute('aria-expanded', 'true')
+      await page.getByRole('menuitemradio', { name: 'Calendar', exact: true }).click()
+      await expect(page).toHaveURL((url) => !url.searchParams.has('list'))
+      await expect(page.getByTestId('schedule-grid')).toBeVisible()
+    }
+
+    await trigger.focus()
+    await page.keyboard.press('ArrowDown')
+    await expect(page.getByRole('menu')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('menu')).toHaveCount(0)
+    await expect(trigger).toBeFocused()
+  })
+
+  test('home: the week with the seeded posts, the count, day/week/month and list views, schedule runs as chips', async ({
+    page,
+    srv,
+  }) => {
+    await page.goto('/')
+    await ready(page, 'Schedule')
+    await expect(page.getByTestId('schedule-count')).toHaveText(/\d+ posts? scheduled/)
+    const tomorrow = daysAhead(1, 10)
+
+    await showWeekOf(page, tomorrow)
+    // One card per channel: the 10:00 cell shows the first and "+N more"; More lists both, each named
+    // with its channel for the screen reader.
+    const cell = page.getByTestId(`schedule-slot-${dayKey(tomorrow)}-10`)
+    const beach = entry(page, srv.seed.posts.scheduledTomorrow!)
+
+    await expect(beach).toHaveCount(1)
+    await expect(beach).toHaveAttribute('data-state', 'scheduled')
+    await expect(beach).toContainText('10:00')
+    await expect(beach).toContainText('Beach day')
+    // The collection is in the entry's name and title, not its visible text.
+    await expect(beach).toHaveAttribute('aria-label', /Instagram posts/)
+    await cell.getByRole('button', { name: /^\+\d+ more$/ }).click()
+    const all = cell.getByRole('group', { name: /Everything at/ })
+
+    await expect(all.getByTestId('schedule-entry')).toHaveCount(2)
+    await expect(all.getByRole('button', { name: /Beach day on Company blog: Scheduled/ })).toBeVisible()
+    await expect(all.getByRole('button', { name: /Beach day on Brand social: Scheduled/ })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(all).toHaveCount(0)
+    // The collection schedules' runs are hollow chips in their slots. Weekday mornings runs Monday to Friday: on a
+    // weekend the week of tomorrow has no run left, so look at the week of the next weekday.
+    const weekday = daysAhead(1, 10)
+
+    while (weekday.getDay() === 0 || weekday.getDay() === 6) {
+      weekday.setDate(weekday.getDate() + 1)
+    }
+
+    await showWeekOf(page, weekday)
+    await expect(page.getByTestId('schedule-slot-chip').first()).toBeVisible()
+    await expect(page.getByTestId('schedule-slot-chip').filter({ hasText: 'Weekday mornings' }).first()).toContainText(
+      'next post',
+    )
+    // The "now" line sits on today's grid.
+    await page.getByRole('button', { name: 'Today' }).click()
+    await expect(page.getByTestId(`schedule-slot-${dayKey(new Date())}-12`)).toBeAttached()
+    await expect(page.getByTestId('now-line')).toBeAttached()
+
+    // Day view: one column, the range names the day.
+    await pickView(page, 'Day')
+    await expect(page).toHaveURL(/view=day/)
+    await expect(page.getByTestId('schedule-range')).toContainText(new Date().getFullYear().toString())
+    await page.getByRole('button', { name: 'Next day' }).click()
+    await expect(entry(page, srv.seed.posts.scheduledTomorrow!)).toBeVisible()
+    // Month view: the posts are in their day cells.
+    await pickView(page, 'Month')
+    await expect(page).toHaveURL(/view=month/)
+    await expect(page.getByTestId(`schedule-day-${dayKey(new Date())}`)).toBeVisible()
+
+    if ((await page.getByTestId(`schedule-day-${dayKey(tomorrow)}`).count()) === 0) {
+      await page.getByRole('button', { name: 'Next month' }).click()
+    }
+
+    await expect(
+      page
+        .getByTestId(`schedule-day-${dayKey(tomorrow)}`)
+        .locator(`[data-post-id="${srv.seed.posts.scheduledTomorrow}"]`)
+        .first(),
+    ).toBeVisible()
+    // List layout: the same posts as rows.
+    await pickView(page, 'Week')
+    // Navigate while the calendar slots still exist; tomorrow may be in the next week.
+    await showWeekOf(page, tomorrow)
+    await pickView(page, 'List')
+    await expect(page).toHaveURL(/list=1/)
+    await expect(page.getByTestId('schedule-list')).toContainText('Beach day')
+    await pickView(page, 'Calendar')
+    await expect(page.getByTestId('schedule-grid')).toBeVisible()
+  })
+
+  test('an entry opens the post; drag it to another hour; the + on a slot schedules a draft or writes a post', async ({
+    page,
+    api,
+  }) => {
+    test.setTimeout(120_000)
+    const col = await freshCollection(api, { posts: 3 })
+    const scheduled = col.posts[0]!
+    const draft = col.posts[1]!
+    const written = col.posts[2]!
+    // Always cross a week boundary so Today must finish navigating before we return.
+    const when = daysAhead(8, 10)
+
+    await api.schedule(scheduled.id, when.toISOString())
+    await page.goto('/schedule')
+    await ready(page, 'Schedule')
+    await showWeekOf(page, when)
+    const e = entry(page, scheduled.id)
+
+    await expect(e).toBeVisible()
+    await e.click()
+    await postOpen(page, titleOf(scheduled.content))
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toBeHidden()
+
+    // Drag to 14:00 the same day: the post is rescheduled.
+    const target = page.getByTestId(`schedule-slot-${dayKey(when)}-14`)
+
+    await drag(page, e, target)
+    await expect(target.getByTestId('schedule-entry')).toHaveCount(1)
+    await expect.poll(async () => new Date((await getPost(api, scheduled.id)).publish_at!).getHours()).toBe(14)
+    await dismissToasts(page)
+    // A past slot is not a drop target and has no +.
+    const yesterday = daysAhead(-1, 9)
+
+    await page.getByRole('button', { name: 'Today' }).click()
+    await expect(page.getByTestId(`schedule-slot-${dayKey(new Date())}-12`)).toBeAttached()
+
+    if ((await page.getByTestId(`schedule-slot-${dayKey(yesterday)}-9`).count()) > 0) {
+      await expect(page.getByTestId(`schedule-slot-${dayKey(yesterday)}-9`)).toHaveAttribute('data-past', 'true')
+      await expect(page.getByTestId(`schedule-slot-${dayKey(yesterday)}-9`).getByTestId('slot-add')).toHaveCount(0)
+    }
+
+    // + on a future slot: the composer with that time; Load a draft loads a waiting draft into it.
+    await showWeekOf(page, when)
+    const slot = page.getByTestId(`schedule-slot-${dayKey(when)}-16`)
+
+    await slot.hover()
+    // The add button shows on focus (a click on the cell's empty space does the same).
+    await slot.getByTestId('slot-add').focus()
+    await page.keyboard.press('Enter')
+    await page.getByRole('dialog', { name: 'New post' }).getByRole('button', { name: 'Load a draft' }).click()
+    const picker = page.getByRole('dialog', { name: 'Load a draft' })
+
+    await picker.getByRole('textbox', { name: 'Search drafts' }).fill(titleOf(draft.content))
+    await picker
+      .getByTestId('slot-drafts')
+      .getByRole('button', { name: new RegExp(titleOf(draft.content)) })
+      .click()
+    await expect(picker).toBeHidden()
+    // The draft opens with the slot's time; Schedule sends it.
+    const loaded = page.getByRole('dialog').filter({ has: page.getByTestId('date-time-picker') })
+
+    await expect(loaded.getByTestId('publish-at-chip')).toContainText(/\d/)
+    await loaded.getByTestId('date-time-picker').click()
+    await page.getByRole('dialog', { name: 'Pick a date and time' }).getByRole('button', { name: 'Schedule' }).click()
+    await expect(loaded).toBeHidden()
+    await expect.poll(async () => (await getPost(api, draft.id)).status).toBe('scheduled')
+    expect(new Date((await getPost(api, draft.id)).publish_at!).getHours()).toBe(16)
+    // The grid re-reads its range on a reload.
+    await page.reload()
+    await showWeekOf(page, when)
+    await expect(slot.getByTestId('schedule-entry')).toHaveCount(1)
+    await dismissToasts(page)
+
+    // + again: the composer with the time set; Schedule puts the new post in the slot.
+    const slot2 = page.getByTestId(`schedule-slot-${dayKey(when)}-18`)
+
+    await slot2.hover()
+    // The add button shows on focus (a click on the cell's empty space does the same).
+    await slot2.getByTestId('slot-add').focus()
+    await page.keyboard.press('Enter')
+    const composer = page.getByRole('dialog', { name: 'New post' })
+
+    await expect(composer.getByTestId('publish-at-chip')).toContainText(/\d/)
+    await composer.getByRole('combobox', { name: 'Collection' }).click()
+    await page.getByRole('option', { name: col.name }).click()
+    await composer.getByTestId('post-title').fill('From the calendar')
+    await composer.getByTestId('post-content').fill('Written from the calendar')
+    await pickChannels(page, composer, col.channel.name)
+    // Schedule opens the calendar with the slot's time picked; its own Schedule sends the post.
+    await composer.getByTestId('date-time-picker').click()
+    await page.getByRole('dialog', { name: 'Pick a date and time' }).getByRole('button', { name: 'Schedule' }).click()
+    await expect(composer).toBeHidden()
+    await expect(slot2.getByTestId('schedule-entry').filter({ hasText: 'From the calendar' })).toBeVisible()
+    expect(written.id).toBeTruthy()
+  })
+
+  test('entries follow the post: publishing, published and failed states; an empty week says so', async ({
+    page,
+    api,
+  }) => {
+    const col = await freshCollection(api, { posts: 2 })
+    const a = col.posts[0]!
+    const b = col.posts[1]!
+    const when = daysAhead(1, 9)
+
+    await api.schedule(a.id, when.toISOString())
+    await api.schedule(b.id, daysAhead(1, 11).toISOString())
+    await page.goto('/schedule')
+    await showWeekOf(page, when)
+    await expect(entry(page, a.id)).toHaveAttribute('data-state', 'scheduled')
+    await api.publishThrough(a.id)
+    await api.publishFailing(b.id)
+    // The calendar re-reads its range on a reload (live updates refresh the open post, not the grid).
+    await page.reload()
+    await showWeekOf(page, when)
+    // The calendar shows what went out and what failed alike.
+    await expect(entry(page, a.id)).toHaveAttribute('data-state', 'published')
+    await expect(entry(page, a.id)).toHaveAttribute('draggable', 'false')
+    await expect(entry(page, b.id)).toHaveAttribute('data-state', 'failed')
+    await expect(entry(page, b.id)).toHaveAttribute('aria-label', /: Failed/)
+
+    // Far in the future nothing is scheduled: the grid stays, with its explanation.
+    await page.goto(`/schedule?at=${dayKey(daysAhead(400, 9))}`)
+    await expect(page.getByTestId('schedule-empty')).toContainText('Nothing scheduled this week')
+    await expect(page.getByTestId('schedule-grid')).toBeVisible()
+  })
+})

@@ -1,0 +1,38 @@
+---
+title: Getting started
+description: The welcome wizard that takes a new account from its first sign-in to its first post, once.
+---
+
+Right after you create an account, and for every new workspace, Staqly opens a short **welcome** on
+its own page, without the sidebar. It takes about a minute. The steps only collect your answers;
+nothing is saved until the end. On Staqly Cloud the last step is the workspace's plan, and the
+workspace is set up and opens once the payment (or Starter's trial, card required) is through. With a
+plan already in place, **Skip for now** (top right) ends it at any step before the last.
+
+## The steps
+
+| Step | What you do |
+|---|---|
+| **Welcome to Staqly** | Say what Staqly should call you (shown in the sidebar and to your team) and what brings you here: posting as a creator, running a team, or automating with agents. |
+| **Name your workspace** | Most people use their brand or client. You can rename it later in **Settings**. |
+| **Where do you post?** | Pick the platforms your posts go to. You connect them in the last step. **I'll do it later** moves on. |
+| **Connect an agent** or **Invite your team** | Which one comes first follows your answer in the first step. For an agent, pick Claude Code or Codex; its API key (it can write and publish posts) is made at the end and put into the one-line command (shown only then). Invitations take several addresses at once and a role, and are sent at the end. |
+| **Choose a plan** (Staqly Cloud, a workspace without a plan) | Starter's 7-day free trial (card required, nothing charged until it ends) or any plan, through Stripe. |
+| **You are all set** | The workspace is set up: renamed, people invited, the agent's key shown. Connect the platforms you picked (X and the other OAuth platforms bring you back here; **Your own automation** needs only a name), then pick **Write your first post** or **Go to the calendar**. |
+
+People who join through an invitation see a shorter version: their name, the workspace they joined
+and what their role lets them do.
+
+## When it shows
+
+- **Cloud:** once per person, right after the first sign-in of a new account or an accepted
+  invitation. Finishing or skipping it ends it for good; it is stored with the person, so it doesn't
+  come back on another device.
+- **Staqly Community Edition:** never. The Community Edition has one workspace and no team to invite, so its empty
+  pages (Schedule, Posts, Channels) guide you instead.
+- It opens only from the dashboard's home (the calendar). A link to a post, a preview or Settings
+  opens what it points to.
+- Until you finish or skip it, **Getting started** in the user menu (bottom left, cloud only) opens it again.
+
+Over the API, `GET /v1/session` reports `onboarded`, and `POST /v1/session/onboarded` (from the
+dashboard) finishes it; see the [API reference](/api/reference).
