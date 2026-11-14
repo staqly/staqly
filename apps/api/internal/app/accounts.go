@@ -497,7 +497,7 @@ func (s *Service) createFirstWorkspace(ctx context.Context, q *db.Queries, user 
 	if _, err := q.AddMember(ctx, db.AddMemberParams{WorkspaceID: ws.ID, UserID: user.ID, Role: RoleOwner, CreatedAt: now, UpdatedAt: now}); err != nil {
 		return "", err
 	}
-	return ws.ID, s.welcomeServerTrial(ctx, q, ws.ID)
+	return ws.ID, s.welcomeNewWorkspace(ctx, q, ws.ID)
 }
 
 // createCloudWorkspace: a workspace on the free trial with its default collection, in time zone tz
@@ -687,7 +687,7 @@ func (s *Service) CreateWorkspace(ctx context.Context, p Principal, name, timezo
 			return err
 		}
 		out = MyWorkspace{ID: ws.ID, Name: ws.Name, Role: RoleOwner}
-		return s.welcomeServerTrial(ctx, q, ws.ID)
+		return s.welcomeNewWorkspace(ctx, q, ws.ID)
 	})
 	return out, err
 }

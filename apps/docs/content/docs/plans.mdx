@@ -146,6 +146,26 @@ On a cloud server without Stripe the server-side trial sends the first email whe
 says the workspace becomes read-only when the trial ends. A server without mail (`MAIL_SMTP_HOST`, `MAIL_FROM`)
 sends neither, and Staqly Community Edition has no plans and sends none.
 
+## Sign-up emails
+
+With Stripe, a new workspace has no plan until its owner starts the Starter trial in Stripe Checkout. Someone who
+creates an account and stops there gets up to three emails, each with a **Start my free week** button that opens
+**Plans** (`/plans`, where Starter's trial starts):
+
+| Email | When | What it says |
+|---|---|---|
+| *Your staqly account is ready – start your free week* | 10 minutes after the workspace was created. | What staqly does, the 7-day free trial (no charge before it ends, cancel any time in **Settings → Plan & usage**). |
+| *Your first post, scheduled in 2 minutes* | A day after. | Connect a channel, write, pick a time, or let an AI agent do it; the trial. |
+| *Your free week is still waiting* | Three days after. | The trial's terms again; the last reminder. |
+
+Each one goes to the person who created the workspace, and only while it is still true: they still own it, it has
+no plan yet, it never had a trial or a subscription, and its free trial is still on offer (no other workspace of
+theirs is in its trial, its card wasn't used for an earlier unpaid one). So starting the trial within 10 minutes
+leaves only *Your free trial has started*, and starting it later stops the rest. A plan the operator sets stops
+them too. Every one has an unsubscribe link (and the one-click `List-Unsubscribe` header): it stops the sign-up
+emails still to come and nothing else, and [Your notifications](/dashboard/notifications) don't change them. A
+server without Stripe or without mail sends none.
+
 ## Payment emails
 
 When a payment fails, Staqly Cloud emails the workspace's **owners**:

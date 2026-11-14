@@ -77,7 +77,7 @@ type jobPayload struct {
 	At         string `json:"at,omitempty"`         // sync_seats: when the membership changed (the proration date)
 	AIJobID    string `json:"ai_job_id,omitempty"`  // ai_run: the AI request
 	AttemptID  string `json:"attempt_id,omitempty"` // target_timeout: the attempt it times out
-	Welcome    string `json:"welcome,omitempty"`    // welcome_email: which one (welcomeTrial..., emailPaymentFailed...)
+	Welcome    string `json:"welcome,omitempty"`    // welcome_email: which one (welcomeTrial..., emailPaymentFailed..., emailSignup...)
 	Interval   string `json:"interval,omitempty"`   // welcome_email: the billing interval (paid)
 }
 

@@ -48,6 +48,9 @@ func TestNoWelcomeEmailInLocalMode(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	if err := s.tx(ctx, func(q *db.Queries) error { return s.queueSignupEmails(ctx, q, ws) }); err != nil {
+		t.Fatal(err)
+	}
 	var jobs int
 	if err := database.QueryRow(`SELECT COUNT(*) FROM river_job WHERE kind = 'welcome_email'`).Scan(&jobs); err != nil {
 		t.Fatal(err)
@@ -92,6 +95,19 @@ func TestWelcomeEmailTexts(t *testing.T) {
 		{"paid-without-trial", welcomeFacts{Kind: welcomePaid, Workspace: "Acme", Plan: "Starter", Interval: IntervalMonth, Steps: true, Base: base},
 			"You are on staqly Starter",
 			[]string{"billed monthly.", "Connect a channel", "Write your first post"}, nil},
+		{"signup", welcomeFacts{Kind: emailSignup, FirstName: "Ana", Unsub: base + "/unsubscribe#t", Base: base},
+			"Your staqly account is ready – start your free week",
+			[]string{"Hi Ana 👋", "Thanks for creating your staqly account! 🎉", "Write once, publish everywhere", "Claude Code, Codex or n8n",
+				"Start your 7-day free trial and publish your first post today.", "Start my free week: " + base + "/plans",
+				"See you in your feed,\nThe staqly team", "PS: Questions?", "Unsubscribe from these emails: " + base + "/unsubscribe#t"},
+			[]string{"**"}},
+		{"signup-day1", welcomeFacts{Kind: emailSignupDay1, Unsub: base + "/unsubscribe#t", Base: base},
+			"Your first post, scheduled in 2 minutes",
+			[]string{"Hi there 👋", "Connect a channel", "Start your 7-day free trial.", "Start my free week: " + base + "/plans", "Unsubscribe"}, nil},
+		{"signup-day3", welcomeFacts{Kind: emailSignupDay3, FirstName: "Ana", Unsub: base + "/unsubscribe#t", Base: base},
+			"Your free week is still waiting",
+			[]string{"7-day free trial hasn't started yet", "won't be charged before the trial ends", "last reminder",
+				"Start my free week: " + base + "/plans", "Unsubscribe"}, nil},
 	}
 	out := os.Getenv("WELCOME_EMAIL_SAMPLES")
 	for _, c := range cases {
