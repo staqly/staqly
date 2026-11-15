@@ -470,10 +470,14 @@ func (s *Service) CheckoutSession(ctx context.Context, p Principal, planID, inte
 		if err := s.noDiscount(ctx, w); err != nil {
 			return "", err
 		}
-		promo, err = s.promotionCodeID(ctx, code, plan, price)
+		currency := s.workspaceCurrency(ctx, w.ID, "")
+		if pr, err := s.livePrice(ctx, plan, interval); err == nil {
+			currency, _ = pr.in(currency) // what Checkout charges (setCheckoutCurrency)
+		}
+		promo, err = s.promotionCodeID(ctx, code, plan, price, currency)
 		if found, ok := s.unpinnedPrice(ctx, plan, interval, err); ok { // a stale STRIPE_PRICE_* (as below)
 			price = found
-			promo, err = s.promotionCodeID(ctx, code, plan, price)
+			promo, err = s.promotionCodeID(ctx, code, plan, price, currency)
 		}
 		if err != nil {
 			return "", err
@@ -735,7 +739,11 @@ type stripeCoupon struct {
 	Currency         string  `json:"currency"`
 	Duration         string  `json:"duration"`
 	DurationInMonths int64   `json:"duration_in_months"`
-	AppliesTo        *struct {
+	// CurrencyOptions: an amount-off coupon's amounts in its other currencies (when expanded).
+	CurrencyOptions map[string]struct {
+		AmountOff int64 `json:"amount_off"`
+	} `json:"currency_options"`
+	AppliesTo *struct {
 		Products []string `json:"products"`
 	} `json:"applies_to"`
 }
@@ -776,13 +784,31 @@ func (s *Service) promotion(ctx context.Context, code string) (string, *stripeCo
 		return pc.ID, nil, nil
 	}
 	var coupon stripeCoupon
-	if err := s.stripe(ctx, "GET", "/v1/coupons/"+url.PathEscape(couponID)+"?expand[]=applies_to", nil, &coupon); err != nil {
+	if err := s.stripe(ctx, "GET", "/v1/coupons/"+url.PathEscape(couponID)+"?expand[]=applies_to&expand[]=currency_options", nil, &coupon); err != nil {
 		return "", nil, err
 	}
 	if !coupon.Valid {
 		return "", nil, notValid
 	}
 	return pc.ID, &coupon, nil
+}
+
+// amountIn: what an amount-off coupon takes off in a currency (cents; 0 for a percent-off coupon), and whether it
+// can be used there at all: Stripe refuses an amount-off coupon on a payment in a currency it has no amount for.
+func (c *stripeCoupon) amountIn(currency string) (int64, bool) {
+	switch {
+	case c == nil || c.AmountOff == 0:
+		return 0, true
+	case c.Currency == currency:
+		return c.AmountOff, true
+	}
+	o, ok := c.CurrencyOptions[currency]
+	return o.AmountOff, ok && o.AmountOff > 0
+}
+
+// errCouponCurrency: an amount-off code made for payments in other currencies than the workspace's.
+func errCouponCurrency(c *stripeCoupon) *Error {
+	return invalid("promotion_code", "this code is for payments in "+strings.ToUpper(c.Currency))
 }
 
 // couponFits: whether a coupon covers a plan's price (a coupon limited to products names the price's product).
@@ -800,11 +826,15 @@ func (s *Service) couponFits(ctx context.Context, coupon *stripeCoupon, price st
 }
 
 // promotionCodeID: the id of the active promotion code `code` (as typed), checked against the plan the person
-// picked: a code limited to other plans is refused here rather than giving nothing at Stripe.
-func (s *Service) promotionCodeID(ctx context.Context, code string, plan Plan, price string) (string, error) {
+// picked and the currency they pay in: a code limited to other plans, or an amount off in another currency, is
+// refused here rather than by Stripe.
+func (s *Service) promotionCodeID(ctx context.Context, code string, plan Plan, price, currency string) (string, error) {
 	id, coupon, err := s.promotion(ctx, code)
 	if err != nil {
 		return "", err
+	}
+	if _, ok := coupon.amountIn(currency); !ok {
+		return "", errCouponCurrency(coupon)
 	}
 	fits, err := s.couponFits(ctx, coupon, price)
 	if err != nil {
@@ -873,7 +903,16 @@ func (s *Service) CheckPromotionCode(ctx context.Context, p Principal, code stri
 	}
 	out := PromotionCode{Code: code, Plans: []string{}}
 	if coupon != nil {
-		out.PercentOff, out.AmountOff, out.Currency = coupon.PercentOff, coupon.AmountOff, coupon.Currency
+		// An amount off is told in the workspace's currency, the one its prices are shown and charged in.
+		currency := s.workspaceCurrency(ctx, p.WorkspaceID, "")
+		amount, ok := coupon.amountIn(currency)
+		if !ok {
+			return PromotionCode{}, errCouponCurrency(coupon)
+		}
+		out.PercentOff, out.AmountOff = coupon.PercentOff, amount
+		if amount > 0 {
+			out.Currency = currency
+		}
 		out.Duration, out.DurationInMonths = coupon.Duration, coupon.DurationInMonths
 	}
 	for _, plan := range OfferedPlans() {
@@ -955,6 +994,7 @@ type stripeSubscription struct {
 	ID                 string            `json:"id"`
 	Customer           string            `json:"customer"`
 	Status             string            `json:"status"`
+	Currency           string            `json:"currency"`
 	CurrentPeriodStart int64             `json:"current_period_start"`
 	CurrentPeriodEnd   int64             `json:"current_period_end"`
 	EndedAt            int64             `json:"ended_at"`

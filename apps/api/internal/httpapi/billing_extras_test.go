@@ -73,10 +73,10 @@ func newAddonStripe(t *testing.T, e *env) *addonStripe {
 		switch route {
 		case "GET /v1/prices":
 			if f.newPrice != "" {
-				fmt.Fprintf(w, `{"data":[{"id":%q,"unit_amount":900,"currency":"eur"}]}`, f.newPrice)
+				fmt.Fprintf(w, `{"data":[{"id":%q,"unit_amount":900,"currency":"eur","currency_options":{"eur":{"unit_amount":900},"chf":{"unit_amount":900},"usd":{"unit_amount":900}}}]}`, f.newPrice)
 				return
 			}
-			fmt.Fprintf(w, `{"data":[{"id":"price_%s","unit_amount":900,"currency":"eur"}]}`, strings.TrimPrefix(r.URL.Query().Get("lookup_keys[]"), "staqly_"))
+			fmt.Fprintf(w, `{"data":[{"id":"price_%s","unit_amount":900,"currency":"eur","currency_options":{"eur":{"unit_amount":900},"chf":{"unit_amount":900},"usd":{"unit_amount":900}}}]}`, strings.TrimPrefix(r.URL.Query().Get("lookup_keys[]"), "staqly_"))
 		case "GET /v1/products":
 			enc.Encode(map[string]any{"data": []any{map[string]any{"name": "Webhooks pack",
 				"metadata": map[string]string{"staqly_kind": "addon", "staqly_addon": "webhooks_pack"}}}})

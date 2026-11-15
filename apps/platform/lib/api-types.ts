@@ -4442,7 +4442,7 @@ export interface components {
             code: string;
             /** @description Percent taken off; absent for an amount off. */
             percent_off?: number;
-            /** @description Amount taken off per invoice, in cents of `currency`; absent for a percent off. */
+            /** @description Amount taken off per invoice, in cents of `currency` (the workspace's: a code with no amount in it is refused, 422); absent for a percent off. */
             amount_off?: number;
             /** @example eur */
             currency?: string;
