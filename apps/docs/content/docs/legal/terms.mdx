@@ -3,7 +3,8 @@ title: Terms of Service
 description: The rules for using staqly cloud, the hosted version of staqly.
 ---
 
-Last updated: 2026-10-28
+Last updated: 2026-11-15. For customers who subscribed before that date, the changes made then to
+section 3 (billing) apply from 2026-12-15 (section 10).
 
 These terms apply to **staqly cloud**, the hosted service at staqly.ai operated by
 **staqly, Switzerland** ("staqly", "we", "us"). By creating a workspace or using the
@@ -33,17 +34,39 @@ your systems through webhooks, alerts and the API.
 
 - Plans and their limits are listed on [Plans & limits](/plans). Limits are enforced per
   workspace; over a limit the API answers `402`.
+- Prices are **per seat**: every member of the workspace is one seat, whatever their role; agents
+  and API keys take no seat. When people join or leave the workspace, the number of seats follows:
+  an added seat is charged at once and a freed seat credited at once to your balance with Stripe
+  (which pays your next invoices), each prorated from the day of the change.
+- Prices are set in EUR and shown and charged with the same figures in **CHF** in Switzerland and
+  Liechtenstein, in **EUR** in the EU and in **USD** everywhere else; your location decides which.
+  Once you have paid, Stripe keeps that currency for your later payments.
 - Starter starts with a **7-day trial**: you add a card at checkout and nothing is charged until
   the trial ends. It is offered once per workspace, and once per person and card: a card, or accounts, that a
   trial ending without a payment already used don't get another one (see
   [Free trial checks](/legal/privacy#free-trial-checks); a person reviews any case you think is wrong). Plus,
-  Pro and Business are paid from the first day. A workspace whose trial or paid period ended unpaid is
-  **suspended**: you can still read and export your data, but cannot change it, until a plan is
-  paid for.
+  Pro and Business are paid from the first day. Apart from the trial, a plan starts only once its first
+  payment goes through: an unpaid first payment never activates it.
 - Paid plans are billed in advance through our payment processor (Stripe, once payments are
-  available). We never see or store your card details. You can cancel at any time; your plan stays
-  active until the end of the period you paid for. Fees already paid are not refunded, except
-  where the law requires it.
+  available) and **renew automatically** for the same period (a month or a year) until cancelled.
+  We never see or store your card details. If a payment fails, Stripe retries it; the plan stays
+  active until three days after the end of the paid period.
+- A workspace whose trial ended unpaid, whose subscription ended, or whose payment is still unpaid
+  three days after the paid period ended is **suspended**: you can still read and export your data,
+  but cannot change it, until a plan is paid for.
+- **Upgrades** and moving from monthly to yearly are charged at once, prorated, and apply once that
+  payment goes through; until then, the plan you already paid for keeps working. **Downgrades** and
+  moving to monthly apply at once; the unused part is [credited](/plans#credits) to your balance with
+  Stripe. A smaller plan must fit what the workspace already holds.
+- **Add-ons** are billed with your plan, monthly or yearly: adding one is charged at once for the rest
+  of the period and applies once paid; removing one credits the unused part to your balance.
+- **X post bundles** are one-off purchases, used after the posts your plan includes, and expire at
+  the end of the billing period. A bundle that is refunded, or whose payment is lost in a chargeback,
+  loses its unused posts.
+- **Chargebacks:** if you dispute a payment with your bank or card issuer and the dispute is decided
+  against us, the subscription ends at once.
+- You can cancel at any time; your plan stays active until the end of the period you paid for. Fees
+  already paid are not refunded, except where the law requires it.
 - We may change prices with at least 30 days' notice; changes apply from your next billing
   period.
 
