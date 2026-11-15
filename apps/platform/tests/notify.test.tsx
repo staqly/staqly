@@ -63,11 +63,11 @@ describe('a plan limit in plain words', () => {
           max: 50 * 1024 ** 2,
           plan: 'pro',
           upgrade_plan: 'business',
-          upgrade_max: 100 * 1024 ** 2,
+          upgrade_max: 90 * 1024 ** 2,
         },
         'x',
       ),
-    ).toBe('The Pro plan takes files up to 50 MB; Business takes files up to 100 MB.')
+    ).toBe('The Pro plan takes files up to 50 MB; Business takes files up to 90 MB.')
   })
 
   it("falls back to the server's message when it sent no numbers", () => {

@@ -3750,7 +3750,7 @@ paths:
       operationId: uploadMedia
       tags: [media]
       summary: Upload a file (media:write). Type is detected from content; SVG/HTML are rejected.
-      description: "Files up to the plan's size (Starter 10 MB, Plus 25 MB, Pro 50 MB, Business 100 MB) and MAX_UPLOAD_MB. A larger file is refused with 413 (`plan_limit_exceeded` naming the plan that takes it, or `too_large`), from Content-Length before the body is read when it says so."
+      description: "Files up to the plan's size (Starter 10 MB, Plus 25 MB, Pro 50 MB, Business 90 MB) and MAX_UPLOAD_MB (default and at most 90 MB; 1 MB = 1,048,576 bytes). A larger file is refused with 413 (`plan_limit_exceeded` naming the plan that takes it, or `too_large`), from Content-Length before the body is read when it says so."
       parameters:
         - name: reuse
           in: query
@@ -3772,42 +3772,6 @@ paths:
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
-        "429": { $ref: "#/components/responses/RateLimited" }
-  /v1/media/upload-tickets:
-    post:
-      operationId: createMediaUploadTicket
-      tags: [media]
-      summary: A URL to upload one large file to directly (media:write)
-      description: "For files too big for a proxy in front of the dashboard (it relays bodies up to 95 MB): POST the file to `url` within 10 minutes, as to POST /v1/media (multipart `file`, optional `reuse`), with no session or key. The upload gets every check POST /v1/media makes."
-      responses:
-        "201": { description: The ticket, content: { application/json: { schema: { $ref: "#/components/schemas/UploadTicket" } } } }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "402": { $ref: "#/components/responses/PaymentRequired" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-        "409": { $ref: "#/components/responses/Conflict" }
-        "429": { $ref: "#/components/responses/RateLimited" }
-  /v1/media/direct:
-    post:
-      operationId: uploadMediaDirect
-      tags: [media]
-      summary: Upload a file with an upload ticket (the URL from POST /v1/media/upload-tickets)
-      security: []
-      parameters:
-        - { name: ticket, in: query, required: true, schema: { type: string }, description: "The signed ticket, as the ticket's url carries it" }
-        - { name: reuse, in: query, required: false, schema: { type: boolean }, description: As for POST /v1/media }
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema: { type: object, required: [file], properties: { file: { type: string, format: binary } } }
-      responses:
-        "201": { description: Uploaded, content: { application/json: { schema: { $ref: "#/components/schemas/Media" } } } }
-        "400": { $ref: "#/components/responses/BadRequest" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "402": { $ref: "#/components/responses/PaymentRequired" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-        "413": { $ref: "#/components/responses/PayloadTooLarge" }
-        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "429": { $ref: "#/components/responses/RateLimited" }
   /v1/media/delete:
     post:
@@ -5610,13 +5574,6 @@ components:
         processing_timeout_seconds: { type: [integer, "null"], minimum: 60, maximum: 86400, description: "How long targets on your own automation may wait for a result before they fail; null goes back to the server's PROCESSING_TIMEOUT." }
         archived: { type: boolean }
 
-    UploadTicket:
-      type: object
-      required: [url, expires_at, max_bytes]
-      properties:
-        url: { type: string, description: "POST the file here (PUBLIC_API_URL/v1/media/direct?ticket=...)" }
-        expires_at: { type: string, format: date-time }
-        max_bytes: { type: integer, description: The largest file the workspace may upload }
     Media:
       type: object
       description: An uploaded file

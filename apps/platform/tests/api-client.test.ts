@@ -1,6 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { api, ApiError, errorMessage, getCsrfToken, onUnauthorized, setCsrfToken } from '@/lib/api'
+import {
+  api,
+  ApiError,
+  errorMessage,
+  getCsrfToken,
+  onUnauthorized,
+  setCsrfToken,
+  uploadMediaWithProgress,
+} from '@/lib/api'
 
 import { mockApi, sessionFixture } from './utils'
 
@@ -234,55 +242,26 @@ function fakeXhr(answer: { status: number; body: unknown }) {
   return sent
 }
 
-function blobOf(size: number) {
-  const b = new Blob(['x'], { type: 'video/mp4' })
+function fileOf(size: number) {
+  const f = new File(['x'], 'big.mp4', { type: 'video/mp4' })
 
-  Object.defineProperty(b, 'size', { value: size })
+  Object.defineProperty(f, 'size', { value: size })
 
-  return b
+  return f
 }
 
 describe('media uploads', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('a file over 90 MB goes to the upload ticket, with no session token, keeping reuse', async () => {
-    const mocked = mockApi({
-      'POST /v1/media/upload-tickets': {
-        status: 201,
-        body: {
-          url: 'https://api.example/v1/media/direct?ticket=t.s',
-          expires_at: '2026-11-15T00:10:00Z',
-          max_bytes: 100 * 2 ** 20,
-        },
-      },
-    })
+  it('the largest file (90 MB) goes through the dashboard like any other, with the session token', async () => {
     const sent = fakeXhr({ status: 201, body: { id: 'med_big', mime_type: 'video/mp4' } })
 
-    const m = await api.uploadMedia(blobOf(95 * 2 ** 20), 'big.mp4', { reuse: true })
+    const m = await uploadMediaWithProgress(fileOf(90 * 2 ** 20), () => {})
 
     expect(m.id).toBe('med_big')
-    expect(mocked.find('POST', '/v1/media/upload-tickets')).toHaveLength(1)
     expect(sent).toEqual([
-      { url: 'https://api.example/v1/media/direct?ticket=t.s&reuse=true', headers: { Accept: 'application/json' } },
+      { url: '/api/v1/media', headers: { Accept: 'application/json', 'X-CSRF-Token': 'csrf-test' } },
     ])
-  })
-
-  it("a direct upload's 401 is its ticket: the person stays signed in", async () => {
-    mockApi({
-      'POST /v1/media/upload-tickets': {
-        status: 201,
-        body: { url: 'https://api.example/v1/media/direct?ticket=t.s', expires_at: '', max_bytes: 0 },
-      },
-    })
-    fakeXhr({
-      status: 401,
-      body: { error: { code: 'unauthorized', message: 'the upload ticket is invalid or expired' } },
-    })
-    const signedOut = vi.fn<(e: ApiError) => void>()
-
-    onUnauthorized(signedOut)
-    expect((await failure(api.uploadMedia(blobOf(95 * 2 ** 20), 'big.mp4'))).status).toBe(401)
-    expect(signedOut).not.toHaveBeenCalled()
   })
 })
 

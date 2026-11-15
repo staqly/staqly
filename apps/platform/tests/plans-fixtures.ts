@@ -89,7 +89,7 @@ export const PLANS: Plan[] = [
       webhooks: 50,
       api_keys: 50,
       storage_bytes: 100 * GB,
-      max_upload_bytes: 100 * MB,
+      max_upload_bytes: 90 * MB,
       data_export: true,
       x_posts_per_period: 500,
       linkedin_posts_per_period: 900,

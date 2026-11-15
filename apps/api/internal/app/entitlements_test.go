@@ -9,7 +9,7 @@ func TestApplyEntitlements(t *testing.T) {
 	// The limits as the database seeds them (migration 00006); ApplyEntitlements is pure, so they are set here.
 	plus, _ := PlanByID("plus")
 	plus.Limits = PlanLimits{PostsPerMonth: 1500, Channels: 15, Alerts: 10, Webhooks: 10, Keys: 10, StorageBytes: 10 * gb,
-		MaxUploadBytes: 100 << 20, DataExport: true, XPostsPerPeriod: 100, LinkedInPostsPerPeriod: 300,
+		MaxUploadBytes: 25 << 20, DataExport: true, XPostsPerPeriod: 100, LinkedInPostsPerPeriod: 300,
 		LinkedInVideosPerPeriod: 15, AIMonthlyCents: 200}
 	business := UnlockedPlan
 	starter, _ := PlanByID("starter")
@@ -49,8 +49,17 @@ func TestApplyEntitlements(t *testing.T) {
 			func(p Plan) bool { return p.Limits == plus.Limits && p.BaseLimits == nil }, 0},
 		{"a feature without metadata is listed, nothing changes", plus, []Entitlement{pack("ai_pack", "AI pack", nil)},
 			func(p Plan) bool { return p.HasEntitlement("ai_pack") && p.Limits == plus.Limits }, 0},
-		{"upload size in MB", starter, []Entitlement{pack("big_files", "Big files", map[string]string{"staqly_limit_max_upload_mb": "+75"})},
-			func(p Plan) bool { return p.Limits.MaxUploadBytes == 100<<20 }, 1},
+		{"upload size in MB", starter, []Entitlement{pack("big_files", "Big files", map[string]string{"staqly_limit_max_upload_mb": "+10"})},
+			func(p Plan) bool { return p.Limits.MaxUploadBytes == 35<<20 }, 1},
+		// No file goes past MaxUploadMB (90 MB): a bonus stops there, "unlimited" means it, a plan at it gets nothing.
+		{"upload size stops at 90 MB", starter, []Entitlement{
+			pack("big_files", "Big files", map[string]string{"staqly_limit_max_upload_mb": "+50"}),
+			pack("bigger_files", "Bigger files", map[string]string{"staqly_limit_max_upload_mb": "+50"})},
+			func(p Plan) bool { return p.Limits.MaxUploadBytes == 90<<20 && p.LimitBonuses[1].Add == 15<<20 }, 2},
+		{"unlimited upload size is 90 MB", starter, []Entitlement{pack("big_files", "Big files", map[string]string{"staqly_limit_max_upload_mb": "unlimited"})},
+			func(p Plan) bool { return p.Limits.MaxUploadBytes == 90<<20 && p.LimitBonuses[0].Add == 65<<20 }, 1},
+		{"a plan at 90 MB gets no upload bonus", withUpload(starter, 90<<20), []Entitlement{pack("big_files", "Big files", map[string]string{"staqly_limit_max_upload_mb": "+10"})},
+			func(p Plan) bool { return p.Limits.MaxUploadBytes == 90<<20 && p.BaseLimits == nil }, 0},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -66,4 +75,9 @@ func TestApplyEntitlements(t *testing.T) {
 	if parseEntitlements("not json") != nil || parseEntitlements("") != nil || len(parseEntitlements(`[{"lookup_key":"a"}]`)) != 1 {
 		t.Fatal("parseEntitlements")
 	}
+}
+
+func withUpload(p Plan, bytes int64) Plan {
+	p.Limits.MaxUploadBytes = bytes
+	return p
 }

@@ -102,7 +102,7 @@ export const PLANS: SitePlan[] = [
       '500 X credits a month',
       '900 LinkedIn posts a month, 60 with video',
       'MCP, REST API, SDKs and CLI',
-      '100 GB storage, 100 MB per file',
+      '100 GB storage, 90 MB per file',
       'Backups and full data export with files',
     ],
   },
@@ -259,7 +259,7 @@ export const COMPARE: { category: string; rows: CompareRow[] }[] = [
       {
         label: 'File size',
         hint: 'Per upload',
-        values: ['10 MB', '25 MB', '50 MB', '100 MB'],
+        values: ['10 MB', '25 MB', '50 MB', '90 MB'],
         limit: 'max_upload_bytes',
       },
       { label: 'Full history of every post', values: [true, true, true, true] },

@@ -179,8 +179,7 @@ Migrations run automatically on start. To stay on one release, use its tag inste
 process (`server`) as uid 10001 and is health-checked via `/health` and the dashboard. The
 dashboard relays `/api/*` to the API in the same process without buffering request bodies,
 capped at **95 MB**, below the 100 MB a Cloudflare proxy in front takes; larger bodies get
-`413 too_large`. The dashboard sends files over 90 MB to `PUBLIC_API_URL` directly
-([large files](/api/media#large-files-from-a-browser)).
+`413 too_large`. The largest file is 90 MB (`MAX_UPLOAD_MB`), so every upload fits.
 
 Binaries in the image: `server` (the server and its [operator commands](/self-hosting/operator-cli))
 and `mcp-stdio`.
