@@ -260,6 +260,11 @@ func limitErr(plan Plan, limit string, max, used int64) *Error {
 		Details: map[string]any{"limit": limit, "max": max, "used": used, "plan": plan.ID}}
 }
 
+// MaxUploadMB: the largest file any workspace may upload, MAX_UPLOAD_MB's default and ceiling. With its multipart
+// wrapping it fits through the dashboard's proxy (web.MaxProxyBodyBytes, 95 MB, below a Cloudflare proxy's 100 MB),
+// so every upload, replace and project save goes the same way.
+const MaxUploadMB = 90
+
 // uploadMax: the workspace's plan and the largest file it may upload, the smaller of the plan's limit and
 // MAX_UPLOAD_MB.
 func (s *Service) uploadMax(ctx context.Context, q *db.Queries, workspaceID string) (Plan, int64, error) {

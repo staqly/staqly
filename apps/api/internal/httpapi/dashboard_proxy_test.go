@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -111,5 +112,60 @@ func TestRelaySecretKeepsPerBrowserLimits(t *testing.T) {
 	}
 	if code := signup("192.0.2.99", ""); code != 429 {
 		t.Fatalf("spoofed X-Forwarded-For escaped the limit: %d", code)
+	}
+}
+
+// The largest file any workspace may upload (Business, MAX_UPLOAD_MB at its ceiling) fits through the dashboard's
+// proxy, which relays at most 95 MB: a new file, a replaced one and a saved project, multipart wrapping included.
+// Nothing needs a way around the proxy.
+func TestLargestFileFitsThroughTheDashboardProxy(t *testing.T) {
+	e := newEnv(t)
+	e.svc.Cfg.MaxUploadBytes = app.MaxUploadMB << 20
+	e.plan("business")
+	u, _ := url.Parse(e.srv.URL)
+	dash := httptest.NewServer(web.Handler(fstest.MapFS{}, u, slog.New(slog.DiscardHandler), false, "", false))
+	t.Cleanup(dash.Close)
+	max := app.MaxUploadMB << 20
+	send := func(path string, fields map[string]string, filename string, content []byte, want int, out any) {
+		t.Helper()
+		body, ct := multipartBody(t, fields, filename, content)
+		if n := body.Len(); n > web.MaxProxyBodyBytes {
+			t.Fatalf("%s: a %d byte body is over the proxy's %d", path, n, web.MaxProxyBodyBytes)
+		}
+		req, _ := http.NewRequest("POST", dash.URL+"/api"+path, body)
+		req.Header.Set("Content-Type", ct)
+		req.Header.Set("Authorization", "Bearer "+e.admin)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		raw, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != want {
+			t.Fatalf("%s: %d, want %d: %.300s", path, resp.StatusCode, want, raw)
+		}
+		if out != nil {
+			_ = json.Unmarshal(raw, out)
+		}
+	}
+	padded := func(b []byte, size int) []byte { return append(append([]byte{}, b...), make([]byte, size-len(b))...) }
+
+	var m app.Media
+	send("/v1/media", nil, "a.png", padded(pngBytes, max), 201, &m)
+	send("/v1/media/"+m.ID+"/replace", nil, "b.png", padded(realPNG(t, 40, 40), max), 201, nil)
+	project := []byte(`{"version":1,"kind":"video","width":1080,"height":1920,"clips":[{"id":"c1"}],"captions":[],"sounds":[]}`)
+	// JSON allows any amount of whitespace between tokens: a project file of exactly the limit.
+	big := append(append([]byte(`{`), bytes.Repeat([]byte(" "), max-len(project))...), project[1:]...)
+	send("/v1/media-projects", map[string]string{"name": "Reel"}, "p.json", big, 201, nil)
+
+	// One byte more is the plan's 413, not the proxy's.
+	var refused struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	send("/v1/media", nil, "c.png", padded(pngBytes, max+1), 413, &refused)
+	if refused.Error.Code != "plan_limit_exceeded" {
+		t.Fatalf("over the limit: %+v", refused)
 	}
 }

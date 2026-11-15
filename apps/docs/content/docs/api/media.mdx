@@ -98,23 +98,17 @@ stay readable.
 
 | Setting | Default |
 |---|---|
-| `MAX_UPLOAD_MB` (server) | 100 MB |
-| Plan (cloud) | Starter 10 MB per file and 2 GB storage, Plus 25 MB / 10 GB, Pro 50 MB / 30 GB, Business 100 MB / 100 GB |
+| `MAX_UPLOAD_MB` (server) | 90 MB, also the most it may be set to |
+| Plan (cloud) | Starter 10 MB per file and 2 GB storage, Plus 25 MB / 10 GB, Pro 50 MB / 30 GB, Business 90 MB / 100 GB |
 
-A file may be as large as the smaller of the two: a Pro or Business workspace needs `MAX_UPLOAD_MB` raised on the server to upload files over 100 MB.
+A file may be as large as the smaller of the two. A MB here is 1,048,576 bytes. 90 MB is the most any file may be:
+with its multipart wrapping it fits through the dashboard's proxy (95 MB, below the 100 MB a Cloudflare proxy in
+front takes), so uploads, replacing a file and saving a project all go the same way.
 
 Over the limit: `413 too_large` (the server's limit), `413 plan_limit_exceeded` for a file over the plan's size
 (`details.max`, and `details.upgrade_plan` and `upgrade_max` when a plan takes bigger files: "The Starter plan takes
 files up to 10 MB; Plus takes files up to 25 MB."), or `402 plan_limit_exceeded` with `details.limit` set to
 `storage_bytes`. A `Content-Length` over the limit is refused before the body is read.
-
-### Large files from a browser
-
-The dashboard's proxy relays request bodies up to 95 MB (a Cloudflare proxy in front of it refuses more than
-100 MB). For a larger file, `POST /v1/media/upload-tickets` answers a `url` on the API's own address
-(`PUBLIC_API_URL`), good for 10 minutes: post the file there exactly as to `POST /v1/media` (`file` part, optional
-`?reuse=true`), with no session or key. It gets the same checks: type, plan and storage limits, reuse. The dashboard
-does this by itself for files over 90 MB; `PUBLIC_DASHBOARD_URL` is allowed to call the API for it (CORS).
 
 ## The library
 

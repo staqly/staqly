@@ -35,7 +35,7 @@ More of the same kind:
 
 - On/off settings (`COOKIE_SECURE`, `TRUST_PROXY`, `WEBHOOK_ALLOW_PRIVATE`, `S3_FORCE_PATH_STYLE`...) take `true` or `false` (also `1`/`0`); `yes` or `on` is refused.
 - Counts (`JOB_CONCURRENCY`, `MAX_UPLOAD_MB`, `NOTIFY_*`, `RATE_LIMIT_*`) must be
-  whole numbers above 0; durations (`SESSION_TTL`, `WEBHOOK_RETRY_BASE`, `NOTIFY_RETRY_BASE`...)
+  whole numbers above 0 (`MAX_UPLOAD_MB` at most 90); durations (`SESSION_TTL`, `WEBHOOK_RETRY_BASE`, `NOTIFY_RETRY_BASE`...)
   Go durations such as `90s`, `15m` or `720h` (`PROCESSING_TIMEOUT` also takes `0`).
 - `STORAGE_DRIVER` is `disk` or `s3`; `s3` names the `S3_*` settings it misses.
 - The Community Edition refuses `DATABASE_URL`: it keeps its data in SQLite (`DATABASE_PATH`).
@@ -163,8 +163,7 @@ URLs. Don't run the binary and the Docker setup at the same time on the default 
 <Accordion title="Upload rejected with 415">
 Only pictures (PNG, JPEG, GIF, WebP, AVIF), videos (MP4, WebM, MOV) and audio (MP3, WAV, OGG, M4A)
 are accepted; documents and archives are not media, and SVG and HTML are refused because they can
-carry script. Raise the size limit with
-`MAX_UPLOAD_MB`.
+carry script. A file over the size limit gets `413` instead; `MAX_UPLOAD_MB` sets it, up to 90 MB.
 </Accordion>
 <Accordion title="database is locked">
 Shouldn't happen with the bundled configuration (immediate transactions and a 10 s busy

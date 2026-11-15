@@ -70,8 +70,6 @@
 /v1/media-projects/{}
 /v1/media-projects/{}/file
 /v1/media/delete
-/v1/media/direct
-/v1/media/upload-tickets
 /v1/media/{}/info
 /v1/media/{}/replace
 /v1/members

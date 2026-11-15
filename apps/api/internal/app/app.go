@@ -295,7 +295,7 @@ func New(database *sql.DB, log *slog.Logger, cfg Config) *Service {
 		cfg.SessionTTL = 30 * 24 * time.Hour
 	}
 	if cfg.MaxUploadBytes == 0 {
-		cfg.MaxUploadBytes = 100 << 20
+		cfg.MaxUploadBytes = MaxUploadMB << 20
 	}
 	if len(cfg.SecretKey) == 0 { // ponytail: tests and embedders; the server always loads one (LoadSecretKey), so sealed channels survive restarts
 		cfg.SecretKey = make([]byte, 32)

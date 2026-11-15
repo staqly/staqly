@@ -26,16 +26,22 @@ func TestInvalidEnvValuesRefuseToStart(t *testing.T) {
 			}
 		})
 	}
+	// Over the largest file the dashboard's proxy carries.
+	clearEnv(t)
+	t.Setenv("MAX_UPLOAD_MB", "91")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "MAX_UPLOAD_MB must be at most 90") {
+		t.Fatalf("MAX_UPLOAD_MB=91: %v", err)
+	}
 	clearEnv(t)
 	for k, v := range map[string]string{"TRUST_PROXY": "1", "COOKIE_SECURE": "FALSE", "SESSION_TTL": "720h",
-		"PROCESSING_TIMEOUT": "0", "RATE_LIMIT_DISABLED": "true", "MAX_UPLOAD_MB": "200"} {
+		"PROCESSING_TIMEOUT": "0", "RATE_LIMIT_DISABLED": "true", "MAX_UPLOAD_MB": "90"} {
 		t.Setenv(k, v)
 	}
 	c, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !c.TrustProxy || c.CookieSecure || c.App.SessionTTL != 720*time.Hour || !c.App.ProcessingTimeoutNever || c.App.MaxUploadBytes != 200<<20 {
+	if !c.TrustProxy || c.CookieSecure || c.App.SessionTTL != 720*time.Hour || !c.App.ProcessingTimeoutNever || c.App.MaxUploadBytes != 90<<20 {
 		t.Fatalf("valid values misread: %+v", c)
 	}
 }

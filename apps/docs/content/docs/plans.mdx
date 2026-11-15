@@ -32,7 +32,7 @@ for information).
 | Webhooks | 3 | 10 | 25 | 50 |
 | Active API keys | 2 | 10 | 25 | 50 |
 | Storage | 2 GB | 10 GB | 30 GB | 100 GB |
-| Max file size | 10 MB | 25 MB | 50 MB | 100 MB |
+| Max file size | 10 MB | 25 MB | 50 MB | 90 MB |
 | Workspace data export (ZIP of collections, posts, channels, schedules, events) | Yes, without files | Yes, with files | Yes, with files | Yes, with files |
 | Backups and activity log export | No | Yes | Yes | Yes |
 | Shared AI allowance per month (estimated provider cost, USD) | $1 | $2 | $5 | $10 |
@@ -384,7 +384,7 @@ list is cached for 10 minutes):
 | `staqly_limit_channels`, `staqly_limit_alerts`, `staqly_limit_webhooks`, `staqly_limit_api_keys` | pieces | `+10` |
 | `staqly_limit_posts_per_month`, `staqly_limit_x_posts_per_period`, `staqly_limit_linkedin_posts_per_period`, `staqly_limit_linkedin_videos_per_period` | posts | `+500` |
 | `staqly_limit_storage_gb` | GB | `+50` |
-| `staqly_limit_max_upload_mb` | MB | `+100` |
+| `staqly_limit_max_upload_mb` | MB, never past 90 MB (`unlimited` means 90 MB) | `+15` |
 | `staqly_enable` | a capability | `data_export` |
 
 So an add-on for more AI is a product `staqly_addon` = `ai_pack` with a feature carrying

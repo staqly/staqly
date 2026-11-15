@@ -337,29 +337,6 @@ func (s *Server) deleteCollection(w http.ResponseWriter, r *http.Request) {
 
 // ---- media ----
 
-func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request) {
-	s.receiveMedia(w, r, principal(r))
-}
-
-// uploadMediaDirect: POST /v1/media/direct?ticket=..., a large file sent to the API's own address instead of
-// through the dashboard's proxy (app.MediaUploadTicket); no session or CSRF token, the ticket stands for them.
-func (s *Server) uploadMediaDirect(w http.ResponseWriter, r *http.Request) {
-	p, err := s.svc.UploadTicketPrincipal(r.Context(), r.URL.Query().Get("ticket"))
-	if err == nil {
-		err = s.svc.CheckWritable(r.Context(), p.WorkspaceID) // the workspace may have been suspended since
-	}
-	if err != nil {
-		writeErr(w, r, err)
-		return
-	}
-	s.receiveMedia(w, r, p)
-}
-
-func (s *Server) createUploadTicket(w http.ResponseWriter, r *http.Request) {
-	out, err := s.svc.MediaUploadTicket(r.Context(), principal(r))
-	respond(w, r, 201, out, err)
-}
-
 // maxDiscard: how much of a refused body is read and dropped so the client, still sending it, can read the 413
 // (closing mid-upload shows most clients a connection error instead). Larger bodies get the connection closed.
 const maxDiscard = 200 << 20
@@ -378,7 +355,8 @@ func (s *Server) refuseOversized(w http.ResponseWriter, r *http.Request, p app.P
 	return true
 }
 
-func (s *Server) receiveMedia(w http.ResponseWriter, r *http.Request, p app.Principal) {
+func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request) {
+	p := principal(r)
 	if s.refuseOversized(w, r, p) {
 		return
 	}

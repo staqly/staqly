@@ -58,7 +58,7 @@ still be edited and publish as planned. An OAuth platform without its app's keys
 | Storage | 2 GB | 10 GB | 30 GB | 100 GB |
 | Shared AI allowance per month (USD) | $1 | $2 | $5 | $10 |
 | Fresh X statistics reads per month | 100 | 200 | 500 | 1,000 |
-| File size | 10 MB | 25 MB | 50 MB | 100 MB |
+| File size | 10 MB | 25 MB | 50 MB | 90 MB |
 | Backups, activity log export, export with files | no | yes | yes | yes |
 | Collections, schedules, MCP, history | unlimited | unlimited | unlimited | unlimited |
 
@@ -118,7 +118,7 @@ See [Webhooks](/automation/webhooks) and [Alerts](/automation/alerts).
 | Page size of list endpoints | default 50, at most 200 ([pagination](/api/pagination-and-search)) |
 | A listing | 5 seconds, then `503 unavailable`: retry or narrow it with filters |
 | A turn of the [assistant](/dashboard/assistant) | a request of 4 MB; 1,000 messages and 200 attached files in a chat, 10 files in a message (`422` over those). The model gets the last 60 messages and pictures of up to 5 MB each, the most recent 20 MB of them |
-| Upload | `MAX_UPLOAD_MB` on the server (default 100 MB), or the plan's file size if smaller ([media](/api/media)); a request through the dashboard's proxy up to 95 MB, larger files go to the API directly |
+| Upload | `MAX_UPLOAD_MB` on the server (default and at most 90 MB), or the plan's file size if smaller ([media](/api/media)) |
 | `Idempotency-Key` | remembered for 24 hours ([idempotency](/api/idempotency)) |
 | Invoices per page (billing details) | 24 |
 

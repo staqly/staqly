@@ -85,6 +85,13 @@ func ApplyEntitlements(p Plan, ents []Entitlement) Plan {
 				continue
 			}
 			ptr := f.field(&p.Limits)
+			if f.limit == LimitMaxUpload { // never past the largest file any workspace may upload
+				if b, ok := maxUploadBonus(*ptr, v, e.Quantity); ok {
+					*ptr += b
+					p.LimitBonuses = append(p.LimitBonuses, LimitBonus{Limit: f.limit, Add: b, From: e.Name})
+				}
+				continue
+			}
 			if strings.EqualFold(v, "unlimited") {
 				if *ptr != Unlimited {
 					*ptr = Unlimited
@@ -112,6 +119,24 @@ func ApplyEntitlements(p Plan, ents []Entitlement) Plan {
 		p.BaseLimits = &base
 	}
 	return p
+}
+
+// maxUploadBonus: what a staqly_limit_max_upload_mb value adds to a file size of cur bytes, capped at MaxUploadMB
+// ("unlimited" up to it); false when it adds nothing.
+func maxUploadBonus(cur int64, v string, quantity int64) (int64, bool) {
+	limit := int64(MaxUploadMB << 20)
+	if cur == Unlimited || cur >= limit {
+		return 0, false
+	}
+	add := limit - cur
+	if !strings.EqualFold(v, "unlimited") {
+		n, err := strconv.ParseInt(strings.TrimPrefix(v, "+"), 10, 64)
+		if err != nil || n <= 0 {
+			return 0, false
+		}
+		add = min(add, n*max(quantity, 1)<<20)
+	}
+	return add, true
 }
 
 // HasEntitlement: the workspace's subscription grants the feature (e.g. "ai_pack").

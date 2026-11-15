@@ -57,7 +57,7 @@ services:
       # The dashboard is published on all interfaces: connect links point phones at this computer's address.
       DASHBOARD_EXPOSED: "true"
       COOKIE_SECURE: ${COOKIE_SECURE:-}
-      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-100}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-90}
       # Empty = mode default: true in local mode (n8n on the Docker network/LAN),
       # false in cloud mode (tenants must not reach your private network).
       WEBHOOK_ALLOW_PRIVATE: ${WEBHOOK_ALLOW_PRIVATE:-}

@@ -26,7 +26,7 @@ func TestPlanLimitValues(t *testing.T) {
 		"starter":  {PostsPerMonth: 300, Channels: 5, Alerts: 3, Webhooks: 3, Keys: 2, StorageBytes: 2 * gb, MaxUploadBytes: 10 * mb, DataExport: false, XPostsPerPeriod: 50, LinkedInPostsPerPeriod: 100, LinkedInVideosPerPeriod: 5, AIMonthlyCents: 100},
 		"plus":     {PostsPerMonth: 1500, Channels: 15, Alerts: 10, Webhooks: 10, Keys: 10, StorageBytes: 10 * gb, MaxUploadBytes: 25 * mb, DataExport: true, XPostsPerPeriod: 100, LinkedInPostsPerPeriod: 300, LinkedInVideosPerPeriod: 15, AIMonthlyCents: 200},
 		"pro":      {PostsPerMonth: 5000, Channels: 40, Alerts: 25, Webhooks: 25, Keys: 25, StorageBytes: 30 * gb, MaxUploadBytes: 50 * mb, DataExport: true, XPostsPerPeriod: 250, LinkedInPostsPerPeriod: 600, LinkedInVideosPerPeriod: 30, AIMonthlyCents: 500},
-		"business": {PostsPerMonth: 15000, Channels: 100, Alerts: 50, Webhooks: 50, Keys: 50, StorageBytes: 100 * gb, MaxUploadBytes: 100 * mb, DataExport: true, XPostsPerPeriod: 500, LinkedInPostsPerPeriod: 900, LinkedInVideosPerPeriod: 60, AIMonthlyCents: 1000},
+		"business": {PostsPerMonth: 15000, Channels: 100, Alerts: 50, Webhooks: 50, Keys: 50, StorageBytes: 100 * gb, MaxUploadBytes: 90 * mb, DataExport: true, XPostsPerPeriod: 500, LinkedInPostsPerPeriod: 900, LinkedInVideosPerPeriod: 60, AIMonthlyCents: 1000},
 	}
 	prices := map[string][2]int{"starter": {15, 144}, "plus": {29, 276}, "pro": {59, 564}, "business": {99, 948}}
 	for id, pr := range prices {
@@ -89,8 +89,8 @@ func TestPlanUploadLimit(t *testing.T) {
 	}{
 		{"starter", 9, 11, "The Starter plan takes files up to 10 MB; Plus takes files up to 25 MB."},
 		{"plus", 24, 26, "The Plus plan takes files up to 25 MB; Pro takes files up to 50 MB."},
-		{"pro", 49, 51, "The Pro plan takes files up to 50 MB; Business takes files up to 100 MB."},
-		{"business", 99, 101, "The Business plan takes files up to 100 MB."},
+		{"pro", 49, 51, "The Pro plan takes files up to 50 MB; Business takes files up to 90 MB."},
+		{"business", 89, 91, "The Business plan takes files up to 90 MB."},
 	} {
 		e.plan(c.plan)
 		e.upload("/v1/media", e.key, nil, "ok.png", file(c.ok), 201, nil)
@@ -132,36 +132,6 @@ func TestUploadRefusedByContentLength(t *testing.T) {
 			t.Errorf("%s: %d %s", path, resp.StatusCode, raw)
 		}
 	}
-}
-
-// Files too big for the dashboard's proxy go to POST /v1/media/direct with a ticket from
-// POST /v1/media/upload-tickets: no session, the same checks as POST /v1/media.
-func TestDirectUpload(t *testing.T) {
-	e := newEnv(t)
-	e.svc.Cfg.MaxUploadBytes = 200 << 20
-	e.plan("plus")
-	var tk app.UploadTicket
-	e.do(nil, "POST", "/v1/media/upload-tickets", e.key, nil, 201, &tk)
-	if tk.MaxBytes != 25<<20 || !strings.Contains(tk.URL, "/v1/media/direct?ticket=") {
-		t.Fatalf("ticket: %+v", tk)
-	}
-	direct := strings.Replace(tk.URL, e.svc.Cfg.PublicURL, "", 1)
-	var m app.Media
-	e.upload(direct, "", nil, "a.png", pngBytes, 201, &m)
-	if m.MimeType != "image/png" {
-		t.Fatalf("media: %+v", m)
-	}
-	var dup app.Media
-	e.upload(direct+"&reuse=true", "", nil, "again.png", pngBytes, 201, &dup)
-	if dup.ID != m.ID {
-		t.Errorf("reuse made a second file: %s, %s", m.ID, dup.ID)
-	}
-	e.upload(direct, "", nil, "page.html", []byte("<html></html>"), 415, nil)
-	e.upload(direct, "", nil, "big.png", append(append([]byte{}, pngBytes...), make([]byte, 26<<20)...), 413, nil)
-	e.upload(direct[:len(direct)-2]+"00", "", nil, "a.png", pngBytes, 401, nil) // signature changed
-	e.upload("/v1/media/direct", "", nil, "a.png", pngBytes, 401, nil)
-	e.svc.Now = func() time.Time { return time.Now().Add(app.UploadTicketTTL + time.Minute) }
-	e.upload(direct, "", nil, "a.png", pngBytes, 401, nil) // expired
 }
 
 // A new cloud workspace gets a 7-day Starter trial; unpaid afterwards it is read-only

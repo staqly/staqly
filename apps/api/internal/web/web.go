@@ -32,8 +32,8 @@ import (
 	"github.com/staqly/staqly/apps/api/internal/logctx"
 )
 
-// MaxProxyBodyBytes caps proxied request bodies below the 100 MB a Cloudflare proxy in front takes. The dashboard
-// sends files over 90 MB to the API's own address instead (POST /v1/media/upload-tickets).
+// MaxProxyBodyBytes caps proxied request bodies below the 100 MB a Cloudflare proxy in front takes; the largest file
+// (app.MaxUploadMB, 90 MB) fits with its multipart wrapping.
 const MaxProxyBodyBytes = 95 << 20
 
 var proxyTooLarge = fmt.Sprintf("request body too large: at most %d MB", MaxProxyBodyBytes>>20)

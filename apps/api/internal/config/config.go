@@ -184,6 +184,9 @@ func checkEnv() error {
 			}
 		}
 	}
+	if n, _ := strconv.Atoi(os.Getenv("MAX_UPLOAD_MB")); n > app.MaxUploadMB {
+		return fmt.Errorf("MAX_UPLOAD_MB must be at most %d, the largest file the dashboard's proxy carries (got %q)", app.MaxUploadMB, os.Getenv("MAX_UPLOAD_MB"))
+	}
 	for _, k := range append(positiveDurVars, nonNegativeDurVars...) {
 		v := os.Getenv(k)
 		if v == "" {
@@ -419,10 +422,6 @@ func Load() (Config, error) {
 	}
 	if c.LogFormat, err = logctx.ParseFormat(os.Getenv("LOG_FORMAT"), "json"); err != nil {
 		return Config{}, err
-	}
-	// The dashboard sends files too big for its proxy to the API's own address (POST /v1/media/direct).
-	if !local && c.App.PublicDashboardURL != "" {
-		c.CORSOrigins = append(c.CORSOrigins, strings.TrimRight(c.App.PublicDashboardURL, "/"))
 	}
 	return c, nil
 }

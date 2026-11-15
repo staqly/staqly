@@ -71,9 +71,9 @@ func TestLimitsResolveDefaultPlanWorkspace(t *testing.T) {
 
 func TestPlanFeaturesFollowTheLimits(t *testing.T) {
 	f := strings.Join(planFeatures(PlanLimits{Channels: 15, PostsPerMonth: 1500, AIMonthlyCents: 250, XPostsPerPeriod: 100,
-		LinkedInPostsPerPeriod: 300, LinkedInVideosPerPeriod: 15, StorageBytes: 10 * gb, MaxUploadBytes: 100 << 20, DataExport: true}), "|")
+		LinkedInPostsPerPeriod: 300, LinkedInVideosPerPeriod: 15, StorageBytes: 10 * gb, MaxUploadBytes: 25 << 20, DataExport: true}), "|")
 	for _, want := range []string{"15 connected channels", "1,500 new posts a month", "$2.50 shared AI allowance a month",
-		"300 LinkedIn posts a month, 15 with video", "10 GB storage, 100 MB per file", "Backups and full data export with files"} {
+		"300 LinkedIn posts a month, 15 with video", "10 GB storage, 25 MB per file", "Backups and full data export with files"} {
 		if !strings.Contains(f, want) {
 			t.Errorf("missing %q in %s", want, f)
 		}
