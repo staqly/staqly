@@ -41,7 +41,7 @@ type PlanLimits struct {
 	Channels       int64 `json:"channels"`
 	Alerts         int64 `json:"alerts"`
 	Webhooks       int64 `json:"webhooks"`
-	APIKeys        int64 `json:"api_keys"`
+	APIKeyCount    int64 `json:"api_keys"`
 	StorageBytes   int64 `json:"storage_bytes"`
 	MaxUploadBytes int64 `json:"max_upload_bytes"`
 	// DataExport: full workspace ZIP exports with media files (backups) and
@@ -151,7 +151,7 @@ func OfferedPlans() []Plan {
 // UnlockedPlan applies to local installs: everything is unlimited.
 // UnlockedPlan is the plan of a local install, the Community Edition (staqly serve, the image).
 var UnlockedPlan = Plan{ID: "unlocked", Name: "Community Edition",
-	Limits: PlanLimits{PostsPerMonth: Unlimited, Channels: Unlimited, Alerts: Unlimited, Webhooks: Unlimited, APIKeys: Unlimited,
+	Limits: PlanLimits{PostsPerMonth: Unlimited, Channels: Unlimited, Alerts: Unlimited, Webhooks: Unlimited, APIKeyCount: Unlimited,
 		StorageBytes: Unlimited, MaxUploadBytes: Unlimited, DataExport: true, XPostsPerPeriod: Unlimited,
 		LinkedInPostsPerPeriod: Unlimited, LinkedInVideosPerPeriod: Unlimited, AIMonthlyCents: Unlimited},
 	Features: []string{"Self-hosted", "No plan limits"}}
@@ -411,7 +411,7 @@ func (s *Service) planFits(ctx context.Context, q *db.Queries, workspaceID strin
 	var over []planOverage
 	var msgs []string
 	for _, c := range []planOverage{{LimitChannels, channels, l.Channels}, {LimitAlerts, alerts, l.Alerts},
-		{LimitWebhooks, hooks, l.Webhooks}, {LimitAPIKeys, keys, l.APIKeys}, {LimitStorage, storage, l.StorageBytes}} {
+		{LimitWebhooks, hooks, l.Webhooks}, {LimitAPIKeys, keys, l.APIKeyCount}, {LimitStorage, storage, l.StorageBytes}} {
 		if c.Max != Unlimited && c.Used > c.Max {
 			over = append(over, c)
 			msgs = append(msgs, overageText(target.Name, c))
