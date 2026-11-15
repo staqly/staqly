@@ -37,6 +37,7 @@
   },
   "devDependencies": {
     "@stylistic/eslint-plugin": "^5.10.0",
+    "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "lucide-react": "^1.70.0",
     "oxfmt": "^0.77.0",

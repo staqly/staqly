@@ -28,6 +28,8 @@ jobs:
     timeout-minutes: 15
     env:
       SITE_URL: https://docs.staqly.ai
+      # The docs' Google Analytics (packages/brand/src/analytics.tsx); empty = off.
+      NEXT_PUBLIC_GA_ID: ${{ vars.GA_ID }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
