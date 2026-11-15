@@ -34,7 +34,7 @@ import { createContext, useContext, useEffect, useMemo, useState, useSyncExterna
 import { toast } from 'sonner'
 
 import { AssistantIcon } from '@/components/assistant/assistant-icon'
-import { daysLeft } from '@/components/billing/billing-format'
+import { cents, daysLeft, shortDate } from '@/components/billing/billing-format'
 import { TrialUsedDialog } from '@/components/billing/trial-used-dialog'
 import { PlanBadge } from '@/components/plans/plan-badge'
 import { PostLinkDrawer } from '@/components/posts/post-link-drawer'
@@ -76,11 +76,20 @@ import {
 import { useLazyDialog } from '@/hooks/use-lazy-dialog'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { useAiStatus } from '@/lib/ai-status'
-import { api, setCsrfToken, type MyWorkspace } from '@/lib/api'
+import { api, setCsrfToken, type BillingDetails, type MyWorkspace } from '@/lib/api'
 import { pluralize } from '@/lib/format'
 import { planName, toastApiError } from '@/lib/notify'
-import { LIVE_SUBSCRIPTION } from '@/lib/plans'
-import { useBilling, useMode, usePlans, useRole, useSession, useSwitchWorkspace, useUsage } from '@/lib/queries'
+import { LIVE_SUBSCRIPTION, promotionSummary } from '@/lib/plans'
+import {
+  useBilling,
+  useBillingDetails,
+  useMode,
+  usePlans,
+  useRole,
+  useSession,
+  useSwitchWorkspace,
+  useUsage,
+} from '@/lib/queries'
 import { rememberApiKey } from '@/lib/session-key'
 import { cn } from '@/lib/utils'
 import { useXPostsWarnings } from '@/lib/x-posts'
@@ -509,11 +518,41 @@ function UserMenu() {
 
 const TRIAL_DAYS = 7
 
+type Subscription = NonNullable<BillingDetails['subscription']>
+
+/** What the trial turns into under the subscription's promotion code: "free forever with code X". */
+export function afterDiscount(sub: Subscription, discount: NonNullable<Subscription['discount']>) {
+  const total = sub.amount * Math.max(sub.quantity, 1)
+  const amountOff = discount.currency === sub.currency ? (discount.amount_off ?? 0) : 0
+  const charge =
+    sub.amount > 0
+      ? discount.percent_off
+        ? Math.round((total * (100 - discount.percent_off)) / 100)
+        : Math.max(0, total - amountOff)
+      : null
+  const code = discount.code ? `code ${discount.code}` : 'the discount'
+
+  if (discount.duration === 'forever' && (discount.percent_off === 100 || charge === 0)) {
+    return `free forever with ${code}`
+  }
+
+  const terms = `${code} (${promotionSummary(discount)})`
+
+  return charge !== null && sub.interval
+    ? `${cents(charge, sub.currency)} / ${sub.interval} with ${terms}`
+    : `${terms} applies`
+}
+
 /** In the trial: the days left, counting down, and for owners and admins the way to a plan. */
 function SidebarTrial() {
   const { isLocal } = useMode()
   const { canManagePeople } = useRole()
   const usage = useUsage()
+  const billing = useBilling({ enabled: !isLocal && canManagePeople })
+  // Only owners and admins may read the subscription, so only they learn about its promotion code.
+  const details = useBillingDetails({
+    enabled: canManagePeople && billing.data?.subscription_status === 'trialing',
+  })
   const { setOpenMobile } = useSidebar()
   const [now] = useState(Date.now)
   const ends = usage.data?.trial_ends_at
@@ -524,6 +563,12 @@ function SidebarTrial() {
 
   const days = daysLeft(ends, now)
   const left = days === 0 ? 'Your trial ends today' : `${pluralize(days, 'day')} left in your trial`
+  const sub = details.data?.subscription
+  const discounted =
+    sub?.discount && !sub.cancel_at_period_end
+      ? `${usage.data?.plan.name} until ${shortDate(ends)}, then ${afterDiscount(sub, sub.discount)}.`
+      : null
+  const action = discounted ? { label: 'View plan', href: '/settings/plan' } : { label: 'Upgrade', href: '/plans' }
 
   return (
     <>
@@ -531,8 +576,12 @@ function SidebarTrial() {
       <SidebarMenu className="hidden group-data-[collapsible=icon]:flex">
         <SidebarMenuItem>
           {canManagePeople ? (
-            <SidebarMenuButton asChild tooltip={`${left}: choose a plan`} className="text-brand">
-              <Link href="/plans" data-testid="trial-icon">
+            <SidebarMenuButton
+              asChild
+              tooltip={discounted ? `${left}: view plan` : `${left}: choose a plan`}
+              className="text-brand"
+            >
+              <Link href={action.href} data-testid="trial-icon">
                 <Clock /> <span>{left}</span>
               </Link>
             </SidebarMenuButton>
@@ -563,15 +612,17 @@ function SidebarTrial() {
             style={{ width: `${(Math.min(days, TRIAL_DAYS) / TRIAL_DAYS) * 100}%` }}
           />
         </div>
-        <p className="text-muted-foreground">
-          {canManagePeople
-            ? 'Pick a plan to keep posting without a break and get more channels.'
-            : 'Ask an owner or admin to pick a plan before it ends.'}
+        <p className="text-muted-foreground" data-testid="trial-message">
+          {discounted ??
+            (canManagePeople
+              ? 'Pick a plan to keep posting without a break and get more channels.'
+              : 'Ask an owner or admin to pick a plan before it ends.')}
         </p>
         {canManagePeople && (
-          <Button size="sm" asChild onClick={() => setOpenMobile(false)}>
-            <Link href="/plans">
-              <Crown /> Upgrade
+          <Button size="sm" variant={discounted ? 'outline' : 'default'} asChild onClick={() => setOpenMobile(false)}>
+            <Link href={action.href}>
+              {!discounted && <Crown />}
+              {action.label}
             </Link>
           </Button>
         )}

@@ -47,11 +47,16 @@ type BillingSubscription struct {
 	Discount *SubscriptionDiscount `json:"discount"`
 }
 
-// SubscriptionDiscount: the promotion code behind a discount (empty when it was set on a coupon in Stripe) and
-// when it ends (null = never).
+// SubscriptionDiscount: the promotion code behind a discount (empty when it was set on a coupon in Stripe), when it
+// ends (null = never) and what its coupon takes off, as PromotionCode tells it (an amount in the subscription's currency).
 type SubscriptionDiscount struct {
-	Code string  `json:"code"`
-	End  *string `json:"end"`
+	Code             string  `json:"code"`
+	End              *string `json:"end"`
+	PercentOff       float64 `json:"percent_off,omitempty"`
+	AmountOff        int64   `json:"amount_off,omitempty"`
+	Currency         string  `json:"currency,omitempty"`
+	Duration         string  `json:"duration,omitempty"`
+	DurationInMonths int64   `json:"duration_in_months,omitempty"`
 }
 
 // PaymentMethod is a card on file: brand and last four digits only.
@@ -129,6 +134,11 @@ func (s *Service) GetBillingDetails(ctx context.Context, p Principal, after stri
 				PromotionCode *struct {
 					Code string `json:"code"`
 				} `json:"promotion_code"`
+				Coupon *stripeCoupon `json:"coupon"` // before API 2025-09
+				// From API 2025-09: source.coupon (an id).
+				Source struct {
+					Coupon string `json:"coupon"`
+				} `json:"source"`
 			} `json:"discounts"`
 			Items struct {
 				Data []struct {
@@ -181,6 +191,21 @@ func (s *Service) GetBillingDetails(ctx context.Context, p Principal, after stri
 			bs.Discount = &SubscriptionDiscount{End: unixTime(d.End)}
 			if d.PromotionCode != nil {
 				bs.Discount.Code = d.PromotionCode.Code
+			}
+			coupon := d.Coupon
+			if coupon == nil && d.Source.Coupon != "" {
+				coupon = &stripeCoupon{}
+				if err := s.stripe(ctx, "GET", "/v1/coupons/"+url.PathEscape(d.Source.Coupon)+"?expand[]=currency_options", nil, coupon); err != nil {
+					return out, err
+				}
+			}
+			if coupon != nil {
+				amount, _ := coupon.amountIn(bs.Currency)
+				bs.Discount.PercentOff, bs.Discount.AmountOff = coupon.PercentOff, amount
+				if amount > 0 {
+					bs.Discount.Currency = bs.Currency
+				}
+				bs.Discount.Duration, bs.Discount.DurationInMonths = coupon.Duration, coupon.DurationInMonths
 			}
 		}
 		out.Subscription = &bs

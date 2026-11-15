@@ -1,10 +1,10 @@
 import { cleanup, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { BillingRedirect } from '@/components/settings/billing-redirect'
 import { PlanUsagePage } from '@/components/settings/plan-usage-page'
-import { AppShell } from '@/components/shell/app-shell'
+import { afterDiscount, AppShell } from '@/components/shell/app-shell'
 import type { Billing, BillingDetails, XPosts } from '@/lib/api'
 import { qk } from '@/lib/queries'
 
@@ -565,17 +565,33 @@ describe('plan & usage', () => {
   })
 })
 
+// The subscription was read and its answer rendered: an unchanged card is not just one still loading.
+const settled = async (details: () => unknown) => {
+  await waitFor(() => expect(details).toHaveBeenCalled())
+  await new Promise((resolve) => setTimeout(resolve, 50))
+}
+const withDiscount = (
+  discount: NonNullable<BillingDetails['subscription']>['discount'],
+  extra = {},
+): BillingDetails => ({
+  ...DETAILS,
+  subscription: { ...SUBSCRIPTION, status: 'trialing', amount: 1500, quantity: 2, discount, ...extra },
+})
+
 // In the free Starter trial (an end date, no subscription) unless a billing state is given.
 function shell(
   plan = PLANS[0],
   billing: unknown = { ...BILLING_PRO, plan: 'starter', subscription_status: null },
   onboarded = true,
+  { details, role = 'owner' }: { details?: unknown; role?: string } = {},
 ) {
   const client = makeClient()
-  const trial = (billing as { subscription_status: string | null }).subscription_status === null
+  const status = (billing as { subscription_status: string | null }).subscription_status
+  const trial = status === null || status === 'trialing'
 
-  client.setQueryData(qk.session, { ...sessionFixture('cloud'), role: 'owner', accounts_enabled: true, onboarded })
+  client.setQueryData(qk.session, { ...sessionFixture('cloud'), role, accounts_enabled: true, onboarded })
   mockApi({
+    ...(details ? { 'GET /v1/billing/details': details } : {}),
     'GET /v1/collections': { data: [] },
     'GET /v1/workspace/usage': {
       ...usage(plan),
@@ -623,6 +639,94 @@ describe('user menu', () => {
 
     expect(banner).toHaveTextContent('3 days left in your trial')
     expect(within(banner).getByRole('link', { name: /Upgrade/ })).toHaveAttribute('href', '/plans')
+  })
+
+  describe('in a Stripe trial with a promotion code', () => {
+    const trialing = { ...BILLING_PRO, plan: 'starter', subscription_status: 'trialing' }
+
+    it('100% off forever: free forever with the code, and View plan instead of Upgrade', async () => {
+      shell(PLANS[0], trialing, true, {
+        details: withDiscount({ code: 'FRIENDS', end: null, percent_off: 100, duration: 'forever' }),
+      })
+
+      const banner = await screen.findByTestId('trial-banner')
+
+      await waitFor(() =>
+        expect(within(banner).getByTestId('trial-message')).toHaveTextContent(
+          /^Starter until .+, then free forever with code FRIENDS\.$/,
+        ),
+      )
+      expect(within(banner).getByRole('link', { name: 'View plan' })).toHaveAttribute('href', '/settings/plan')
+      expect(within(banner).queryByRole('link', { name: /Upgrade/ })).not.toBeInTheDocument()
+    })
+
+    it('20% off for 3 months: the discounted charge and the code', async () => {
+      shell(PLANS[0], trialing, true, {
+        details: withDiscount({
+          code: 'SPRING20',
+          end: null,
+          percent_off: 20,
+          duration: 'repeating',
+          duration_in_months: 3,
+        }),
+      })
+
+      const banner = await screen.findByTestId('trial-banner')
+
+      await waitFor(() =>
+        expect(within(banner).getByTestId('trial-message')).toHaveTextContent(
+          'then $24 / month with code SPRING20 (20% off for 3 months).',
+        ),
+      )
+      expect(within(banner).getByRole('link', { name: 'View plan' })).toHaveAttribute('href', '/settings/plan')
+    })
+
+    it('cancelling at the trial end: unchanged, Upgrade to the plans', async () => {
+      const details = vi.fn<() => BillingDetails>(() =>
+        withDiscount(
+          { code: 'FRIENDS', end: null, percent_off: 100, duration: 'forever' },
+          { cancel_at_period_end: true },
+        ),
+      )
+
+      shell(PLANS[0], trialing, true, { details })
+
+      const banner = await screen.findByTestId('trial-banner')
+
+      await settled(details)
+
+      expect(within(banner).getByTestId('trial-message')).toHaveTextContent('Pick a plan to keep posting')
+      expect(within(banner).getByRole('link', { name: /Upgrade/ })).toHaveAttribute('href', '/plans')
+    })
+
+    it('without a discount: unchanged, Upgrade to the plans', async () => {
+      const details = vi.fn<() => BillingDetails>(() => withDiscount(null))
+
+      shell(PLANS[0], trialing, true, { details })
+      const banner = await screen.findByTestId('trial-banner')
+
+      await settled(details)
+
+      expect(within(banner).getByTestId('trial-message')).toHaveTextContent('Pick a plan to keep posting')
+      expect(within(banner).getByRole('link', { name: /Upgrade/ })).toHaveAttribute('href', '/plans')
+    })
+
+    it('what the trial turns into: free when an amount covers the price, no price when it is unknown', () => {
+      const sub = { ...SUBSCRIPTION, amount: 1500, quantity: 2 }
+
+      expect(
+        afterDiscount(sub, { code: 'BIG', end: null, amount_off: 5000, currency: 'usd', duration: 'forever' }),
+      ).toBe('free forever with code BIG')
+      expect(afterDiscount(sub, { code: 'TEN', end: null, amount_off: 1000, currency: 'usd', duration: 'once' })).toBe(
+        '$20 / month with code TEN ($10 off the first payment)',
+      )
+      expect(
+        afterDiscount(sub, { code: 'ALL', end: null, percent_off: 100, duration: 'repeating', duration_in_months: 2 }),
+      ).toBe('$0 / month with code ALL (100% off for 2 months)')
+      expect(
+        afterDiscount({ ...sub, amount: 0 }, { code: 'HALF', end: null, percent_off: 50, duration: 'forever' }),
+      ).toBe('code HALF (50% off) applies')
+    })
   })
 
   it('in the trial: a highlighted Choose a plan, no Plan & usage (it is in the workspace menu)', async () => {

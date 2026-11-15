@@ -4,10 +4,10 @@ import { taxNote } from '@/components/billing/tax-note'
 import { SkeletonList } from '@/components/common/skeleton-list'
 import { UNLIMITED, type BillingInterval, type Plan, type PlanLimits, type PromotionCode } from '@/lib/api'
 import { formatBytes } from '@/lib/format'
-import { money } from '@/lib/plans'
+import { money, promotionSummary } from '@/lib/plans'
 import { cn } from '@/lib/utils'
 
-export { money }
+export { money, promotionSummary }
 
 export const EVERY_PLAN = 'Signed webhooks, full history and MCP on every plan'
 
@@ -43,23 +43,6 @@ export function discounted(plan: Plan, interval: BillingInterval, promo?: Promot
   }
 
   return undefined
-}
-
-/** "20% off" or "€10 off", then how long: "for 3 months", "on the first payment". */
-export function promotionSummary(promo: PromotionCode) {
-  const off = promo.percent_off
-    ? `${promo.percent_off}% off`
-    : promo.amount_off
-      ? `${money(promo.amount_off / 100, promo.currency)} off`
-      : 'Discount'
-  const time =
-    promo.duration === 'once'
-      ? ' the first payment'
-      : promo.duration === 'repeating' && promo.duration_in_months
-        ? ` for ${promo.duration_in_months === 1 ? '1 month' : `${promo.duration_in_months} months`}`
-        : ''
-
-  return off + time
 }
 
 /** What a team pays: "3 users × €29 = €87/month" (yearly: "3 users × €276 = €828/year"). */

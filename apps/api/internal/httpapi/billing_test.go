@@ -390,6 +390,9 @@ func TestBillingDetails(t *testing.T) {
 	e.do(nil, "GET", "/v1/workspace", e.key, nil, 200, &ws)
 	start, end := time.Now().Add(-5*24*time.Hour).Unix(), time.Now().Add(25*24*time.Hour).Unix()
 	var invoiceQueries []string
+	// Before API 2025-09 a discount carries its coupon; from it, source.coupon is the coupon's id.
+	discount := map[string]any{"id": "di_1", "end": end, "promotion_code": map[string]any{"code": "SPRING20"},
+		"coupon": map[string]any{"id": "co_spring", "percent_off": 20, "duration": "repeating", "duration_in_months": 3}}
 	stripe := httptest.NewServer(subsFirst(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method + " " + r.URL.Path {
 		case "GET /v1/subscriptions/sub_1":
@@ -397,9 +400,11 @@ func TestBillingDetails(t *testing.T) {
 				t.Errorf("subscription read without its discount's code: %s", r.URL.RawQuery)
 			}
 			json.NewEncoder(w).Encode(map[string]any{"id": "sub_1", "status": "active", "cancel_at_period_end": true,
-				"discounts": []any{map[string]any{"id": "di_1", "end": end, "promotion_code": map[string]any{"code": "SPRING20"}}},
+				"discounts": []any{discount},
 				"items": map[string]any{"data": []any{map[string]any{"current_period_start": start, "current_period_end": end,
 					"price": map[string]any{"unit_amount": 3000, "currency": "usd", "recurring": map[string]any{"interval": "month"}}}}}})
+		case "GET /v1/coupons/co_off":
+			fmt.Fprint(w, `{"id":"co_off","amount_off":1000,"currency":"eur","currency_options":{"usd":{"amount_off":1200}},"duration":"forever"}`)
 		case "GET /v1/customers/cus_1":
 			fmt.Fprint(w, `{"id":"cus_1","invoice_settings":{"default_payment_method":"pm_2"}}`)
 		case "GET /v1/customers/cus_1/payment_methods":
@@ -458,7 +463,8 @@ func TestBillingDetails(t *testing.T) {
 		sub.CurrentPeriodStart == nil || sub.CurrentPeriodEnd == nil {
 		t.Fatalf("subscription: %+v", sub)
 	}
-	if sub.Discount == nil || sub.Discount.Code != "SPRING20" || sub.Discount.End == nil {
+	if dc := sub.Discount; dc == nil || dc.Code != "SPRING20" || dc.End == nil || dc.PercentOff != 20 || dc.AmountOff != 0 ||
+		dc.Duration != "repeating" || dc.DurationInMonths != 3 {
 		t.Fatalf("discount: %+v", sub.Discount)
 	}
 	if len(d.PaymentMethods) != 2 || d.PaymentMethods[1].Last4 != "4444" || !d.PaymentMethods[1].Default || d.PaymentMethods[0].Default {
@@ -488,6 +494,14 @@ func TestBillingDetails(t *testing.T) {
 	e.do(nil, "GET", "/v1/billing/details", admin, nil, 200, &d)
 	if !d.ManagedPayments {
 		t.Fatal("managed_payments with STRIPE_MANAGED_PAYMENTS")
+	}
+	// From API 2025-09: the coupon is read by its id, an amount off told in the subscription's currency.
+	delete(discount, "coupon")
+	discount["source"] = map[string]any{"type": "coupon", "coupon": "co_off"}
+	d = app.BillingDetails{}
+	e.do(nil, "GET", "/v1/billing/details", admin, nil, 200, &d)
+	if dc := d.Subscription.Discount; dc == nil || dc.AmountOff != 1200 || dc.Currency != "usd" || dc.PercentOff != 0 || dc.Duration != "forever" {
+		t.Fatalf("discount by coupon id: %+v", dc)
 	}
 }
 
