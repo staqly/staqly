@@ -35,17 +35,20 @@ const list = (data: unknown[]) => ({ object: 'list', data, has_more: false })
 // The plans' monthly prices in EUR, as in apps/api/internal/app/plans.go (the plan picker orders plans by them).
 const MONTHLY: Record<string, number> = { starter: 15, plus: 29, pro: 59, business: 99 }
 
-/** price_plus_year <-> staqly_plus_year: every lookup key staqly asks for exists (what is no plan costs 10 EUR). */
+/** price_plus_year <-> staqly_plus_year: every lookup key staqly asks for exists (what is no plan costs 10). */
 function price(idOrKey: string): Obj {
   const name = idOrKey.replace(/^(price_|staqly_)/, '')
   const interval = /_(month|year)$/.exec(name)?.[1]
   const monthly = MONTHLY[name.replace(/_(month|year)$/, '')] ?? 10
+  const cents = monthly * (interval === 'year' ? 10 : 1) * 100
 
   return {
     id: `price_${name}`,
     lookup_key: `staqly_${name}`,
-    unit_amount: monthly * (interval === 'year' ? 10 : 1) * 100,
+    unit_amount: cents,
     currency: 'eur',
+    // Like the catalogue: the same amount in CHF, EUR and USD (staqly sells only in a currency a price has).
+    currency_options: Object.fromEntries(['chf', 'eur', 'usd'].map((c) => [c, { unit_amount: cents }])),
     metadata: {},
     product: name.startsWith('addon_') ? 'prod_addon' : `prod_${name}`,
     recurring: interval ? { interval } : null,
