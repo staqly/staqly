@@ -8,7 +8,7 @@ export function shortDate(value?: string | null) {
   return value ? dateFormat().format(new Date(value)) : ''
 }
 
-// ponytail: amounts are in cents; zero-decimal currencies (JPY, KRW) would show 100x too small. Staqly's plans are EUR.
+// ponytail: amounts are in cents; zero-decimal currencies (JPY, KRW) would show 100x too small. Staqly sells in CHF, EUR and USD.
 /** A Stripe amount in cents: €29, €87.50. */
 export function cents(amount: number, currency: string) {
   return money(amount / 100, currency || 'eur')

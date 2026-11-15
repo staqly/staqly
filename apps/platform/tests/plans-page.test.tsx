@@ -32,7 +32,7 @@ const PROMOTIONS: Record<string, unknown> = {
   SPRING20: { code: 'SPRING20', percent_off: 20, duration: 'repeating', duration_in_months: 3, plans: ['plus', 'pro'] },
 }
 
-function render(paying: boolean, trial = paying ? 'none' : 'available', sub: object = SUB) {
+function render(paying: boolean, trial = paying ? 'none' : 'available', sub: object = SUB, plans = PLANS) {
   const client = makeClient()
 
   client.setQueryData(qk.session, {
@@ -42,7 +42,7 @@ function render(paying: boolean, trial = paying ? 'none' : 'available', sub: obj
   })
 
   const api = mockApi({
-    'GET /v1/plans': { data: PLANS },
+    'GET /v1/plans': { data: plans },
     'GET /v1/workspace/usage': {
       ...usage(paying ? PLANS[1] : PLANS[0]),
       trial_ends_at: paying ? null : new Date(Date.now() + 3 * 86_400_000 - 60_000).toISOString(),
@@ -356,5 +356,27 @@ describe('per user pricing', () => {
     await waitFor(() =>
       expect(api.find('POST', '/v1/billing/checkout')[0]?.body).toEqual({ plan: 'business', interval: 'month' }),
     )
+  })
+})
+
+describe('plan picker currency', () => {
+  it.each([
+    ['chf', 'CHF 29', 'CHF 276 per user, billed yearly, incl. Swiss VAT'],
+    ['eur', '€29', '€276 per user, billed yearly, incl. VAT'],
+    ['usd', '$29', '$276 per user, billed yearly, incl. applicable taxes'],
+  ])('shows the prices in the currency the API picked (%s), with its tax wording', async (currency, month, year) => {
+    render(
+      false,
+      'available',
+      SUB,
+      PLANS.map((p) => ({ ...p, currency })),
+    )
+    const user = userEvent.setup()
+
+    const plus = await screen.findByTestId('plan-plus')
+
+    expect(within(plus).getByText(month)).toBeInTheDocument()
+    await user.click(screen.getByRole('radio', { name: /yearly/i }))
+    expect(within(plus).getByText(year)).toBeInTheDocument()
   })
 })

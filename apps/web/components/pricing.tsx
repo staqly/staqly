@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useState } from 'react'
 
 import { useLivePlans } from '@/lib/live-plans'
-import { TRIAL_DAYS, ctaLabel, perMonth, eur, type Interval, VAT_NOTE } from '@/lib/plans'
+import { TRIAL_DAYS, ctaLabel, money, perMonth, taxNote, type Interval } from '@/lib/plans'
 import { DOCS, SELF_HOST, arrowLink, btnPrimary, btnSecondary, signupFor } from '@/lib/site'
 
 /** Monthly / Yearly switch above the plan cards. */
@@ -46,7 +46,7 @@ export function IntervalToggle({ value, onChange }: { value: Interval; onChange:
 
 export function PricingCards() {
   const [interval, setPeriod] = useState<Interval>('year')
-  const { plans } = useLivePlans()
+  const { plans, currency } = useLivePlans()
 
   return (
     <>
@@ -72,11 +72,12 @@ export function PricingCards() {
             <h3 className="font-semibold">{p.name}</h3>
             <p className="mt-1 min-h-10 text-sm text-muted-foreground">{p.tagline}</p>
             <p className="mt-5 text-4xl font-semibold tracking-tight tabular-nums">
-              {eur(perMonth(p, interval))}{' '}
+              {money(perMonth(p, interval), currency)}{' '}
               <span className="text-sm font-normal text-muted-foreground">per user / month</span>
             </p>
             <p className="mt-1 text-xs text-muted-foreground tabular-nums">
-              {interval === 'year' ? `${eur(p.year)} per user, billed yearly` : 'Billed monthly'}, {VAT_NOTE}
+              {interval === 'year' ? `${money(p.year, currency)} per user, billed yearly` : 'Billed monthly'},{' '}
+              {taxNote(currency)}
             </p>
             <ul className="mt-6 flex-1 space-y-2.5 text-sm">
               {p.features.map((f) => (

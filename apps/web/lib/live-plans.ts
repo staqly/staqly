@@ -3,13 +3,15 @@
 import { useEffect, useState } from 'react'
 
 import { env } from './env'
-import { COMPARE, PLANS, type Cell, type SitePlan } from './plans'
+import { COMPARE, DEFAULT_CURRENCY, PLANS, type Cell, type SitePlan } from './plans'
 
 /** A plan as GET /v1/plans answers (the fields the site reads). */
 export type ApiPlan = {
   id: string
   price_month: number
   price_year: number
+  /** ISO 4217, lower case: the visitor's (chf, eur or usd), picked by the API from the time zone sent. */
+  currency: string
   features: string[]
   limits: Record<string, number | boolean>
 }
@@ -68,14 +70,17 @@ export function withLive(api: ApiPlan[]) {
     }),
   }))
 
-  return { plans, compare }
+  return { plans, compare, currency: api[0]?.currency || DEFAULT_CURRENCY }
 }
 
-const STATIC = { plans: PLANS, compare: COMPARE }
+const STATIC = { plans: PLANS, compare: COMPARE, currency: DEFAULT_CURRENCY }
 
 /**
- * The plans for the pricing page: the static ones at once, then the live ones from the dashboard's public API once
- * they arrive. A failed request (offline, the API down) keeps the static ones.
+ * The plans for the pricing page: the static ones at once (in USD), then the live ones from the dashboard's public
+ * API once they arrive, in the visitor's currency. The page is a static export on a host without a server of its
+ * own, so the API picks the currency from the browser's time zone (CHF for Switzerland and Liechtenstein, EUR for
+ * the EU, USD elsewhere): the same rule, and the same answer, as the plan picker in the app. A failed request
+ * (offline, the API down) keeps the static ones.
  */
 export function useLivePlans() {
   const [data, setData] = useState(STATIC)
@@ -83,7 +88,12 @@ export function useLivePlans() {
   useEffect(() => {
     const ctl = new AbortController()
 
-    fetch(`${env.appUrl}/api/v1/plans`, { signal: ctl.signal, credentials: 'omit' })
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || ''
+
+    fetch(`${env.appUrl}/api/v1/plans?timezone=${encodeURIComponent(timezone)}`, {
+      signal: ctl.signal,
+      credentials: 'omit',
+    })
       .then((r) => (r.ok ? (r.json() as Promise<{ data: ApiPlan[] }>) : Promise.reject(new Error(String(r.status)))))
       .then((r) => setData(withLive(r.data)))
       .catch(() => {})

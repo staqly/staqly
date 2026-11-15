@@ -1,5 +1,6 @@
 import { Check, Sparkles } from 'lucide-react'
 
+import { taxNote } from '@/components/billing/tax-note'
 import { SkeletonList } from '@/components/common/skeleton-list'
 import { UNLIMITED, type BillingInterval, type Plan, type PlanLimits, type PromotionCode } from '@/lib/api'
 import { formatBytes } from '@/lib/format'
@@ -192,7 +193,7 @@ function PlanCard({
         {interval === 'year'
           ? `${money(after ?? plan.price_year, plan.currency)} per user, billed yearly`
           : 'Billed monthly'}
-        , incl. VAT
+        , {taxNote(plan.currency)}
       </p>
       {after !== undefined && promotion && (
         <p className="mt-1 text-xs font-medium text-brand" data-testid={`plan-discount-${plan.id}`}>

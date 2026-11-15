@@ -145,7 +145,8 @@ func (t *tools) getExport(ctx context.Context, _ *mcp.CallToolRequest, in export
 // ---- plans ----
 
 func (t *tools) listPlans(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
-	plans, err := t.svc.LivePlans(ctx)
+	p := t.principal(ctx)
+	plans, err := t.svc.LivePlans(ctx, t.svc.PlansCurrency(ctx, p, ""))
 	if err != nil {
 		return nil, nil, err
 	}

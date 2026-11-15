@@ -435,7 +435,7 @@ func (s *Service) GetUsage(ctx context.Context, p Principal) (Usage, error) {
 	if err != nil {
 		return Usage{}, err
 	}
-	return Usage{Plan: s.withLivePrices(ctx, plan), Period: period, PlanExpiresAt: expiresAt, TrialEndsAt: trialEnds, Suspended: suspended,
+	return Usage{Plan: s.withLivePrices(ctx, plan, s.workspaceCurrency(ctx, p.WorkspaceID, "")), Period: period, PlanExpiresAt: expiresAt, TrialEndsAt: trialEnds, Suspended: suspended,
 		PostsByStatus: byStatus, Deliveries: deliveries, Usage: map[string]int64{
 			LimitPostsPerMonth: posts, LimitChannels: channels, UsageSeats: seats, LimitXPosts: xPosts,
 			LimitLinkedInPosts: liPosts, LimitLinkedInVideos: liVideos, LimitAlerts: alerts, LimitWebhooks: hooks, LimitAPIKeys: keys, LimitStorage: storage}}, nil

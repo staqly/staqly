@@ -4,7 +4,10 @@ description: Starter, Plus, Pro and Business on Staqly Cloud, priced per user, m
 ---
 
 Plans set how much each workspace may use on [Staqly Cloud](/local-vs-cloud#staqly-cloud): channels, storage, posts
-to X and so on. Prices are in euros, **include VAT** (Stripe works out the VAT part from your billing
+to X and so on. Prices are the same number in three currencies: **CHF** in Switzerland and Liechtenstein,
+**EUR** in the EU and **USD** everywhere else (by the country Cloudflare reports for your connection, else your
+time zone; once you have paid, your workspace keeps its currency, as Stripe ties a customer to one). They
+**include tax**: Swiss VAT in CHF, VAT in EUR, any sales tax in USD (Stripe works it out from your billing
 address; a business with a valid EU VAT ID under reverse charge pays the same amount) and are
 **per user**: every member of the workspace is a seat billed at the plan's price,
 whatever their role. All usage limits are shared by the workspace and do not multiply with seats. Collections and schedules have no count limit; created posts do. If you run
@@ -16,8 +19,8 @@ for information).
 
 | | Starter | Plus | Pro | Business |
 |---|---|---|---|---|
-| Per user, billed monthly | €15 / month | €29 / month | €59 / month | €99 / month |
-| Per user, billed yearly | €12 / month (€144 a year) | €23 / month (€276) | €47 / month (€564) | €79 / month (€948) |
+| Per user, billed monthly | 15 / month | 29 / month | 59 / month | 99 / month |
+| Per user, billed yearly | 12 / month (144 a year) | 23 / month (276) | 47 / month (564) | 79 / month (948) |
 | New posts per month | 300 | 1,500 | 5,000 | 15,000 |
 | Collections and schedules | Unlimited | Unlimited | Unlimited | Unlimited |
 | Connected channels | 5 | 15 | 40 | 100 |
@@ -194,7 +197,7 @@ open invoices, so a card added later is not charged for a plan that has ended.
 
 - Limits apply **per workspace**: every API key of a workspace shares its plan.
 - **Seats** are the workspace's members, whatever their role, and each one is billed at the plan's
-  price per user (a team of three on Plus pays 3 × €29 = €87 a month). An invitation adds a seat
+  price per user (a team of three on Plus pays 3 × 29 = 87 a month). An invitation adds a seat
   once it is accepted and the rest of the period is charged at once; removing someone (or someone
   leaving) takes it away and the unused rest is credited at once (see [credits](#credits)), so a person pays for
   exactly the days they were a member; during the Starter trial seats are free and the first charge uses the
@@ -203,8 +206,8 @@ open invoices, so a card added later is not charged for a plan that has ended.
 - **Posts to X** are counted because X charges for every post sent through its API: each post and
   thread reply needs one unit (a post with a live link needs 14; X channels remove
   or defang links by default). The plan's posts reset every month. **Extra posts** come in
-  one-time bundles, **Settings → Plan & usage → Buy more** (next to X): 200 for €10, 1,000 for €40 or
-  4,000 for €150, incl. VAT. They are used after the included ones and expire at the end of the
+  one-time bundles, **Settings → Plan & usage → Buy more** (next to X): 200 for 10, 1,000 for 40 or
+  4,000 for 150, incl. tax. They are used after the included ones and expire at the end of the
   billing period (bought during the free trial: a month after the purchase). When both run out, publishing to X answers **402 `x_posts_exhausted`** (and a
   post scheduled for later fails with the reason). `GET /v1/billing/x-posts` shows what's left.
 - **Posts to LinkedIn** are counted because LinkedIn limits how many posts and video uploads all
@@ -286,7 +289,7 @@ A request over a limit fails with **HTTP 402** and machine-readable `details`:
 ## Changing a workspace's plan
 
 A workspace changes plan when its account owner pays with a card: the plan picker (**Settings → Plan & usage → Choose a plan** or **Change plan**, or the user menu)
-has a **Monthly / Yearly** switch and one card per plan. Yearly prices are twelve whole-euro
+has a **Monthly / Yearly** switch and one card per plan. Yearly prices are twelve whole-unit
 months at 20 % off, rounded down, so the saving is 20 % or a little more.
 
 Paying and managing the subscription are for a signed-in person, like members and invitations: the

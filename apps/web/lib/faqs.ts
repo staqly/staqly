@@ -1,4 +1,4 @@
-import { TRIAL_DAYS } from './plans'
+import { CURRENCY_NOTE, TRIAL_DAYS } from './plans'
 
 /** The questions on the home page (its FAQ section and FAQPage structured data) and in llms-full.txt. */
 export const faqs: [string, string][] = [
@@ -24,7 +24,7 @@ export const faqs: [string, string][] = [
   ],
   [
     'What does it cost?',
-    `Plans are per user and start at €15 a month (€12 billed yearly), incl. VAT; each plan sets how many channels, new posts a month, AI allowance and storage the workspace shares. Starter has a ${TRIAL_DAYS}-day free trial. The AI assistant, the editors, MCP and the API come with every plan.`,
+    `Plans are per user and start at 15 a month (12 billed yearly), tax included, ${CURRENCY_NOTE}; each plan sets how many channels, new posts a month, AI allowance and storage the workspace shares. Starter has a ${TRIAL_DAYS}-day free trial. The AI assistant, the editors, MCP and the API come with every plan.`,
   ],
   [
     'What makes it different from other schedulers?',

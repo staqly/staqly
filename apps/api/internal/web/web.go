@@ -185,22 +185,19 @@ func DialURL(addr string) *url.URL {
 
 // ClientIP is the browser's address as the dashboard sees it: the TCP peer, or with trustProxy the
 // right-most X-Forwarded-For entry (the one your own proxy appended; anything left of it is
-// client-controlled). "" if neither parses.
+// client-controlled); when that is one of Cloudflare's addresses, the browser's as Cloudflare saw it
+// (CF-Connecting-IP). "" if none parses.
 func ClientIP(r *http.Request, trustProxy bool) string {
-	if xff := r.Header.Values("X-Forwarded-For"); trustProxy && len(xff) > 0 {
-		parts := strings.Split(xff[len(xff)-1], ",")
-		if ip, err := netip.ParseAddr(strings.TrimSpace(parts[len(parts)-1])); err == nil {
-			return ip.Unmap().String()
+	ip, ok := peerIP(r, trustProxy)
+	if !ok {
+		return ""
+	}
+	if fromCloudflare(ip) {
+		if real, err := netip.ParseAddr(strings.TrimSpace(r.Header.Get("CF-Connecting-IP"))); err == nil {
+			return real.Unmap().String()
 		}
 	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		host = r.RemoteAddr
-	}
-	if ip, err := netip.ParseAddr(host); err == nil {
-		return ip.Unmap().String()
-	}
-	return ""
+	return ip.String()
 }
 
 func apiProxy(upstream *url.URL, log *slog.Logger, trustProxy bool, relayToken string) http.Handler {
@@ -234,6 +231,11 @@ func apiProxy(upstream *url.URL, log *slog.Logger, trustProxy bool, relayToken s
 			// proxy's entry), never copied from what the browser sent.
 			if ip := ClientIP(pr.In, trustProxy); ip != "" {
 				pr.Out.Header.Set("X-Forwarded-For", ip)
+			}
+			// The country Cloudflare saw, when the request came through it (the API reads it from relayed requests only).
+			pr.Out.Header.Del(CountryHeader)
+			if cc := ClientCountry(pr.In, trustProxy); cc != "" {
+				pr.Out.Header.Set(CountryHeader, cc)
 			}
 			pr.Out.Header.Del(RelayHeader) // never the browser's
 			if relayToken != "" {

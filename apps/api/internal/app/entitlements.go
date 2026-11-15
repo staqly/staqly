@@ -461,6 +461,11 @@ func (s *Service) ListAddons(ctx context.Context, p Principal) ([]Addon, error) 
 		return nil, err
 	}
 	out := append([]Addon{}, all...)
+	// The same amounts in every currency; an add-on joins the subscription, which bills in the customer's.
+	cur := s.workspaceCurrency(ctx, p.WorkspaceID, "")
+	for i := range out {
+		out[i].Currency = cur
+	}
 	if sub, err := s.liveSubscriptionOf(ctx, p.WorkspaceID); err == nil {
 		for i := range out {
 			_, out[i].Active = addonItem(sub, out[i].ID)

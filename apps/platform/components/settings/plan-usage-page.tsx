@@ -595,7 +595,7 @@ export function PlanUsagePage() {
         description={
           !canBuy
             ? 'The account owner buys them.'
-            : (blocked ?? addBlocked ?? 'On top of the plan, incl. VAT, charged with the subscription.')
+            : (blocked ?? addBlocked ?? 'On top of the plan, taxes included, charged with the subscription.')
         }
       >
         <AddonsSection canBuy={canBuy} yearly={sub?.interval === 'year'} blocked={blocked} addBlocked={addBlocked} />

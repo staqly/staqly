@@ -5,6 +5,7 @@ import { Check, Plus } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { taxNote } from '@/components/billing/tax-note'
 import { ConfirmDialog } from '@/components/common/confirm-dialog'
 import { money } from '@/components/plans/plan-cards'
 import { Button } from '@/components/ui/button'
@@ -101,7 +102,9 @@ export function AddonsSection({
                 )}
               </span>
               <span className="text-xs text-muted-foreground">{a.description || a.features.join(' · ')}</span>
-              <span className="text-xs text-muted-foreground tabular-nums">{price(a)} · incl. VAT</span>
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {price(a)} · {taxNote(a.currency)}
+              </span>
             </div>
             {canBuy &&
               (a.active ? (
@@ -134,7 +137,7 @@ export function AddonsSection({
         title={`Add ${adding?.name ?? ''}?`}
         description={
           adding
-            ? `${price(adding)}, incl. VAT. The rest of this billing period is charged now to the card on file.`
+            ? `${price(adding)}, ${taxNote(adding.currency)}. The rest of this billing period is charged now to the card on file.`
             : ''
         }
         confirmLabel="Add"

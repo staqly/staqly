@@ -74,9 +74,10 @@ var priceIDs = struct {
 
 type priceCacheEntry struct {
 	id       string
-	cents    int64  // unit amount per seat, in cents of currency
-	currency string // e.g. eur
-	err      error  // a price Stripe doesn't have, or a failed lookup (kept a minute, so pages don't hammer Stripe)
+	cents    int64            // unit amount per seat, in cents of currency
+	currency string           // e.g. eur
+	options  map[string]int64 // currency -> unit amount in its cents (the price's currency_options); see in
+	err      error            // a price Stripe doesn't have, or a failed lookup (kept a minute, so pages don't hammer Stripe)
 	exp      time.Time
 }
 
@@ -151,14 +152,17 @@ func (s *Service) lookupPrice(ctx context.Context, key, pinned, missing string) 
 		return c, c.err
 	}
 	type price struct {
-		ID         string `json:"id"`
-		Active     *bool  `json:"active"`
-		UnitAmount int64  `json:"unit_amount"`
-		Currency   string `json:"currency"`
+		ID              string `json:"id"`
+		Active          *bool  `json:"active"`
+		UnitAmount      int64  `json:"unit_amount"`
+		Currency        string `json:"currency"`
+		CurrencyOptions map[string]struct {
+			UnitAmount int64 `json:"unit_amount"`
+		} `json:"currency_options"` // only when expanded
 	}
 	var found price
 	if pinned != "" {
-		if err := s.stripe(ctx, "GET", "/v1/prices/"+url.PathEscape(pinned), nil, &found); err != nil {
+		if err := s.stripe(ctx, "GET", "/v1/prices/"+url.PathEscape(pinned)+"?expand[]=currency_options", nil, &found); err != nil {
 			return remember(priceCacheEntry{err: err, exp: s.Now().Add(time.Minute)})
 		}
 		found.ID = pinned
@@ -173,7 +177,7 @@ func (s *Service) lookupPrice(ctx context.Context, key, pinned, missing string) 
 		var list struct {
 			Data []price `json:"data"`
 		}
-		if err := s.stripe(ctx, "GET", "/v1/prices?active=true&limit=1&lookup_keys[]="+url.QueryEscape(key), nil, &list); err != nil {
+		if err := s.stripe(ctx, "GET", "/v1/prices?active=true&limit=1&expand[]=data.currency_options&lookup_keys[]="+url.QueryEscape(key), nil, &list); err != nil {
 			return remember(priceCacheEntry{err: err, exp: s.Now().Add(time.Minute)})
 		}
 		if len(list.Data) == 0 {
@@ -181,7 +185,11 @@ func (s *Service) lookupPrice(ctx context.Context, key, pinned, missing string) 
 		}
 		found = list.Data[0]
 	}
-	return remember(priceCacheEntry{id: found.ID, cents: found.UnitAmount, currency: found.Currency, exp: s.Now().Add(priceCacheTTL)})
+	options := map[string]int64{}
+	for cur, o := range found.CurrencyOptions {
+		options[cur] = o.UnitAmount
+	}
+	return remember(priceCacheEntry{id: found.ID, cents: found.UnitAmount, currency: found.Currency, options: options, exp: s.Now().Add(priceCacheTTL)})
 }
 
 // priceCacheKey: one Stripe account's price by lookup key (and pinned id) in priceIDs.
@@ -206,10 +214,13 @@ func stripeParam(err error) string {
 	return param
 }
 
-// withLivePrices: a plan with the amounts Stripe actually charges (per seat, monthly and yearly) when billing
-// is on, so what people read is what they pay. Without billing, or when Stripe can't be reached or a price is
-// missing, not in whole units or in another currency, the plan keeps its amounts from Plans (and the reason is logged).
-func (s *Service) withLivePrices(ctx context.Context, p Plan) Plan {
+// withLivePrices: a plan with the amounts Stripe actually charges (per seat, monthly and yearly) in a currency,
+// so what people read is what they pay. The built-in amounts are the same number in every currency; Stripe's
+// stand in when billing is on, from the price's currency options (its own currency when it has none in that
+// one: what Checkout then charges). Without billing, or when Stripe can't be reached or a price is missing or
+// not in whole units, the plan keeps its built-in amounts (and the reason is logged).
+func (s *Service) withLivePrices(ctx context.Context, p Plan, currency string) Plan {
+	p.Currency = currency
 	if !s.BillingEnabled() || p.Hidden {
 		return p
 	}
@@ -220,27 +231,32 @@ func (s *Service) withLivePrices(ctx context.Context, p Plan) Plan {
 	defer cancel()
 	for _, iv := range []string{IntervalMonth, IntervalYear} {
 		pr, err := s.livePrice(ctx, p, iv)
-		if err != nil || pr.cents <= 0 || pr.cents%100 != 0 || (pr.currency != "" && pr.currency != Currency) {
-			s.logger(ctx).Warn("billing: showing the built-in price", "plan", p.ID, "interval", iv, "err", err, "cents", pr.cents, "currency", pr.currency)
+		cur, cents := pr.in(currency)
+		if err != nil || cents <= 0 || cents%100 != 0 {
+			s.logger(ctx).Warn("billing: showing the built-in price", "plan", p.ID, "interval", iv, "err", err, "cents", cents, "currency", cur)
 			continue
 		}
+		if cur != "" {
+			p.Currency = cur
+		}
 		if iv == IntervalMonth {
-			p.PriceMonth = int(pr.cents / 100)
+			p.PriceMonth = int(cents / 100)
 		} else {
-			p.PriceYear = int(pr.cents / 100)
+			p.PriceYear = int(cents / 100)
 		}
 	}
 	return p
 }
 
-// LivePlans: the offered plans with their charged amounts (see withLivePrices); GET /plans, MCP, the dashboard.
-func (s *Service) LivePlans(ctx context.Context) ([]Plan, error) {
+// LivePlans: the offered plans with their charged amounts in a currency (see withLivePrices and PlansCurrency);
+// GET /plans, MCP, the dashboard.
+func (s *Service) LivePlans(ctx context.Context, currency string) ([]Plan, error) {
 	out, err := s.withLimits(ctx, OfferedPlans())
 	if err != nil {
 		return nil, err
 	}
 	for i := range out {
-		out[i] = s.withLivePrices(ctx, out[i])
+		out[i] = s.withLivePrices(ctx, out[i], currency)
 	}
 	return out, nil
 }
@@ -526,6 +542,9 @@ func (s *Service) CheckoutSession(ctx context.Context, p Principal, planID, inte
 		form.Set("subscription_data[trial_settings][end_behavior][missing_payment_method]", "cancel")
 	}
 	form.Set("payment_method_collection", "always")
+	if pr, err := s.livePrice(ctx, plan, interval); err == nil {
+		s.setCheckoutCurrency(ctx, form, w.ID, pr)
+	}
 	s.checkoutTax(form)
 	err = s.stripe(ctx, "POST", "/v1/checkout/sessions", form, &cs)
 	if found, ok := s.unpinnedPrice(ctx, plan, interval, err); ok {

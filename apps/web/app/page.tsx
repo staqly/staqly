@@ -580,8 +580,8 @@ function Faq() {
   )
 }
 
-// Structured data for search engines: who publishes the site, the product and its plans (per user a month, incl. VAT,
-// as on /pricing and in apps/api/internal/app/plans.go). No ratings or reviews: there are none to show.
+// Structured data for search engines: who publishes the site, the product and its plans (per user a month, tax
+// included, the same number in CHF, EUR and USD, as on /pricing and in apps/api/internal/app/plans.go). No ratings or reviews: there are none to show.
 // One script per entity, each with its own @context and @type: some crawlers read only a top-level @type, not @graph.
 const jsonLd = [
   ...SITE_LD,
@@ -598,21 +598,23 @@ const jsonLd = [
     isAccessibleForFree: false,
     publisher: { '@id': `${SITE_URL}/#organization` },
     sameAs: [GITHUB],
-    offers: PLANS.map((p) => ({
-      '@type': 'Offer',
-      name: p.name,
-      url: `${SITE_URL}/pricing`,
-      price: String(p.month),
-      priceCurrency: 'EUR',
-      // Google's software rich result rejects a UnitPriceSpecification here: the unit goes in the description.
-      priceSpecification: {
-        '@type': 'PriceSpecification',
+    offers: PLANS.flatMap((p) =>
+      ['CHF', 'EUR', 'USD'].map((currency) => ({
+        '@type': 'Offer',
+        name: p.name,
+        url: `${SITE_URL}/pricing`,
         price: String(p.month),
-        priceCurrency: 'EUR',
-        valueAddedTaxIncluded: true,
-      },
-      description: 'Per user per month, VAT included',
-    })),
+        priceCurrency: currency,
+        // Google's software rich result rejects a UnitPriceSpecification here: the unit goes in the description.
+        priceSpecification: {
+          '@type': 'PriceSpecification',
+          price: String(p.month),
+          priceCurrency: currency,
+          valueAddedTaxIncluded: true,
+        },
+        description: 'Per user per month, tax included',
+      })),
+    ),
   },
   {
     '@type': 'FAQPage',

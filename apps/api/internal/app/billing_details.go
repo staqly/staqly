@@ -118,6 +118,7 @@ func (s *Service) GetBillingDetails(ctx context.Context, p Principal, after stri
 			CurrentPeriodStart int64           `json:"current_period_start"`
 			CurrentPeriodEnd   int64           `json:"current_period_end"`
 			CancelAtPeriodEnd  bool            `json:"cancel_at_period_end"`
+			Currency           string          `json:"currency"`
 			CancelAt           int64           `json:"cancel_at"`
 			CanceledAt         int64           `json:"canceled_at"`
 			TrialEnd           int64           `json:"trial_end"`
@@ -166,7 +167,7 @@ func (s *Service) GetBillingDetails(ctx context.Context, p Principal, after stri
 			if start == 0 {
 				start, end = it.CurrentPeriodStart, it.CurrentPeriodEnd
 			}
-			bs.Amount, bs.Currency, bs.Interval = it.Price.UnitAmount, it.Price.Currency, it.Price.Recurring.Interval
+			bs.Amount, bs.Currency, bs.Interval = it.Price.UnitAmount, firstNonEmpty(sub.Currency, it.Price.Currency), it.Price.Recurring.Interval
 			bs.Quantity = max(it.Quantity, 1)
 		}
 		bs.CurrentPeriodStart, bs.CurrentPeriodEnd = unixTime(start), unixTime(end)

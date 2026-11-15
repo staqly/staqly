@@ -33,7 +33,7 @@ func TestPlanLimitValues(t *testing.T) {
 		}
 	}
 	// As a fresh database has them (migration 00006); the admin panel changes them afterwards.
-	live, err := newEnv(t).svc.LivePlans(context.Background())
+	live, err := newEnv(t).svc.LivePlans(context.Background(), app.CurrencyEUR)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +187,8 @@ func TestPlansShowStripeAmounts(t *testing.T) {
 		case "staqly_pro_month":
 			w.WriteHeader(500) // Stripe failing: the built-in price
 		case "staqly_business_month":
-			fmt.Fprint(w, `{"data":[{"id":"price_usd","unit_amount":12000,"currency":"usd"}]}`) // another currency: built-in
+			// No option in the workspace's currency (USD: its zone is UTC): shown in the price's own, as charged.
+			fmt.Fprint(w, `{"data":[{"id":"price_eur","unit_amount":12000,"currency":"eur"}]}`)
 		case "staqly_pro_year":
 			fmt.Fprint(w, `{"data":[{"id":"price_bad","unit_amount":4750}]}`) // not whole dollars: the built-in price
 		default:
@@ -203,8 +204,8 @@ func TestPlansShowStripeAmounts(t *testing.T) {
 	if p := price("pro"); p.PriceMonth != 59 || p.PriceYear != 564 {
 		t.Fatalf("pro falls back: %+v", p)
 	}
-	if p := price("business"); p.PriceMonth != 99 || p.Currency != "eur" {
-		t.Fatalf("a price in another currency is not shown: %+v", p)
+	if p := price("business"); p.PriceMonth != 120 || p.Currency != "eur" {
+		t.Fatalf("a price without the currency is shown in its own: %+v", p)
 	}
 	if p := price("starter"); p.PriceMonth != 15 {
 		t.Fatalf("starter falls back: %+v", p)
@@ -219,7 +220,7 @@ func TestPlansShowStripeAmounts(t *testing.T) {
 	e.svc.Cfg.Billing.SecretKey = "sk_test_canceled" // a fresh cache key
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
-	e.svc.LivePlans(canceled)
+	e.svc.LivePlans(canceled, app.CurrencyEUR)
 	e.do(nil, "GET", "/v1/plans", e.key, nil, 200, &plans)
 	if p := price("plus"); p.PriceMonth != 31 {
 		t.Fatalf("after a canceled lookup the next one asks Stripe again: %+v", p)
@@ -254,7 +255,7 @@ func TestWebsitePricesMatchPlans(t *testing.T) {
 		}
 	}
 	// The landing page is static: it shows the limits a fresh database has.
-	live, err := newEnv(t).svc.LivePlans(context.Background())
+	live, err := newEnv(t).svc.LivePlans(context.Background(), app.CurrencyEUR)
 	if err != nil {
 		t.Fatal(err)
 	}

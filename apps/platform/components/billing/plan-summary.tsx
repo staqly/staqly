@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils'
 
 import { cents, daysLeft, shortDate } from './billing-format'
 import { Pill } from './payments'
+import { taxNote } from './tax-note'
 
 type State = 'unlocked' | 'start' | 'suspended' | 'past_due' | 'trial' | 'canceling' | 'active'
 
@@ -167,6 +168,7 @@ export function PlanSummary({
 
   // Price per user: the subscription's (cents), else the plan's list price.
   const interval = sub?.interval || 'month'
+  const currency = sub && sub.amount > 0 ? sub.currency : plan.currency
   const price =
     sub && sub.amount > 0
       ? `${cents(sub.amount, sub.currency)} per user / ${interval}`
@@ -185,7 +187,7 @@ export function PlanSummary({
     } else if (nextAt && sub.amount > 0) {
       next = {
         value: `${cents(sub.amount * quantity, sub.currency)} on ${shortDate(nextAt)}`,
-        hint: `${pluralize(quantity, 'user')} × ${cents(sub.amount, sub.currency)}, incl. VAT`,
+        hint: `${pluralize(quantity, 'user')} × ${cents(sub.amount, sub.currency)}, ${taxNote(sub.currency)}`,
       }
     }
   }
@@ -281,7 +283,11 @@ export function PlanSummary({
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-t pt-4 sm:grid-cols-4" data-testid="plan-facts">
         {price && (
-          <Fact label="Price" value={price} hint={interval === 'year' ? 'Billed yearly, incl. VAT' : 'Incl. VAT'} />
+          <Fact
+            label="Price"
+            value={price}
+            hint={interval === 'year' ? `Billed yearly, ${taxNote(currency)}` : `Billed monthly, ${taxNote(currency)}`}
+          />
         )}
         <Fact label="Seats" value={pluralize(seats, 'user')} hint="Every member is billed" />
         {next && <Fact label="Next payment" value={next.value} hint={next.hint} testId="next-payment" />}

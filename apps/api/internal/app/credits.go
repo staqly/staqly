@@ -115,7 +115,15 @@ func (s *Service) GetXPosts(ctx context.Context, p Principal) (XPosts, error) {
 	if err := p.require(ScopePostsRead); err != nil {
 		return XPosts{}, err
 	}
-	return s.xPosts(ctx, s.Q, p.WorkspaceID)
+	x, err := s.xPosts(ctx, s.Q, p.WorkspaceID)
+	x.Currency = s.workspaceCurrency(ctx, p.WorkspaceID, "")
+	if s.BillingEnabled() {
+		// What CreditsCheckout charges in: the bundle's own currency when it has none in the workspace's.
+		if pr, err := s.lookupPrice(ctx, BundleLookupKey(ProviderX, XBundles[0].Posts), "", ""); err == nil {
+			x.Currency, _ = pr.in(x.Currency)
+		}
+	}
+	return x, err
 }
 
 // errXExhausted: the allowance can't cover a post; the date is when the included posts reset.
@@ -301,6 +309,7 @@ func (s *Service) CreditsCheckout(ctx context.Context, p Principal, provider str
 		"success_url":               {back + "?credits=success"},
 		"cancel_url":                {back + "?credits=canceled"},
 	}
+	s.setCheckoutCurrency(ctx, form, w.ID, pr)
 	s.checkoutTax(form)
 	err = s.stripe(ctx, "POST", "/v1/checkout/sessions", form, &cs)
 	return cs.URL, err

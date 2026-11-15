@@ -1,7 +1,7 @@
 /** Subscription statuses that pay (or are about to): a plan change switches them instead of a new checkout. */
 export const LIVE_SUBSCRIPTION = ['active', 'trialing', 'past_due', 'incomplete']
 
-/** €12, €15: whole amounts without cents (others with two decimals), in the plans' currency (euros). */
+/** €12, CHF 15, $15: whole amounts without cents (others with two decimals), in the plans' currency. */
 export function money(n: number, currency = 'eur') {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
