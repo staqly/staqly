@@ -32,9 +32,18 @@ describe('promoPayload', () => {
   it('omits empty optional fields and sends set ones', () => {
     expect(promoPayload(ok)).not.toHaveProperty('max_redemptions')
     expect(promoPayload(ok)).not.toHaveProperty('expires_at')
+    expect(promoPayload(ok)).not.toHaveProperty('first_time')
+    expect(promoPayload(ok)).not.toHaveProperty('plans')
     expect(promoPayload({ ...ok, maxRedemptions: '5', expiresAt: '2027-01-01' })).toMatchObject({
       max_redemptions: 5,
-      expires_at: expect.any(String),
+      expires_at: '2027-01-01',
+    })
+  })
+
+  it('sends first-time-only and the plans a code is limited to', () => {
+    expect(promoPayload({ ...ok, firstTime: true, plans: ['plus', 'pro'] })).toMatchObject({
+      first_time: true,
+      plans: ['plus', 'pro'],
     })
   })
 })
@@ -149,12 +158,10 @@ describe('what the form refuses before it reaches Stripe', () => {
     expect(validatePromo({ ...ok, maxRedemptions: '  ' }, now)).toEqual({})
   })
 
-  it('a code may end today: it runs to the end of that day', () => {
+  it('a code may end today: it runs to the end of that day, UTC (the server sets the time)', () => {
     expect(validatePromo({ ...ok, expiresAt: '2026-11-01' }, now)).toEqual({})
     expect(validatePromo({ ...ok, expiresAt: '2026-10-31' }, now).expiresAt).toBe('Pick a date in the future.')
-    expect(promoPayload({ ...ok, expiresAt: '2026-11-01' }).expires_at).toBe(
-      new Date('2026-11-01T23:59:59').toISOString(),
-    )
+    expect(promoPayload({ ...ok, expiresAt: '2026-11-01' }).expires_at).toBe('2026-11-01')
   })
 
   it('several mistakes are all reported at once', () => {

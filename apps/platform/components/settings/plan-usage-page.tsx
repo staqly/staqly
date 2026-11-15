@@ -587,6 +587,14 @@ export function PlanUsagePage() {
     </Callout>
   ) : null
 
+  // A chargeback still open: everything keeps working until the bank decides.
+  const disputed = b?.disputed ? (
+    <Callout tone="warning" role="status" data-testid="payment-disputed">
+      A payment for this workspace is disputed with the bank (a chargeback). Everything keeps working meanwhile; if the
+      dispute is lost, the plan it paid for ends at once, or the extra X posts it paid for are taken back.
+    </Callout>
+  ) : null
+
   const extras =
     !unlocked && hasAddons ? (
       <Group
@@ -630,6 +638,7 @@ export function PlanUsagePage() {
       <SettingsNav className="mt-4" />
 
       <div className="mt-6 grid gap-8">
+        {disputed}
         {summary}
         {waiting}
         {extras}

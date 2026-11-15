@@ -111,7 +111,7 @@ The compare page on staqly.ai lists the same limits side by side.
    - **Promotion codes:** Stripe Checkout has its own code box for a first plan. To switch plans with a
      code, or apply one to the plan you have, use **Have a promotion code?** on the plan page (or send
      `promotion_code` to `POST /v1/billing/checkout`). The code is checked with Stripe before it is applied
-     (`POST /v1/billing/promotion-code`; codes are case sensitive: `SPRING20`, not `spring20`), and the plans it covers show their discounted price; a code that is
+     (`POST /v1/billing/promotion-code`; what you type is upper-cased: `spring20` is `SPRING20`; an expired or used-up code is refused), and the plans it covers show their discounted price; a code that is
      unknown, used up or made for other plans is refused with the reason. One discount at a time: while
      the subscription has one, the plan page shows it with its end date instead of **Have a promotion code?**,
      and another code (or the same one again) is refused until it ends.
@@ -192,6 +192,19 @@ subscription (and the workspace becomes read-only) when its retries of that invo
 
 When Stripe ends a subscription because a payment kept failing, staqly voids the subscription's other
 open invoices, so a card added later is not charged for a plan that has ended.
+
+Three days before the free trial ends (Stripe's notice), the owners get *Your staqly free trial ends on …*:
+the day, and that the card is charged then unless the plan is cancelled before.
+
+## Refunds and chargebacks
+
+- **A refunded bundle of extra X posts** takes back its refunded share of the posts (rounded down, in your
+  favour); a second partial refund takes the difference. Posts already used stay used, and nothing is taken
+  back beyond what is left of the bundle. A refunded subscription payment changes nothing by itself.
+- **A disputed payment** (a chargeback): the owners and admins get one email per dispute, `GET /v1/billing`
+  says `disputed: true` and Plan & usage shows a notice; the plan and the posts keep working meanwhile. A
+  dispute that is lost ends the subscription it paid at once, or takes back what is left of the bundle; one
+  that is won (or closed without a chargeback) changes nothing.
 
 ## How limits are counted
 

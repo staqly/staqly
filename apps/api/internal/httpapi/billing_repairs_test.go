@@ -155,7 +155,7 @@ func TestBillingSyncJobsOutlastAStripeOutage(t *testing.T) {
 		}
 		switch r.Method + " " + r.URL.Path {
 		case "GET /v1/prices":
-			fmt.Fprint(w, `{"data":[{"id":"price_plus_year"}]}`)
+			fmt.Fprint(w, `{"data":[{"id":"price_plus_year","currency":"usd"}]}`)
 		case "POST /v1/customers":
 			fmt.Fprint(w, `{"id":"cus_1"}`)
 		case "POST /v1/checkout/sessions":
@@ -278,7 +278,7 @@ func TestFeatureNewerThanTheCatalogCacheGetsItsAllowance(t *testing.T) {
 		case "POST /v1/customers":
 			fmt.Fprint(w, `{"id":"cus_1"}`)
 		case "GET /v1/prices":
-			fmt.Fprint(w, `{"data":[{"id":"price_starter_month"}]}`)
+			fmt.Fprint(w, `{"data":[{"id":"price_starter_month","currency":"usd"}]}`)
 		case "POST /v1/checkout/sessions":
 			fmt.Fprint(w, `{"url":"https://checkout.stripe.test/cs_1"}`)
 		case "GET /v1/entitlements/active_entitlements":
@@ -334,7 +334,7 @@ func TestStartPaidPlanHoldsTheBillingLock(t *testing.T) {
 		r.ParseForm()
 		switch r.Method + " " + r.URL.Path {
 		case "GET /v1/prices":
-			fmt.Fprint(w, `{"data":[{"id":"price_starter_month"}]}`)
+			fmt.Fprint(w, `{"data":[{"id":"price_starter_month","currency":"usd"}]}`)
 		case "POST /v1/customers":
 			fmt.Fprint(w, `{"id":"cus_c"}`)
 		case "POST /v1/checkout/sessions":

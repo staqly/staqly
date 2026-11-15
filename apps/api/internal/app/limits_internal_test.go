@@ -88,3 +88,22 @@ func hasAudit(t *testing.T, s *Service, action string) bool {
 	}
 	return n > 0
 }
+
+// The refusal of a plan switch says what to reduce, in the limit's own words.
+func TestOverageText(t *testing.T) {
+	for _, c := range []struct {
+		o    planOverage
+		want string
+	}{
+		{planOverage{LimitChannels, 14, 10}, "Plus allows 10 channels; this workspace has 14. Remove 4 channels first."},
+		{planOverage{LimitAlerts, 2, 1}, "Plus allows 1 alert; this workspace has 2. Remove 1 alert first."},
+		{planOverage{LimitWebhooks, 3, 0}, "Plus allows 0 webhooks; this workspace has 3. Remove 3 webhooks first."},
+		{planOverage{LimitAPIKeys, 6, 5}, "Plus allows 5 API keys; this workspace has 6. Revoke 1 API key first."},
+		{planOverage{LimitStorage, 12*gb + gb/2, 10 * gb}, "Plus allows 10.0 GB of storage; this workspace uses 12.5 GB. Free up 2.5 GB first."},
+		{planOverage{LimitStorage, 10*gb + 3<<20, 10 * gb}, "Plus allows 10.0 GB of storage; this workspace uses 10.0 GB. Free up 3 MB first."},
+	} {
+		if got := overageText("Plus", c.o); got != c.want {
+			t.Errorf("%+v: %q, want %q", c.o, got, c.want)
+		}
+	}
+}

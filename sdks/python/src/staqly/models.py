@@ -222,6 +222,8 @@ class Plan(StaqlyModel):
     price_year: int = 0
     #: ISO 4217 code, lower case (``"eur"``).
     currency: str = "eur"
+    #: Intervals (``"month"``, ``"year"``) whose price isn't sold in ``currency``: checkout answers 409.
+    unavailable: list[str] = Field(default_factory=list)
     highlight: bool
     limits: PlanLimits
     features: list[str] = Field(default_factory=list)
@@ -318,6 +320,8 @@ class Billing(StaqlyModel):
     #: ``payment_failed`` when the subscription ended, or is held unpaid, because a payment failed (Stripe's
     #: cancellation reason); ``None`` otherwise, and again once the workspace subscribes.
     ended_for: str | None = None
+    #: A payment of the workspace is in a chargeback not closed yet (everything keeps working meanwhile).
+    disputed: bool = False
 
 
 class SubscriptionDiscount(StaqlyModel):

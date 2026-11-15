@@ -550,6 +550,9 @@ paths:
         `customer.subscription.updated` event arrives. 409 for the plan and interval it already has. A lower plan
         on the same interval, and yearly to monthly on the same or a lower plan, are settled by Stripe's proration
         at once: the credit goes to the customer's balance at Stripe, which pays the next invoices (an upgrade's too).
+        A plan the workspace has more on than it allows (channels, alerts, webhooks, API keys, storage; with the
+        add-ons it keeps) is refused before Stripe is asked: 409 `plan_limits_exceeded`, whose message says what to
+        reduce and whose `details` are `{plan, overages: [{limit, used, max}]}`. Monthly allowances don't block.
 
         An upgrade (a paying subscription moving to a higher plan) charges the prorated difference at once,
         monthly to yearly on any plan charges the year at once (less the unused rest of the month), and
@@ -830,7 +833,8 @@ paths:
       summary: Stripe webhook endpoint
       description: |
         Called by Stripe, not by clients. Verified with the `Stripe-Signature` header and
-        `STRIPE_WEBHOOK_SECRET`; each event is applied once. Handles
+        `STRIPE_WEBHOOK_SECRET` (several comma-separated while an old and a new endpoint both deliver); each
+        event id is applied once, so the same event from two endpoints counts once. Handles
         `checkout.session.completed` and `customer.subscription.*`.
       security: []
       parameters:
@@ -5175,7 +5179,7 @@ components:
             failed: { type: integer, description: Gave up after every retry }
     Billing:
       type: object
-      required: [enabled, plan, subscription_status, plan_expires_at, trial_ends_at, suspended, has_customer, seats, trial, trial_revoked, trial_review, ended_for]
+      required: [enabled, plan, subscription_status, plan_expires_at, trial_ends_at, suspended, has_customer, seats, trial, trial_revoked, trial_review, ended_for, disputed]
       properties:
         enabled: { type: boolean, description: Billing is configured on this instance }
         plan: { type: string, description: "starter, plus, pro or business (cloud; an operator may also set a plan of their own), unlocked (Community Edition)", examples: [plus] }
@@ -5204,6 +5208,7 @@ components:
           type: [string, "null"]
           enum: [payment_failed, null]
           description: "payment_failed when the subscription ended, or is held unpaid, because a payment failed (Stripe's cancellation_details.reason; subscription_status is canceled or unpaid); null otherwise, also for a subscription the customer cancelled, and again once the workspace subscribes"
+        disputed: { type: boolean, description: "A payment of the workspace is in a chargeback that isn't closed yet. Everything keeps working meanwhile; a lost dispute ends the subscription it paid at once, or takes back the extra posts left of the bundle it paid. Owners and admins get one email per dispute." }
     XPosts:
       type: object
       required: [period, period_end, unlimited, included, used, included_left, credits_left, credits_expire_at, left, bundles, currency, link_post_weight]
@@ -5395,6 +5400,10 @@ components:
         price_month: { type: integer, description: "Price per user (each workspace member is a seat) per month billed monthly, in whole units of currency (euros)", examples: [29] }
         price_year: { type: integer, description: "Price per user per year billed yearly: twelve whole months at 20 % off or a little more (rounded down)", examples: [276] }
         currency: { type: string, description: "ISO 4217 code, lower case", examples: [eur] }
+        unavailable:
+          type: array
+          items: { type: string, enum: [month, year] }
+          description: "Intervals whose Stripe price isn't sold in currency (left out when every interval is): their amount is the built-in one, and checkout answers 409 not_available"
         highlight: { type: boolean, description: The plan the picker suggests }
         limits: { $ref: "#/components/schemas/PlanLimits" }
         features: { type: array, items: { type: string } }

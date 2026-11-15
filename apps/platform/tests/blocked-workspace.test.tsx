@@ -26,6 +26,7 @@ const BILLING: Billing = {
   trial_review: null,
   trial_revoked: null,
   ended_for: null,
+  disputed: false,
 }
 
 const SUBSCRIPTION: NonNullable<BillingDetails['subscription']> = {

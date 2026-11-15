@@ -88,4 +88,14 @@ describe('X posts', () => {
     // Still leaving for Stripe: no second checkout from another click.
     expect(screen.getByTestId('buy-x-posts-continue')).toBeDisabled()
   })
+  it('without a bundle sold in the currency, Buy more is disabled and says why', async () => {
+    const user = userEvent.setup()
+
+    renderWithProviders(<BuyXPosts x={xposts({ bundles: [], currency: 'chf' })} />, { mode: 'cloud' })
+    const button = screen.getByRole('button', { name: 'Buy more X posts' })
+
+    expect(button).toHaveAttribute('aria-disabled', 'true')
+    await user.click(button)
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument()
+  })
 })

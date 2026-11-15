@@ -98,6 +98,7 @@ var exportPlan = map[string]string{
 	"usage_events":                      "left out: metering",
 	"credit_grants":                     "left out: billing",
 	"workspace_trials":                  "left out: billing",
+	"billing_disputes":                  "left out: billing (chargebacks, read again from Stripe)",
 	"trial_fingerprints":                "left out: abuse prevention",
 	"limit_workspaces":                  "left out: the operator's limits for the workspace",
 	"publishing_allowance_reservations": "left out: quota held by sends in progress",

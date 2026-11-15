@@ -94,7 +94,7 @@ func TestXPostsAreMetered(t *testing.T) {
 		switch r.Method + " " + r.URL.Path {
 		case "GET /v1/prices":
 			key := r.URL.Query().Get("lookup_keys[]")
-			fmt.Fprintf(w, `{"data":[{"id":"price_%s","unit_amount":4000}]}`, strings.TrimPrefix(key, "staqly_"))
+			fmt.Fprintf(w, `{"data":[{"id":"price_%s","unit_amount":4000,"currency":"usd"}]}`, strings.TrimPrefix(key, "staqly_"))
 		case "POST /v1/customers":
 			fmt.Fprint(w, `{"id":"cus_x"}`)
 		case "POST /v1/checkout/sessions":

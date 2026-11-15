@@ -34,6 +34,7 @@ const BILLING_PRO: Billing = {
   trial_review: null,
   trial_revoked: null,
   ended_for: null,
+  disputed: false,
 }
 
 function invoice(n: number): BillingDetails['invoices'][number] {
@@ -191,6 +192,36 @@ describe('plan & usage', () => {
     await waitFor(() => expect(screen.getAllByTestId('invoice-row')).toHaveLength(2))
     expect(screen.queryByRole('button', { name: 'Show older invoices' })).not.toBeInTheDocument()
     expect(api.find('GET', '/v1/billing/details').some((c) => c.query.get('starting_after') === 'in_2')).toBe(true)
+  })
+
+  it('an open chargeback shows an alert at the top, and the plan keeps working', async () => {
+    mockApi({
+      'GET /v1/billing': { ...BILLING_PRO, disputed: true },
+      'GET /v1/billing/details': DETAILS,
+      'GET /v1/billing/addons': { data: [] },
+      'GET /v1/billing/x-posts': XPOSTS,
+      'GET /v1/workspace/usage': usage(PLANS[1]),
+    })
+
+    renderPlan()
+
+    expect(await screen.findByTestId('payment-disputed')).toHaveTextContent('disputed with the bank')
+    expect(screen.getByTestId('payment-disputed')).toHaveTextContent('Everything keeps working')
+  })
+
+  it('without a chargeback there is no alert', async () => {
+    mockApi({
+      'GET /v1/billing': BILLING_PRO,
+      'GET /v1/billing/details': DETAILS,
+      'GET /v1/billing/addons': { data: [] },
+      'GET /v1/billing/x-posts': XPOSTS,
+      'GET /v1/workspace/usage': usage(PLANS[1]),
+    })
+
+    renderPlan()
+    await screen.findByTestId('plan-summary')
+
+    expect(screen.queryByTestId('payment-disputed')).not.toBeInTheDocument()
   })
 
   it('invoices say Refunded, Partially refunded (with the amount) and Disputed, though Stripe keeps them paid', async () => {

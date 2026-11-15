@@ -143,18 +143,19 @@ func TestCheckoutCompletedDuplicateAndUnknown(t *testing.T) {
 	}
 }
 
-// creditStripe is a Stripe that knows the credit Checkout sessions and charges of a test and, like Stripe, lists
-// only the sessions of the payment asked for.
+// creditStripe is a Stripe that knows the credit Checkout sessions, charges and disputes of a test and, like
+// Stripe, lists only the sessions of the payment asked for. No payment paid an invoice.
 type creditStripe struct {
 	mu       sync.Mutex
 	sessions []map[string]any
 	charges  map[string]map[string]any
+	disputes map[string]map[string]any
 	lookups  int
 }
 
 func newCreditStripe(t *testing.T, e *env) *creditStripe {
 	t.Helper()
-	f := &creditStripe{charges: map[string]map[string]any{}}
+	f := &creditStripe{charges: map[string]map[string]any{}, disputes: map[string]map[string]any{}}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
@@ -176,6 +177,16 @@ func newCreditStripe(t *testing.T, e *env) *creditStripe {
 				return
 			}
 			json.NewEncoder(w).Encode(ch)
+		case r.Method == "GET" && strings.HasPrefix(r.URL.Path, "/v1/disputes/"):
+			d, ok := f.disputes[strings.TrimPrefix(r.URL.Path, "/v1/disputes/")]
+			if !ok {
+				w.WriteHeader(404)
+				fmt.Fprint(w, `{"error":{"code":"resource_missing","type":"invalid_request_error"}}`)
+				return
+			}
+			json.NewEncoder(w).Encode(d)
+		case r.Method == "GET" && r.URL.Path == "/v1/invoice_payments":
+			fmt.Fprint(w, `{"data":[]}`)
 		default:
 			w.WriteHeader(404)
 			fmt.Fprint(w, `{"error":{"message":"fake: unhandled","type":"invalid_request_error"}}`)
@@ -264,13 +275,15 @@ func TestCreditEventsPaidOnceInAnyOrder(t *testing.T) {
 	}
 }
 
-// Refunds and disputes of bought posts: a dispute counts on top of what was refunded before; the same event
-// again, an older total arriving late, a refund before the purchase's own event, and a charge of another
-// workspace or of something that isn't credits all leave the right number of posts.
+// Refunds and disputes of bought posts. A refund takes back its share, cumulatively, read from the charge as Stripe
+// has it now (the same event again, or an older total arriving late, changes nothing); a refund before the
+// purchase's own event counts too. An open dispute takes nothing (the posts keep working); a lost one takes back
+// all that is left. A charge of another workspace or of something that isn't credits changes nothing here.
 func TestCreditRefundEventsDuplicateStaleAndUnknown(t *testing.T) {
 	e := newEnv(t)
 	f := newCreditStripe(t, e)
 	ws := workspaceID(e)
+	admin := e.keyWith(app.ScopeAdmin)
 	left := func() int64 {
 		t.Helper()
 		var x app.XPosts
@@ -290,34 +303,62 @@ func TestCreditRefundEventsDuplicateStaleAndUnknown(t *testing.T) {
 		f.mu.Unlock()
 		return ch
 	}
+	dispute := func(id, ch, status string) map[string]any {
+		d := map[string]any{"id": id, "object": "dispute", "charge": ch, "status": status}
+		f.mu.Lock()
+		f.disputes[id] = d
+		f.mu.Unlock()
+		return d
+	}
 	bought := f.session("cs_1", "pi_1", ws, "1000", "paid")
 	send("evt_buy", "checkout.session.completed", bought)
 
-	// A quarter refunded, then a dispute of half the charge: three quarters are gone, 250 stay.
+	// A quarter refunded, then half: half of the posts are gone, 500 stay.
 	send("evt_ref_1", "charge.refunded", charge("ch_1", "pi_1", 4000, 1000))
 	if n := left(); n != 750 {
 		t.Fatalf("after a quarter's refund: %d posts, want 750", n)
 	}
-	dispute := map[string]any{"id": "dp_1", "object": "dispute", "charge": "ch_1", "amount": 2000}
-	send("evt_dp_1", "charge.dispute.created", dispute)
-	if n := left(); n != 250 {
-		t.Fatalf("a dispute of half after a quarter's refund: %d posts, want 250", n)
+	send("evt_ref_2", "charge.refunded", charge("ch_1", "pi_1", 4000, 2000))
+	if n := left(); n != 500 {
+		t.Fatalf("after half refunded in all: %d posts, want 500", n)
 	}
-	// Told again, and the older refund arriving late under a new id: nothing comes back.
-	send("evt_dp_1", "charge.dispute.created", dispute)
-	send("evt_ref_1", "charge.refunded", charge("ch_1", "pi_1", 4000, 1000))
+	// Told again, and an older total in a late event's payload: Stripe's charge says half, nothing comes back.
+	send("evt_ref_1", "charge.refunded", charge("ch_1", "pi_1", 4000, 2000))
 	send("evt_ref_late", "charge.refunded", map[string]any{"id": "ch_1", "object": "charge", "payment_intent": "pi_1", "amount": 4000, "amount_refunded": 500})
-	if n := left(); n != 250 {
-		t.Fatalf("a repeated or older event changed the posts: %d, want 250", n)
+	if n := left(); n != 500 {
+		t.Fatalf("a repeated or older event changed the posts: %d, want 500", n)
+	}
+
+	// A dispute opened: the posts keep working, the billing status says so.
+	send("evt_dp_1", "charge.dispute.created", dispute("dp_1", "ch_1", "needs_response"))
+	if n, b := left(), e.billing(admin); n != 500 || !b.Disputed {
+		t.Fatalf("an open dispute: %d posts (want 500), disputed %v", n, b.Disputed)
+	}
+	// Lost: all that is left of the purchase goes; the alert clears. Told again: nothing changes.
+	dispute("dp_1", "ch_1", "lost")
+	send("evt_dp_2", "charge.dispute.closed", map[string]any{"id": "dp_1"})
+	send("evt_dp_1", "charge.dispute.created", map[string]any{"id": "dp_1"})
+	if n, b := left(), e.billing(admin); n != 0 || b.Disputed {
+		t.Fatalf("a lost dispute: %d posts (want 0), disputed %v", n, b.Disputed)
 	}
 
 	// A refund that arrives before the purchase's own event: the grant is made, lowered, and the purchase's
 	// event later adds nothing.
 	early := f.session("cs_2", "pi_2", ws, "200", "paid")
-	send("evt_ref_2", "charge.refunded", charge("ch_2", "pi_2", 1000, 1000))
+	send("evt_ref_3", "charge.refunded", charge("ch_2", "pi_2", 1000, 1000))
 	send("evt_buy_2", "checkout.session.completed", early)
-	if n := left(); n != 250 {
-		t.Fatalf("a purchase refunded before its event arrived: %d posts, want 250", n)
+	if n := left(); n != 0 {
+		t.Fatalf("a purchase refunded before its event arrived: %d posts, want 0", n)
+	}
+	// A dispute won: the alert clears, the posts stay.
+	f.session("cs_3", "pi_3", ws, "200", "paid")
+	send("evt_buy_3", "checkout.session.completed", f.session("cs_3", "pi_3", ws, "200", "paid"))
+	charge("ch_3", "pi_3", 1000, 0)
+	send("evt_dp_3", "charge.dispute.created", dispute("dp_3", "ch_3", "warning_needs_response"))
+	dispute("dp_3", "ch_3", "won")
+	send("evt_dp_4", "charge.dispute.updated", map[string]any{"id": "dp_3"})
+	if n, b := left(), e.billing(admin); n != 200 || b.Disputed {
+		t.Fatalf("a won dispute: %d posts (want 200), disputed %v", n, b.Disputed)
 	}
 
 	// Another workspace's purchase, a payment that isn't credits (a subscription invoice), a dispute whose charge
@@ -325,18 +366,22 @@ func TestCreditRefundEventsDuplicateStaleAndUnknown(t *testing.T) {
 	f.session("cs_else", "pi_else", "ws_someone_else", "4000", "paid")
 	send("evt_ref_else", "charge.refunded", charge("ch_else", "pi_else", 15000, 15000))
 	send("evt_ref_invoice", "charge.refunded", charge("ch_inv", "pi_invoice", 1900, 1900))
-	send("evt_dp_bare", "charge.dispute.created", map[string]any{"id": "dp_2", "object": "dispute", "amount": 4000})
-	if n := left(); n != 250 {
-		t.Fatalf("someone else's refund changed this workspace: %d posts, want 250", n)
+	send("evt_dp_else", "charge.dispute.created", dispute("dp_else", "ch_else", "needs_response"))
+	send("evt_dp_bare", "charge.dispute.created", dispute("dp_bare", "", "needs_response"))
+	if n, b := left(), e.billing(admin); n != 200 || b.Disputed {
+		t.Fatalf("someone else's refund or dispute changed this workspace: %d posts, disputed %v", n, b.Disputed)
 	}
 	var grants int
-	e.svc.DB.QueryRow(`SELECT COUNT(*) FROM credit_grants`).Scan(&grants)
-	if grants != 2 {
-		t.Fatalf("%d grants, want this workspace's 2", grants)
+	e.svc.DB.QueryRow(`SELECT COUNT(*) FROM credit_grants WHERE workspace_id = ?`, ws).Scan(&grants)
+	if grants != 3 {
+		t.Fatalf("%d grants, want this workspace's 3", grants)
 	}
-	// Stripe can't be asked about a disputed charge: the event fails, so Stripe sends it again.
-	if code := e.rawStripeEvent("evt_dp_gone", "charge.dispute.created", map[string]any{"id": "dp_3", "charge": "ch_missing", "amount": 100}); code != 502 {
-		t.Fatalf("a dispute whose charge can't be read: %d, want 502", code)
+	// Stripe can't be asked about a dispute or its charge: the event fails, so Stripe sends it again.
+	dispute("dp_gone", "ch_missing", "needs_response")
+	for _, id := range []string{"dp_gone", "dp_unknown"} {
+		if code := e.rawStripeEvent("evt_"+id, "charge.dispute.created", map[string]any{"id": id}); code != 502 {
+			t.Fatalf("a dispute that can't be read (%s): %d, want 502", id, code)
+		}
 	}
 }
 
@@ -444,7 +489,7 @@ func TestCardAttachedDuplicateAndUnknown(t *testing.T) {
 		t.Fatalf("one card told three times left %d marks, want 1", n)
 	}
 	// Events staqly doesn't handle are acknowledged, whatever they carry.
-	for _, typ := range []string{"invoice.paid", "invoice.payment_failed", "customer.updated", "charge.succeeded", "customer.subscription.trial_will_end"} {
+	for _, typ := range []string{"invoice.paid", "invoice.payment_failed", "customer.updated", "charge.succeeded"} {
 		if code := e.rawStripeEvent("evt_"+typ, typ, map[string]any{"id": "x", "customer": "cus_1"}); code != 200 {
 			t.Fatalf("%s: %d", typ, code)
 		}

@@ -27,7 +27,7 @@ func TestBillingRoleMatrix(t *testing.T) {
 	f.set("GET /v1/products", func() (int, any) { return 200, map[string]any{"data": []any{}} })
 	f.set("GET /v1/promotion_codes", func() (int, any) { return 200, map[string]any{"data": []any{}} })
 	f.set("GET /v1/prices", func() (int, any) {
-		return 200, map[string]any{"data": []any{map[string]any{"id": "price_credits", "unit_amount": 1000}}}
+		return 200, map[string]any{"data": []any{map[string]any{"id": "price_credits", "unit_amount": 1000, "currency": "usd"}}}
 	})
 	f.set("POST /v1/customers/cus_1", func() (int, any) { return 200, map[string]string{"id": "cus_1"} })
 	f.set("GET /v1/checkout/sessions", func() (int, any) { return 200, map[string]any{"data": []any{}} })

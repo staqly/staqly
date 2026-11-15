@@ -206,7 +206,7 @@ func TestPinnedInactivePriceUsesLookupKey(t *testing.T) {
 		case "GET /v1/prices/price_old":
 			fmt.Fprint(w, `{"id":"price_old","active":false,"unit_amount":100,"currency":"usd"}`)
 		case "GET /v1/prices":
-			fmt.Fprint(w, `{"data":[{"id":"price_live_plus","active":true,"unit_amount":2900,"currency":"eur"}]}`)
+			fmt.Fprint(w, `{"data":[{"id":"price_live_plus","active":true,"unit_amount":2900,"currency":"usd"}]}`)
 		case "POST /v1/customers":
 			fmt.Fprint(w, `{"id":"cus_p"}`)
 		case "POST /v1/checkout/sessions":
@@ -271,9 +271,9 @@ func TestStripeSubscriptionEventReadsCurrentState(t *testing.T) {
 	}
 }
 
-// A refunded or disputed purchase of extra X posts takes back the refunded share of the posts not used yet:
-// partial refunds count up (Stripe's amount_refunded is the total so far), what was already used stays, the
-// allowance never goes below it, and a repeated or late event changes nothing more.
+// A refunded purchase of extra X posts takes back the refunded share of the posts not used yet: partial refunds
+// count up (Stripe's amount_refunded is the total so far), what was already used stays, the allowance never goes
+// below it, and a repeated or late event changes nothing more. A lost dispute takes back all that is left.
 func TestCreditRefundsAndDisputesTakeBackUnusedPosts(t *testing.T) {
 	e := newEnv(t)
 	f := withStripe(t, e)
@@ -301,10 +301,16 @@ func TestCreditRefundsAndDisputesTakeBackUnusedPosts(t *testing.T) {
 	if n := creditsLeft(); n != 170 {
 		t.Fatalf("before the refund: %d", n)
 	}
+	// charge: the charge as an event carries it; Stripe has amount_refunded = stripe (what refund reads again).
+	stripeRefunded := 0
+	f.set("GET /v1/charges/ch_r1", func() (int, any) {
+		return 200, map[string]any{"id": "ch_r1", "payment_intent": "pi_r1", "amount": 1000, "amount_refunded": stripeRefunded, "currency": "eur"}
+	})
 	charge := func(refunded int) map[string]any {
 		return map[string]any{"id": "ch_r1", "object": "charge", "payment_intent": "pi_r1", "amount": 1000, "amount_refunded": refunded, "currency": "eur"}
 	}
 	// Half refunded: 100 of the 200 posts go back; 30 were used, 70 stay.
+	stripeRefunded = 500
 	if code := e.stripeEvent("evt_ref_1", "charge.refunded", charge(500), testWhsec); code != 200 {
 		t.Fatalf("refund: %d", code)
 	}
@@ -319,6 +325,7 @@ func TestCreditRefundsAndDisputesTakeBackUnusedPosts(t *testing.T) {
 	}
 	// The rest refunded: nothing is left. The grant's units are what the refund leaves (none), below what was
 	// used, so a post given back later (a rejected publish) doesn't make one of them usable again.
+	stripeRefunded = 1000
 	e.stripeEvent("evt_ref_2", "charge.refunded", charge(1000), testWhsec)
 	if n := creditsLeft(); n != 0 {
 		t.Fatalf("after a full refund: %d left", n)
@@ -328,20 +335,31 @@ func TestCreditRefundsAndDisputesTakeBackUnusedPosts(t *testing.T) {
 		t.Fatalf("grant after a full refund: units %d used %d (%v)", units, used, err)
 	}
 
-	// A dispute of a whole purchase takes back every unused post of it.
+	// A dispute: nothing is taken while it is open; lost, every unused post of the purchase goes.
 	buy("cs_d1", "pi_d1", "1000")
 	f.set("GET /v1/charges/ch_d1", func() (int, any) {
 		return 200, map[string]any{"id": "ch_d1", "payment_intent": "pi_d1", "amount": 4000, "amount_refunded": 0}
 	})
-	dispute := map[string]any{"id": "dp_1", "object": "dispute", "charge": "ch_d1", "payment_intent": "pi_d1", "amount": 4000}
-	if code := e.stripeEvent("evt_dp_1", "charge.dispute.created", dispute, testWhsec); code != 200 {
+	status := "needs_response"
+	f.set("GET /v1/disputes/dp_1", func() (int, any) { return 200, map[string]any{"id": "dp_1", "charge": "ch_d1", "status": status} })
+	if code := e.stripeEvent("evt_dp_1", "charge.dispute.created", map[string]any{"id": "dp_1"}, testWhsec); code != 200 {
 		t.Fatalf("dispute: %d", code)
 	}
+	if n := creditsLeft(); n != 1000 {
+		t.Fatalf("while a dispute is open: %d left, want 1000", n)
+	}
+	status = "lost"
+	if code := e.stripeEvent("evt_dp_2", "charge.dispute.closed", map[string]any{"id": "dp_1"}, testWhsec); code != 200 {
+		t.Fatalf("dispute lost: %d", code)
+	}
 	if n := creditsLeft(); n != 0 {
-		t.Fatalf("after a dispute: %d left", n)
+		t.Fatalf("after a lost dispute: %d left", n)
 	}
 	// A refund of something else (no credits session behind it) is acknowledged and ignored.
 	f.set("GET /v1/checkout/sessions", func() (int, any) { return 200, map[string]any{"data": []any{}} })
+	f.set("GET /v1/charges/ch_x", func() (int, any) {
+		return 200, map[string]any{"id": "ch_x", "payment_intent": "pi_x", "amount": 100, "amount_refunded": 100}
+	})
 	if code := e.stripeEvent("evt_ref_other", "charge.refunded", map[string]any{"id": "ch_x", "payment_intent": "pi_x", "amount": 100, "amount_refunded": 100}, testWhsec); code != 200 {
 		t.Fatalf("unrelated refund: %d", code)
 	}
@@ -500,7 +518,7 @@ func TestOutboundErrorsHideResolvedAddressesInCloud(t *testing.T) {
 }
 
 func TestCreditReversalBeforeCheckoutDoesNotRestoreRefundedPosts(t *testing.T) {
-	for _, typ := range []string{"charge.refunded", "charge.dispute.created"} {
+	for _, typ := range []string{"charge.refunded", "charge.dispute.closed"} {
 		t.Run(typ, func(t *testing.T) {
 			e := newEnv(t)
 			f := withStripe(t, e)
@@ -508,10 +526,18 @@ func TestCreditReversalBeforeCheckoutDoesNotRestoreRefundedPosts(t *testing.T) {
 			session := map[string]any{"id": "cs_reversed", "mode": "payment", "payment_status": "paid", "payment_intent": "pi_reversed", "client_reference_id": ws,
 				"metadata": map[string]string{"workspace_id": ws, "staqly_kind": "credits", "staqly_provider": "x", "staqly_posts": "200"}}
 			f.set("GET /v1/checkout/sessions", func() (int, any) { return 200, map[string]any{"data": []any{session}} })
+			// Refunded in full, or a dispute of it lost: either takes all of it back.
+			refunded := map[string]int{"charge.refunded": 1000}[typ]
 			f.set("GET /v1/charges/ch_reversed", func() (int, any) {
-				return 200, map[string]any{"id": "ch_reversed", "payment_intent": "pi_reversed", "amount": 1000, "amount_refunded": 0}
+				return 200, map[string]any{"id": "ch_reversed", "payment_intent": "pi_reversed", "amount": 1000, "amount_refunded": refunded}
 			})
-			reversal := map[string]any{"id": "ch_reversed", "charge": "ch_reversed", "payment_intent": "pi_reversed", "amount": 1000, "amount_refunded": 1000}
+			f.set("GET /v1/disputes/dp_reversed", func() (int, any) {
+				return 200, map[string]any{"id": "dp_reversed", "charge": "ch_reversed", "status": "lost"}
+			})
+			reversal := map[string]any{"id": map[string]string{"charge.refunded": "ch_reversed"}[typ]}
+			if reversal["id"] == "" {
+				reversal["id"] = "dp_reversed"
+			}
 			if status := e.stripeEvent("evt_reversed", typ, reversal, testWhsec); status != 200 {
 				t.Fatalf("reversal status %d", status)
 			}

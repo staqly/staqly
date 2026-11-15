@@ -348,6 +348,9 @@ func (s *Service) GetBillingDetails(ctx context.Context, p Principal, after stri
 }
 
 type stripeCharge struct {
+	ID             string `json:"id"`
+	Customer       string `json:"customer"`
+	Amount         int64  `json:"amount"`
 	PaymentIntent  string `json:"payment_intent"`
 	Status         string `json:"status"`
 	AmountRefunded int64  `json:"amount_refunded"`

@@ -2,6 +2,7 @@ import { Check, Sparkles } from 'lucide-react'
 
 import { taxNote } from '@/components/billing/tax-note'
 import { SkeletonList } from '@/components/common/skeleton-list'
+import { Button } from '@/components/ui/button'
 import { UNLIMITED, type BillingInterval, type Plan, type PlanLimits, type PromotionCode } from '@/lib/api'
 import { formatBytes } from '@/lib/format'
 import { money, promotionSummary } from '@/lib/plans'
@@ -135,6 +136,8 @@ function PlanCard({
   const features = plan.features?.length ? plan.features : limitFeatures(plan.limits)
   const after = discounted(plan, interval, promotion, seats)
   const perMonth = (n: number) => (interval === 'year' ? Math.round((n / 12) * 100) / 100 : n)
+  // Not sold in the workspace's currency in this interval: no price to show, nothing to choose (checkout answers 409).
+  const unavailable = !!plan.unavailable?.includes(interval)
 
   const body = (
     <div className="relative flex h-full flex-col rounded-[calc(var(--radius)*1.8)] bg-card p-5 text-card-foreground sm:p-6">
@@ -151,44 +154,65 @@ function PlanCard({
         ) : null}
       </div>
       <p className="mt-1 text-sm text-muted-foreground">{TAGLINES[plan.id] ?? ''}</p>
-      <div className="mt-5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        {after !== undefined && (
-          <s
-            className="text-xl font-medium text-muted-foreground tabular-nums decoration-destructive decoration-2"
-            data-testid={`plan-old-price-${plan.id}`}
-          >
-            <span className="sr-only">Was </span>
-            {money(monthly(plan, interval), plan.currency)}
-          </s>
-        )}
-        <span className="flex items-baseline gap-1">
-          <span
-            className={cn('text-4xl font-semibold tracking-tight tabular-nums', after !== undefined && 'text-brand')}
-            data-testid={`plan-price-${plan.id}`}
-          >
-            {after !== undefined && <span className="sr-only">Now </span>}
-            {money(after !== undefined ? perMonth(after) : monthly(plan, interval), plan.currency)}
-          </span>
-          <span className="text-sm whitespace-nowrap text-muted-foreground">/ user / mo</span>
-        </span>
-      </div>
-      <p className="mt-1 text-xs text-muted-foreground">
-        {interval === 'year'
-          ? `${money(after ?? plan.price_year, plan.currency)} per user, billed yearly`
-          : 'Billed monthly'}
-        , {taxNote(plan.currency)}
-      </p>
-      {after !== undefined && promotion && (
-        <p className="mt-1 text-xs font-medium text-brand" data-testid={`plan-discount-${plan.id}`}>
-          {promotionSummary(promotion)} with {promotion.code}
+      {unavailable ? (
+        <p className="mt-5 text-sm text-muted-foreground" data-testid={`plan-unavailable-${plan.id}`}>
+          Not available {interval === 'year' ? 'yearly' : 'monthly'} in {plan.currency.toUpperCase()}.
         </p>
+      ) : (
+        <>
+          <div className="mt-5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            {after !== undefined && (
+              <s
+                className="text-xl font-medium text-muted-foreground tabular-nums decoration-destructive decoration-2"
+                data-testid={`plan-old-price-${plan.id}`}
+              >
+                <span className="sr-only">Was </span>
+                {money(monthly(plan, interval), plan.currency)}
+              </s>
+            )}
+            <span className="flex items-baseline gap-1">
+              <span
+                className={cn(
+                  'text-4xl font-semibold tracking-tight tabular-nums',
+                  after !== undefined && 'text-brand',
+                )}
+                data-testid={`plan-price-${plan.id}`}
+              >
+                {after !== undefined && <span className="sr-only">Now </span>}
+                {money(after !== undefined ? perMonth(after) : monthly(plan, interval), plan.currency)}
+              </span>
+              <span className="text-sm whitespace-nowrap text-muted-foreground">/ user / mo</span>
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {interval === 'year'
+              ? `${money(after ?? plan.price_year, plan.currency)} per user, billed yearly`
+              : 'Billed monthly'}
+            , {taxNote(plan.currency)}
+          </p>
+          {after !== undefined && promotion && (
+            <p className="mt-1 text-xs font-medium text-brand" data-testid={`plan-discount-${plan.id}`}>
+              {promotionSummary(promotion)} with {promotion.code}
+            </p>
+          )}
+          {seats !== undefined && seats > 1 && (
+            <p className="mt-1 text-xs font-medium" data-testid={`plan-total-${plan.id}`}>
+              {teamTotal(plan, interval, seats, promotion)}
+            </p>
+          )}
+        </>
       )}
-      {seats !== undefined && seats > 1 && (
-        <p className="mt-1 text-xs font-medium" data-testid={`plan-total-${plan.id}`}>
-          {teamTotal(plan, interval, seats, promotion)}
-        </p>
+      {cta && (
+        <div className="mt-5 grid">
+          {unavailable ? (
+            <Button variant="outline" disabled>
+              Not available
+            </Button>
+          ) : (
+            cta
+          )}
+        </div>
       )}
-      {cta && <div className="mt-5 grid">{cta}</div>}
       <div className="my-5 h-px bg-border" />
       <ul className="grid gap-2.5 text-sm" aria-label={`${plan.name} features`}>
         {[...features, EVERY_PLAN.replace(' on every plan', '')].map((f) => (

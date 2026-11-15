@@ -33,7 +33,10 @@ import (
 //   - subscription ended: Stripe ended it (or holds it unpaid) because the payment kept failing, once per
 //     subscription (subscription_ended_for remembers it); the workspace is read-only until it has a plan again.
 //
-// A payment put right sends nothing: Stripe's receipt says so.
+// A payment put right sends nothing: Stripe's receipt says so. Two more billing notices go through it:
+//
+//   - trial ending: Stripe's customer.subscription.trial_will_end (three days before), not sent once the trial is over;
+//   - payment disputed: a chargeback was opened (disputes.go), to the owners and the admins, not sent once it is closed.
 //
 // With billing, a new workspace has no plan until its owner starts Starter's trial in Stripe Checkout (card
 // required), so someone who signs up and stops there would hear nothing. The transaction that creates the workspace
@@ -51,6 +54,8 @@ const (
 
 	emailPaymentFailed     = "payment_failed"
 	emailSubscriptionEnded = "subscription_ended"
+	emailTrialEnding       = "trial_ending"     // customer.subscription.trial_will_end: owners, once
+	emailPaymentDisputed   = "payment_disputed" // a chargeback opened: owners and admins, once per dispute
 
 	// welcomeTrialDelay: the trial's email waits, so a trial ended right after it began (guardCard) says nothing.
 	welcomeTrialDelay = time.Minute
@@ -150,8 +155,8 @@ func (s *Service) signupEmailDue(ctx context.Context, w db.GetWorkspaceBillingRo
 	return offer == TrialAvailable, err
 }
 
-// queueWelcome queues one email per owner (the people who manage billing), in the caller's transaction. Without
-// mail nothing is queued, and mail set up later doesn't welcome anyone to a trial half over.
+// queueWelcome queues one email per owner (the people who manage billing; a dispute's to the admins too), in the
+// caller's transaction. Without mail nothing is queued, and mail set up later doesn't welcome anyone to a trial half over.
 func (s *Service) queueWelcome(ctx context.Context, q *db.Queries, workspaceID, kind, interval string) error {
 	if s.Cfg.Mode != ModeCloud || !s.mailConfigured() {
 		return nil
@@ -165,7 +170,7 @@ func (s *Service) queueWelcome(ctx context.Context, q *db.Queries, workspaceID, 
 		at = at.Add(welcomeTrialDelay)
 	}
 	for _, m := range members {
-		if m.Role != RoleOwner {
+		if !emailedRole(kind, m.Role) {
 			continue
 		}
 		if err := s.enqueue(ctx, q, workspaceID, "welcome_email", "welcome_email:"+workspaceID+":"+kind+":"+m.UserID,
@@ -174,6 +179,11 @@ func (s *Service) queueWelcome(ctx context.Context, q *db.Queries, workspaceID, 
 		}
 	}
 	return nil
+}
+
+// emailedRole: whether a member in role hears about kind.
+func emailedRole(kind, role string) bool {
+	return role == RoleOwner || (kind == emailPaymentDisputed && role == RoleAdmin)
 }
 
 // runWelcomeEmail is the welcome_email job: one email to one owner. A failed send is retried like any job (three
@@ -190,8 +200,8 @@ func (s *Service) runWelcomeEmail(ctx context.Context, workspaceID string, p job
 		return err
 	}
 	m, err := s.Q.GetMember(ctx, db.GetMemberParams{WorkspaceID: workspaceID, UserID: p.UserID})
-	if isNoRows(err) || (err == nil && m.Role != RoleOwner) {
-		return nil // no longer an owner
+	if isNoRows(err) || (err == nil && !emailedRole(p.Welcome, m.Role)) {
+		return nil // no longer an owner (or admin)
 	}
 	if err != nil {
 		return err
@@ -247,6 +257,16 @@ func (s *Service) runWelcomeEmail(ctx context.Context, workspaceID string, p job
 	case emailSubscriptionEnded:
 		if liveSubscription(w.SubscriptionStatus.String) {
 			return nil // a plan again already
+		}
+	case emailTrialEnding:
+		ends := s.trialEndsAt(w)
+		if ends == nil {
+			return nil // the trial is over already (paid early, cancelled)
+		}
+		f.TrialEnds = day(*ends)
+	case emailPaymentDisputed:
+		if n, err := s.Q.CountOpenDisputes(ctx, workspaceID); err != nil || n == 0 {
+			return err // closed meanwhile
 		}
 	case welcomePaid, welcomePaidNew:
 		if w.SubscriptionStatus.String != "active" {
@@ -341,6 +361,29 @@ func welcomeEmail(f welcomeFacts) (string, emailDoc) {
 			"To open it again, choose a plan in Settings → Plan & usage. It opens as soon as the plan is paid.",
 		}
 		d.Button = &emailLink{Text: "Choose a plan", URL: planPage}
+		return subject, d
+	case emailTrialEnding:
+		day := f.TrialEnds.Format("2 January 2006")
+		subject = "Your staqly free trial ends on " + day
+		d.Title = "Your free trial ends soon"
+		d.Preheader = f.Plan + " is free until " + day + "."
+		d.Paragraphs = []string{
+			"The free trial of the **" + f.Plan + "** plan of the workspace **" + f.Workspace + "** ends on **" + day + "**.",
+			"On that day your card is charged for " + f.Plan + " and the plan goes on. If you don't want to pay, cancel before then in Settings → Plan & usage: nothing is charged.",
+		}
+		d.Button = &emailLink{Text: "See your plan", URL: planPage}
+		return subject, d
+	case emailPaymentDisputed:
+		subject = "A payment for your staqly workspace was disputed"
+		d.Title = "A payment was disputed"
+		d.Preheader = "The bank was asked to reverse a payment."
+		d.Footer = []string{"You get this email once per dispute, because you are an owner or an admin of the workspace " + f.Workspace + "."}
+		d.Paragraphs = []string{
+			"A payment for the workspace **" + f.Workspace + "** was disputed with the bank of the card that made it (a chargeback).",
+			"Everything keeps working while the bank decides. If the dispute is lost, the plan it paid for ends at once, or the extra posts it paid for are taken back.",
+			"If the dispute was a mistake, ask the card's bank to withdraw it.",
+		}
+		d.Button = &emailLink{Text: "See your plan", URL: planPage}
 		return subject, d
 	}
 	if f.Kind == welcomeTrial {

@@ -28,7 +28,7 @@ func TestPromotionCodes(t *testing.T) {
 		r.ParseForm()
 		switch r.Method + " " + r.URL.Path {
 		case "GET /v1/prices":
-			fmt.Fprintf(w, `{"data":[{"id":"price_%s"}]}`, strings.TrimPrefix(r.URL.Query().Get("lookup_keys[]"), "staqly_"))
+			fmt.Fprintf(w, `{"data":[{"id":"price_%s","currency":"usd"}]}`, strings.TrimPrefix(r.URL.Query().Get("lookup_keys[]"), "staqly_"))
 		case "GET /v1/prices/price_business_month":
 			fmt.Fprint(w, `{"id":"price_business_month","product":"prod_business"}`)
 		case "GET /v1/prices/price_pro_month":
@@ -118,7 +118,7 @@ func TestCheckPromotionCode(t *testing.T) {
 		path := r.Method + " " + r.URL.Path
 		switch {
 		case path == "GET /v1/prices":
-			fmt.Fprintf(w, `{"data":[{"id":"price_%s"}]}`, strings.TrimPrefix(r.URL.Query().Get("lookup_keys[]"), "staqly_"))
+			fmt.Fprintf(w, `{"data":[{"id":"price_%s","currency":"usd"}]}`, strings.TrimPrefix(r.URL.Query().Get("lookup_keys[]"), "staqly_"))
 		case strings.HasPrefix(path, "GET /v1/prices/price_"):
 			id := strings.TrimPrefix(r.URL.Path, "/v1/prices/")
 			plan, _, _ := strings.Cut(strings.TrimPrefix(id, "price_"), "_")
@@ -128,6 +128,12 @@ func TestCheckPromotionCode(t *testing.T) {
 			code := strings.ToUpper(r.URL.Query().Get("code"))
 			if code == "OLDIE" { // before Stripe API 2025-09: the code carries its coupon, an object
 				fmt.Fprint(w, `{"data":[{"id":"promo_old","code":"OLDIE","coupon":{"id":"old","valid":true,"percent_off":99}}]}`)
+				return
+			}
+			// Still listed as active by Stripe, but past its expiry or used up: refused all the same.
+			if code == "EXPIRED" || code == "USEDUP" {
+				fmt.Fprintf(w, `{"data":[{"id":"promo_x","code":%q,"expires_at":%d,"max_redemptions":5,"times_redeemed":%d,"promotion":{"type":"coupon","coupon":"spring"}}]}`,
+					code, map[string]int64{"EXPIRED": time.Now().Add(-time.Minute).Unix(), "USEDUP": time.Now().Add(time.Hour).Unix()}[code], map[string]int{"EXPIRED": 0, "USEDUP": 5}[code])
 				return
 			}
 			coupon := map[string]string{"BIZ-FREE": "biz_free", "SPRING20": "spring", "DEAD": "dead", "GONE": "gone"}[code]
@@ -170,8 +176,12 @@ func TestCheckPromotionCode(t *testing.T) {
 	if c.PercentOff != 15 || c.Duration != "forever" || strings.Join(c.Plans, ",") != "pro" {
 		t.Fatalf("a code in the old shape: %+v", c)
 	}
-	// Codes are case sensitive: spring20 is not SPRING20, though Stripe's lookup finds it.
-	for _, code := range []string{"NOPE", "DEAD", "GONE", " ", "spring20", "Biz-Free"} {
+	// Codes are made upper case: what is typed is trimmed and upper-cased, so spring20 is SPRING20.
+	e.do(nil, "POST", "/v1/billing/promotion-code", admin, map[string]string{"promotion_code": " spring20 "}, 200, &c)
+	if c.Code != "SPRING20" || c.PercentOff != 20 {
+		t.Fatalf("a code typed in lower case: %+v", c)
+	}
+	for _, code := range []string{"NOPE", "DEAD", "GONE", " ", "EXPIRED", "USEDUP"} {
 		var errBody struct{ Error app.Error }
 		e.do(nil, "POST", "/v1/billing/promotion-code", admin, map[string]string{"promotion_code": code}, 422, &errBody)
 		if errBody.Error.Fields["promotion_code"] == "" {
@@ -182,7 +192,8 @@ func TestCheckPromotionCode(t *testing.T) {
 }
 
 // Leaving Starter's trial for another plan ends the trial now and charges the new plan at once; the change waits
-// for that payment, so a card that fails keeps the trial and the dashboard is told.
+// for that payment, so a card that fails keeps the trial and the dashboard is told. The trial plan billed in its
+// other interval keeps the trial.
 func TestUpgradeFromTrialChargesNow(t *testing.T) {
 	e := newEnv(t)
 	var ws app.Workspace
@@ -196,7 +207,7 @@ func TestUpgradeFromTrialChargesNow(t *testing.T) {
 		r.ParseForm()
 		switch r.Method + " " + r.URL.Path {
 		case "GET /v1/prices":
-			fmt.Fprintf(w, `{"data":[{"id":"price_%s"}]}`, strings.TrimPrefix(r.URL.Query().Get("lookup_keys[]"), "staqly_"))
+			fmt.Fprintf(w, `{"data":[{"id":"price_%s","currency":"usd"}]}`, strings.TrimPrefix(r.URL.Query().Get("lookup_keys[]"), "staqly_"))
 		case "GET /v1/subscriptions/sub_t":
 			json.NewEncoder(w).Encode(sub)
 		case "POST /v1/subscriptions/sub_t":
@@ -214,6 +225,12 @@ func TestUpgradeFromTrialChargesNow(t *testing.T) {
 	e.svc.Cfg.Billing = app.BillingConfig{SecretKey: "sk_test_t", WebhookSecret: testWhsec, APIBase: stripe.URL}
 	if code := e.stripeEvent("evt_t1", "customer.subscription.created", sub, testWhsec); code != 200 {
 		t.Fatalf("subscription event: %d", code)
+	}
+
+	// The trial plan billed yearly instead: the trial goes on, nothing is due before it ends.
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "starter", "interval": "year"}, 200, nil)
+	if updated.Get("items[0][price]") != "price_starter_year" || updated.Has("trial_end") || updated.Has("payment_behavior") {
+		t.Fatalf("the trial plan's other interval: %v", updated)
 	}
 
 	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "business"}, 200, nil)

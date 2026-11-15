@@ -102,6 +102,7 @@ const BILLING: Billing = {
   trial_review: null,
   trial_revoked: null,
   ended_for: null,
+  disputed: false,
 }
 
 const DETAILS: BillingDetails = {

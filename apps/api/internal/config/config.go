@@ -360,7 +360,9 @@ func Load() (Config, error) {
 			// Cloud billing; on when the key and the webhook secret are set. Prices are found by lookup key
 			// (staqly_<plan>_<month|year>); STRIPE_PRICE_<PLAN>_<MONTHLY|YEARLY> overrides one with a price id.
 			Billing: app.BillingConfig{
-				SecretKey:     os.Getenv("STRIPE_SECRET_KEY"),
+				SecretKey: os.Getenv("STRIPE_SECRET_KEY"),
+				// One whsec_ secret, or several comma-separated (whsec_new,whsec_old): during an API version switch
+				// Stripe delivers from the old and the new endpoint, each signing with its own.
 				WebhookSecret: os.Getenv("STRIPE_WEBHOOK_SECRET"),
 				Prices:        stripePrices(),
 				// Stripe Managed Payments: Stripe is the merchant of record (tax, invoices, disputes).

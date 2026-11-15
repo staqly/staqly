@@ -319,7 +319,7 @@ func TestCreditsBecomeBalanceAtOnce(t *testing.T) {
 		before := total()
 		switch r.Method + " " + r.URL.Path {
 		case "GET /v1/prices":
-			fmt.Fprintf(w, `{"data":[{"id":"price_%s"}]}`, strings.TrimPrefix(r.URL.Query().Get("lookup_keys[]"), "staqly_"))
+			fmt.Fprintf(w, `{"data":[{"id":"price_%s","currency":"usd"}]}`, strings.TrimPrefix(r.URL.Query().Get("lookup_keys[]"), "staqly_"))
 		case "GET /v1/subscriptions/sub_1":
 			json.NewEncoder(w).Encode(sub())
 		case "POST /v1/subscriptions/sub_1":

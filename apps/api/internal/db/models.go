@@ -121,6 +121,13 @@ type AssistantChat struct {
 	UpdatedAt   string `json:"updated_at"`
 }
 
+type BillingDispute struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+	Status      string `json:"status"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
 type Channel struct {
 	ID          string         `json:"id"`
 	WorkspaceID string         `json:"workspace_id"`

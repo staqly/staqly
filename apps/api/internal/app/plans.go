@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/staqly/staqly/apps/api/internal/db"
@@ -69,7 +70,9 @@ type Plan struct {
 	PriceMonth int    `json:"price_month"`
 	PriceYear  int    `json:"price_year"`
 	Currency   string `json:"currency"`
-	Highlight  bool   `json:"highlight"`
+	// Unavailable: the intervals (month, year) whose Stripe price isn't sold in Currency; checkout answers 409.
+	Unavailable []string `json:"unavailable,omitempty"`
+	Highlight   bool     `json:"highlight"`
 	// Hidden plans can be given by the operator (`server set-plan`) but are not offered or listed.
 	Hidden   bool       `json:"-"`
 	Limits   PlanLimits `json:"limits"`
@@ -364,6 +367,87 @@ func checkCount(plan Plan, limit string, max, used int64) error {
 		return limitErr(plan, limit, max, used)
 	}
 	return nil
+}
+
+// planOverage: a count limit the workspace is over on another plan.
+type planOverage struct {
+	Limit string `json:"limit"`
+	Used  int64  `json:"used"`
+	Max   int64  `json:"max"`
+}
+
+// planFits refuses a plan switch to a plan the workspace has more on than it allows (channels, alerts, webhooks,
+// API keys, storage), measured against that plan's limits with the workspace's own values and its add-ons, which
+// stay. Monthly allowances don't block: they start again each month.
+func (s *Service) planFits(ctx context.Context, q *db.Queries, workspaceID string, target Plan) error {
+	row, err := q.GetWorkspacePlan(ctx, workspaceID)
+	if err != nil {
+		return err
+	}
+	if target.Limits, err = s.planLimits(ctx, q, target.ID, workspaceID); err != nil {
+		return err
+	}
+	l := ApplyEntitlements(target, parseEntitlements(row.Entitlements)).Limits
+	channels, err := q.CountChannels(ctx, workspaceID)
+	if err != nil {
+		return err
+	}
+	alerts, err := q.CountNotifyChannels(ctx, workspaceID)
+	if err != nil {
+		return err
+	}
+	hooks, err := q.CountWebhooks(ctx, workspaceID)
+	if err != nil {
+		return err
+	}
+	keys, err := q.CountActiveAPIKeys(ctx, db.CountActiveAPIKeysParams{WorkspaceID: workspaceID, Now: nullStr(s.now())})
+	if err != nil {
+		return err
+	}
+	storage, err := q.StorageUsed(ctx, workspaceID)
+	if err != nil {
+		return err
+	}
+	var over []planOverage
+	var msgs []string
+	for _, c := range []planOverage{{LimitChannels, channels, l.Channels}, {LimitAlerts, alerts, l.Alerts},
+		{LimitWebhooks, hooks, l.Webhooks}, {LimitAPIKeys, keys, l.APIKeys}, {LimitStorage, storage, l.StorageBytes}} {
+		if c.Max != Unlimited && c.Used > c.Max {
+			over = append(over, c)
+			msgs = append(msgs, overageText(target.Name, c))
+		}
+	}
+	if len(over) == 0 {
+		return nil
+	}
+	return &Error{Code: "plan_limits_exceeded", Status: 409, Message: strings.Join(msgs, " "),
+		Details: map[string]any{"plan": target.ID, "overages": over}}
+}
+
+// overageText: "Plus allows 10 channels; this workspace has 14. Remove 4 channels first."
+func overageText(plan string, o planOverage) string {
+	if o.Limit == LimitStorage {
+		return fmt.Sprintf("%s allows %s of storage; this workspace uses %s. Free up %s first.",
+			plan, bytesText(o.Max), bytesText(o.Used), bytesText(o.Used-o.Max))
+	}
+	w := map[string][2]string{LimitChannels: {"channel", "Remove"}, LimitAlerts: {"alert", "Remove"},
+		LimitWebhooks: {"webhook", "Remove"}, LimitAPIKeys: {"API key", "Revoke"}}[o.Limit]
+	noun, verb := w[0], w[1]
+	n := func(v int64) string {
+		if v == 1 {
+			return "1 " + noun
+		}
+		return fmt.Sprintf("%d %ss", v, noun)
+	}
+	return fmt.Sprintf("%s allows %s; this workspace has %d. %s %s first.", plan, n(o.Max), o.Used, verb, n(o.Used-o.Max))
+}
+
+// bytesText: a size in GB with one decimal, or in MB below a tenth of a GB.
+func bytesText(b int64) string {
+	if b < gb/10 {
+		return fmt.Sprintf("%d MB", max(b>>20, 1))
+	}
+	return fmt.Sprintf("%.1f GB", float64(b)/gb)
 }
 
 // usePostQuota counts one created post against this month's quota, inside the

@@ -505,7 +505,7 @@ func TestStripeRequestsRetriedWhenStripeSaysSo(t *testing.T) {
 		defer mu.Unlock()
 		switch r.Method + " " + r.URL.Path {
 		case "GET /v1/prices":
-			fmt.Fprintf(w, `{"data":[{"id":"price_%s","unit_amount":2900,"currency":"eur"}]}`, r.URL.Query().Get("lookup_keys[]"))
+			fmt.Fprintf(w, `{"data":[{"id":"price_%s","unit_amount":2900,"currency":"usd"}]}`, r.URL.Query().Get("lookup_keys[]"))
 		case "POST /v1/customers":
 			customers++
 			if customers == 1 {

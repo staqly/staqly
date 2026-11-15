@@ -111,7 +111,7 @@ services:
     # two drift (TestDevStripeListenerForwardsHandledEvents).
     command: >-
       listen --skip-verify
-      --events checkout.session.completed,checkout.session.async_payment_succeeded,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,customer.subscription.paused,customer.subscription.resumed,payment_method.attached,charge.refunded,charge.dispute.created,entitlements.active_entitlement_summary.updated
+      --events checkout.session.completed,checkout.session.async_payment_succeeded,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,customer.subscription.paused,customer.subscription.resumed,customer.subscription.trial_will_end,payment_method.attached,charge.refunded,charge.dispute.created,charge.dispute.updated,charge.dispute.closed,entitlements.active_entitlement_summary.updated
       --forward-to http://staqly:3333/v1/billing/webhook
     depends_on:
       staqly:

@@ -118,9 +118,14 @@ func (s *Service) GetXPosts(ctx context.Context, p Principal) (XPosts, error) {
 	x, err := s.xPosts(ctx, s.Q, p.WorkspaceID)
 	x.Currency = s.workspaceCurrency(ctx, p.WorkspaceID, "")
 	if s.BillingEnabled() {
-		// What CreditsCheckout charges in: the bundle's own currency when it has none in the workspace's.
-		if pr, err := s.lookupPrice(ctx, BundleLookupKey(ProviderX, XBundles[0].Posts), "", ""); err == nil {
-			x.Currency, _ = pr.in(x.Currency)
+		// Only the bundles sold in the workspace's currency (CreditsCheckout refuses the others).
+		x.Bundles = []Bundle{}
+		for _, b := range XBundles {
+			if pr, err := s.lookupPrice(ctx, BundleLookupKey(ProviderX, b.Posts), "", ""); err == nil {
+				if _, ok := pr.in(x.Currency); ok {
+					x.Bundles = append(x.Bundles, b)
+				}
+			}
 		}
 	}
 	return x, err
@@ -266,6 +271,10 @@ func (s *Service) CreditsCheckout(ctx context.Context, p Principal, provider str
 	if err := requirePerson(p); err != nil {
 		return "", err
 	}
+	// Extra posts come with a live plan (402 plan_expired without one), as over HTTP for every write.
+	if err := s.CheckWritable(ctx, p.WorkspaceID); err != nil {
+		return "", err
+	}
 	if provider == "" {
 		provider = ProviderX
 	}
@@ -286,6 +295,10 @@ func (s *Service) CreditsCheckout(ctx context.Context, p Principal, provider str
 	w, err := s.Q.GetWorkspaceBilling(ctx, p.WorkspaceID)
 	if err != nil {
 		return "", err
+	}
+	currency := s.workspaceCurrency(ctx, w.ID, "")
+	if _, ok := pr.in(currency); !ok {
+		return "", errNotSoldIn(fmt.Sprintf("the bundle of %d X posts", posts), currency)
 	}
 	customer, err := s.ensureCustomer(ctx, w)
 	if err != nil {
@@ -309,7 +322,7 @@ func (s *Service) CreditsCheckout(ctx context.Context, p Principal, provider str
 		"success_url":               {back + "?credits=success"},
 		"cancel_url":                {back + "?credits=canceled"},
 	}
-	s.setCheckoutCurrency(ctx, form, w.ID, pr)
+	form.Set("currency", currency)
 	s.checkoutTax(form)
 	err = s.stripe(ctx, "POST", "/v1/checkout/sessions", form, &cs)
 	return cs.URL, err
@@ -419,43 +432,6 @@ func errorMessage(err error) string {
 	return err.Error()
 }
 
-// creditRefund is what a charge.refunded or charge.dispute.created event says about one payment.
-type creditRefund struct {
-	PaymentIntent string
-	Amount, Taken int64 // the charge and what was refunded or disputed of it, in cents
-}
-
-// decodeCreditRefund reads a refunded charge (amount_refunded is the total so far) or a dispute (its
-// amount, on top of what the charge had refunded: the charge is read from Stripe).
-func (s *Service) decodeCreditRefund(ctx context.Context, typ string, raw json.RawMessage) (creditRefund, error) {
-	var obj struct {
-		Charge         string `json:"charge"`
-		PaymentIntent  string `json:"payment_intent"`
-		Amount         int64  `json:"amount"`
-		AmountRefunded int64  `json:"amount_refunded"`
-	}
-	if err := json.Unmarshal(raw, &obj); err != nil {
-		return creditRefund{}, invalid("body", "bad charge object")
-	}
-	r := creditRefund{PaymentIntent: obj.PaymentIntent, Amount: obj.Amount, Taken: obj.AmountRefunded}
-	if typ == "charge.dispute.created" {
-		var ch struct {
-			PaymentIntent  string `json:"payment_intent"`
-			Amount         int64  `json:"amount"`
-			AmountRefunded int64  `json:"amount_refunded"`
-		}
-		if obj.Charge == "" {
-			return creditRefund{}, nil
-		}
-		if err := s.stripe(ctx, "GET", "/v1/charges/"+url.PathEscape(obj.Charge), nil, &ch); err != nil {
-			return creditRefund{}, err
-		}
-		r = creditRefund{PaymentIntent: firstNonEmpty(obj.PaymentIntent, ch.PaymentIntent), Amount: ch.Amount,
-			Taken: min(ch.Amount, ch.AmountRefunded+obj.Amount)}
-	}
-	return r, nil
-}
-
 // creditSessionOf: the credits Checkout session that took this payment, or nil (a subscription invoice, or
 // a payment staqly didn't start).
 func (s *Service) creditSessionOf(ctx context.Context, paymentIntent string) (*creditSession, error) {
@@ -474,18 +450,20 @@ func (s *Service) creditSessionOf(ctx context.Context, paymentIntent string) (*c
 	return decodeCreditSession(list.Data[0]), nil
 }
 
-// revokeCredits takes back the refunded share of a bought bundle's posts that weren't used yet (rounded in
-// the customer's favour). Idempotent: it sets the grant from the totals Stripe sends, and only lowers it.
-func (s *Service) revokeCredits(ctx context.Context, q *db.Queries, cs creditSession, r creditRefund, eventType string) error {
+// revokeCredits takes back the refunded share (taken of amount, in cents) of a bought bundle's posts: posts *
+// taken / amount, rounded down in the customer's favour; all of it for a full refund or a lost dispute (taken =
+// amount). Posts already used stay used: the grant's units may drop below them, which leaves nothing, never less
+// than nothing. Idempotent and cumulative: Stripe's amount_refunded is the total so far, and the grant is only lowered.
+func (s *Service) revokeCredits(ctx context.Context, q *db.Queries, cs creditSession, amount, taken int64, eventType string) error {
 	posts, _ := strconv.ParseInt(cs.Metadata["staqly_posts"], 10, 64)
-	if posts <= 0 || r.Amount <= 0 || r.Taken <= 0 {
+	if posts <= 0 || amount <= 0 || taken <= 0 {
 		return nil
 	}
-	keep := posts - posts*min(r.Taken, r.Amount)/r.Amount
+	keep := posts - posts*min(taken, amount)/amount
 	n, err := q.LowerCreditGrant(ctx, "stripe:"+cs.ID, keep)
 	if err == nil && n > 0 {
 		s.logger(ctx).Info("stripe: credits taken back", "session", cs.ID, "event", eventType, "posts", posts, "kept", keep,
-			"refunded_cents", r.Taken, "charge_cents", r.Amount)
+			"refunded_cents", taken, "charge_cents", amount)
 	}
 	return err
 }

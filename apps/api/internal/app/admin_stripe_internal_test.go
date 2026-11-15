@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -154,6 +155,45 @@ func TestAdminPromoCreateAndDeactivate(t *testing.T) {
 	}
 	if f.forms["POST /v1/promotion_codes/promo_1"].Get("active") != "false" {
 		t.Errorf("deactivate form %v", f.forms)
+	}
+}
+
+// An amount off works in every currency plans are sold in (the same figure in CHF, EUR and USD); a code can be for
+// first-time customers only and for some plans only (their products); a date expires at the end of that day, UTC.
+func TestAdminPromoAmountFirstTimePlans(t *testing.T) {
+	s, _, f := adminStripeTest(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/v1/prices":
+			key := strings.TrimPrefix(r.URL.Query().Get("lookup_keys[]"), "staqly_")
+			_, _ = w.Write([]byte(`{"data":[{"id":"price_` + key + `","currency":"eur","unit_amount":1500}]}`))
+		case strings.HasPrefix(r.URL.Path, "/v1/prices/price_"):
+			plan, _, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, "/v1/prices/price_"), "_")
+			_, _ = w.Write([]byte(`{"product":"prod_` + plan + `"}`))
+		case r.URL.Path == "/v1/coupons":
+			_, _ = w.Write([]byte(`{"id":"cp_2"}`))
+		default:
+			_, _ = w.Write([]byte(`{"id":"promo_2","code":"FIVE","active":true,"promotion":{"type":"coupon","coupon":{"id":"cp_2","amount_off":500,"currency":"eur","duration":"once"}}}`))
+		}
+	})
+	day := time.Now().UTC().Add(48 * time.Hour).Format("2006-01-02")
+	if _, err := s.AdminCreatePromotionCode(context.Background(), Admin{Email: "a@b.c"}, AdminPromoInput{Code: "FIVE", AmountOff: 500,
+		Currency: "eur", Duration: "once", ExpiresAt: day, FirstTime: true, Plans: []string{"plus", "pro"}}); err != nil {
+		t.Fatal(err)
+	}
+	c := f.forms["POST /v1/coupons"]
+	if c.Get("amount_off") != "500" || c.Get("currency") != "eur" || c.Get("currency_options[chf][amount_off]") != "500" ||
+		c.Get("currency_options[usd][amount_off]") != "500" || c.Has("currency_options[eur][amount_off]") ||
+		strings.Join(c["applies_to[products][]"], ",") != "prod_plus,prod_pro" {
+		t.Errorf("coupon form %v", c)
+	}
+	end, _ := time.Parse("2006-01-02", day)
+	pc := f.forms["POST /v1/promotion_codes"]
+	if pc.Get("restrictions[first_time_transaction]") != "true" || pc.Get("expires_at") != strconv.FormatInt(end.Add(24*time.Hour-time.Second).Unix(), 10) {
+		t.Errorf("promo form %v", pc)
+	}
+	if _, err := s.AdminCreatePromotionCode(context.Background(), Admin{Email: "a@b.c"}, AdminPromoInput{Code: "NOPLAN", PercentOff: 5,
+		Duration: "once", Plans: []string{"gold"}}); !isCode(err, "validation_failed") {
+		t.Errorf("an unknown plan: %v", err)
 	}
 }
 
