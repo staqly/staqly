@@ -76,6 +76,7 @@ var accessRules = map[string]rule{
 	"POST /v1/sessions/recover":                            public(),
 	"POST /v1/sessions/api-key":                            public(),
 	"POST /v1/device-links/redeem":                         public(),
+	"POST /v1/media/direct":                                public(), // the upload ticket in the URL stands for the caller
 	"GET /v1/auth/google/start":                            public(),
 	"GET /v1/auth/google/callback":                         public(),
 	"POST /v1/auth/email/start":                            public(),
@@ -264,6 +265,7 @@ var accessRules = map[string]rule{
 	"GET /v1/ai/jobs/{id}":             scope(mediaR),
 	"GET /v1/ai/jobs/{id}/result":      scope(mediaR),
 	"POST /v1/media":                   scope(mediaW).file(),
+	"POST /v1/media/upload-tickets":    scope(mediaW),
 	"PATCH /v1/media/{id}":             scope(mediaW),
 	"POST /v1/media/bulk":              scope(mediaW),
 	"POST /v1/media/{id}/replace":      scope(mediaW, postW, postD).file(),

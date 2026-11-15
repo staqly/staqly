@@ -3155,8 +3155,48 @@ export interface paths {
         /** The media library (media:read), newest first by default */
         get: operations["listMedia"];
         put?: never;
-        /** Upload a file (media:write). Type is detected from content; SVG/HTML are rejected. */
+        /**
+         * Upload a file (media:write). Type is detected from content; SVG/HTML are rejected.
+         * @description Files up to the plan's size (Starter 10 MB, Plus 25 MB, Pro 50 MB, Business 100 MB) and MAX_UPLOAD_MB. A larger file is refused with 413 (`plan_limit_exceeded` naming the plan that takes it, or `too_large`), from Content-Length before the body is read when it says so.
+         */
         post: operations["uploadMedia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/media/upload-tickets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * A URL to upload one large file to directly (media:write)
+         * @description For files too big for a proxy in front of the dashboard (it relays bodies up to 95 MB): POST the file to `url` within 10 minutes, as to POST /v1/media (multipart `file`, optional `reuse`), with no session or key. The upload gets every check POST /v1/media makes.
+         */
+        post: operations["createMediaUploadTicket"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/media/direct": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload a file with an upload ticket (the URL from POST /v1/media/upload-tickets) */
+        post: operations["uploadMediaDirect"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4782,6 +4822,14 @@ export interface components {
             /** @description How long targets on your own automation may wait for a result before they fail; null goes back to the server's PROCESSING_TIMEOUT. */
             processing_timeout_seconds?: number | null;
             archived?: boolean;
+        };
+        UploadTicket: {
+            /** @description POST the file here (PUBLIC_API_URL/v1/media/direct?ticket=...) */
+            url: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** @description The largest file the workspace may upload */
+            max_bytes: number;
         };
         /** @description An uploaded file */
         Media: {
@@ -6464,7 +6512,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description Body over the size limit (`too_large`; JSON bodies 2 MiB, uploads MAX_UPLOAD_BYTES) */
+        /** @description Body over the size limit: `too_large` (JSON bodies 2 MiB, files MAX_UPLOAD_MB), or `plan_limit_exceeded` for a file over the plan's size (`details`: limit, max, used, plan, and upgrade_plan and upgrade_max when a plan takes bigger files) */
         PayloadTooLarge: {
             headers: {
                 [name: string]: unknown;
@@ -12941,6 +12989,70 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    createMediaUploadTicket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The ticket */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadTicket"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["PaymentRequired"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    uploadMediaDirect: {
+        parameters: {
+            query: {
+                /** @description The signed ticket, as the ticket's url carries it */
+                ticket: string;
+                /** @description As for POST /v1/media */
+                reuse?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Uploaded */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Media"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["PaymentRequired"];
+            403: components["responses"]["Forbidden"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["RateLimited"];
         };
     };

@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -96,7 +97,7 @@ func New(svc *app.Service, log *slog.Logger, cfg Config) http.Handler {
 		w.Write(cfg.OpenAPISpec)
 	})
 	if cfg.MCP != nil {
-		r.With(s.authenticate(false), s.requireAuth).Handle("/mcp", cfg.MCP)
+		r.With(s.authenticate(false), s.requireAuth, capBody(s.svc.Cfg.MaxUploadBytes*4/3+(1<<20))).Handle("/mcp", cfg.MCP)
 	}
 
 	r.Route("/v1", func(r chi.Router) {
@@ -115,6 +116,7 @@ func New(svc *app.Service, log *slog.Logger, cfg Config) http.Handler {
 		r.Post("/device-links/redeem", s.redeemDeviceLink)
 		// The platform's redirect: it lands with an error instead of a JSON 401 when the session is gone.
 		r.Get("/channels/oauth/{provider}/callback", s.oauthCallback)
+		r.Post("/media/direct", s.uploadMediaDirect)
 		for _, f := range publicRoutes {
 			f(s, r)
 		}
@@ -199,6 +201,7 @@ func New(svc *app.Service, log *slog.Logger, cfg Config) http.Handler {
 
 			r.Get("/media", s.listMedia)
 			r.Post("/media", s.uploadMedia)
+			r.Post("/media/upload-tickets", s.createUploadTicket)
 			r.Post("/media/delete", s.deleteMediaMany)
 			r.Post("/media/bulk", s.bulkUpdateMedia)
 			r.Get("/media-folders", s.listMediaFolders)
@@ -278,6 +281,21 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("Cache-Control", "no-store")
 		next.ServeHTTP(w, r)
 	})
+}
+
+// capBody refuses a body over max: at once when Content-Length says so, else once that much was read. /mcp
+// carries files as base64 (upload_media), 4/3 of their size.
+func capBody(max int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.ContentLength > max {
+				writeErr(w, r, &app.Error{Code: "too_large", Status: 413, Message: fmt.Sprintf("request body too large: at most %d MB", max>>20)})
+				return
+			}
+			r.Body = http.MaxBytesReader(w, r.Body, max)
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // cors lets the listed browser origins call the API with an API key
@@ -686,7 +704,7 @@ func writeErr(w http.ResponseWriter, r *http.Request, err error) {
 	if !errors.As(err, &de) {
 		var mbe *http.MaxBytesError
 		if errors.As(err, &mbe) {
-			de = &app.Error{Code: "too_large", Status: 413, Message: "request body too large"}
+			de = &app.Error{Code: "too_large", Status: 413, Message: fmt.Sprintf("request body too large: at most %d MB", mbe.Limit>>20)}
 		} else if errors.Is(err, store.ErrNUL) {
 			// PostgreSQL text cannot hold NUL: a client error, not a failure.
 			de = &app.Error{Code: "validation_failed", Status: 422, Message: err.Error()}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/staqly/staqly/apps/api/internal/db"
@@ -254,6 +255,71 @@ func limitErr(plan Plan, limit string, max, used int64) *Error {
 	return &Error{Code: "plan_limit_exceeded", Status: 402,
 		Message: fmt.Sprintf("The %s plan allows %s; upgrade the workspace plan to continue.", plan.Name, describeLimit(limit, max)),
 		Details: map[string]any{"limit": limit, "max": max, "used": used, "plan": plan.ID}}
+}
+
+// uploadMax: the workspace's plan and the largest file it may upload, the smaller of the plan's limit and
+// MAX_UPLOAD_MB.
+func (s *Service) uploadMax(ctx context.Context, q *db.Queries, workspaceID string) (Plan, int64, error) {
+	plan, err := s.planFor(ctx, q, workspaceID)
+	if err != nil {
+		return Plan{}, 0, err
+	}
+	maxBytes := s.Cfg.MaxUploadBytes
+	if l := plan.Limits.MaxUploadBytes; l != Unlimited && l < maxBytes {
+		maxBytes = l
+	}
+	return plan, maxBytes, nil
+}
+
+// multipartSlack: what a multipart body may carry besides its file (boundaries, headers, small fields).
+const multipartSlack = 1 << 20
+
+// CheckUploadSize refuses a body whose declared length (Content-Length, -1 when unknown) can't hold a file the
+// workspace may upload, before any of it is read. The file's own size is checked again as it streams in.
+func (s *Service) CheckUploadSize(ctx context.Context, p Principal, declared int64) error {
+	plan, maxBytes, err := s.uploadMax(ctx, s.Q, p.WorkspaceID)
+	if err != nil || declared <= maxBytes+multipartSlack {
+		return err
+	}
+	return s.uploadTooLarge(ctx, s.Q, plan, maxBytes, declared)
+}
+
+// uploadTooLarge: the 413 for a file over maxBytes. When the plan sets that limit it says so and names the next
+// plan that takes bigger files (plan_limit_exceeded: the dashboard offers its plans); otherwise only the size.
+func (s *Service) uploadTooLarge(ctx context.Context, q *db.Queries, plan Plan, maxBytes, n int64) *Error {
+	if plan.Limits.MaxUploadBytes != maxBytes {
+		return &Error{Code: "too_large", Status: 413, Message: fmt.Sprintf("Files can be up to %s.", sizeText(maxBytes)),
+			Details: map[string]any{"limit": LimitMaxUpload, "max": maxBytes}}
+	}
+	msg := fmt.Sprintf("The %s plan takes files up to %s", plan.Name, sizeText(maxBytes))
+	details := map[string]any{"limit": LimitMaxUpload, "max": maxBytes, "used": n, "plan": plan.ID}
+	if next, nextMax, ok := s.biggerUploadPlan(ctx, q, plan.ID, maxBytes); ok {
+		msg += fmt.Sprintf("; %s takes files up to %s", next.Name, sizeText(nextMax))
+		details["upgrade_plan"], details["upgrade_max"] = next.ID, nextMax
+	}
+	return &Error{Code: "plan_limit_exceeded", Status: 413, Message: msg + ".", Details: details}
+}
+
+// biggerUploadPlan: the first offered plan after current whose files may be larger than than.
+func (s *Service) biggerUploadPlan(ctx context.Context, q *db.Queries, current string, than int64) (Plan, int64, bool) {
+	i := slices.IndexFunc(Plans, func(p Plan) bool { return p.ID == current })
+	for _, p := range Plans[i+1:] {
+		if p.Hidden {
+			continue
+		}
+		l, err := s.planLimits(ctx, q, p.ID, "")
+		if err != nil {
+			return Plan{}, 0, false
+		}
+		m := s.Cfg.MaxUploadBytes
+		if l.MaxUploadBytes != Unlimited && l.MaxUploadBytes < m {
+			m = l.MaxUploadBytes
+		}
+		if m > than {
+			return p, m, true
+		}
+	}
+	return Plan{}, 0, false
 }
 
 func describeLimit(limit string, max int64) string {

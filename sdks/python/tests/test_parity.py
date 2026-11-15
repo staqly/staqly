@@ -100,6 +100,8 @@ NOT_IN_SDK = {
     ("POST", "/v1/pending-connections/{}"),
     ("POST", "/v1/ai/post"),  # the dashboard composer's assistant, like /v1/assistant/* below
     ("POST", "/mcp"),
+    ("POST", "/v1/media/upload-tickets"),  # the dashboard's route past its proxy; SDKs call the API directly
+    ("POST", "/v1/media/direct"),
 }
 NOT_IN_SDK_PREFIXES = (
     "/v1/auth/",

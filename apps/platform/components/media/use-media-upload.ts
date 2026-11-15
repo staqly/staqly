@@ -4,10 +4,11 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { insertMedia, refreshMediaCounts } from '@/components/media/media-cache'
-import { api, errorMessage, uploadMediaWithProgress, UNLIMITED, type Media } from '@/lib/api'
+import { api, errorMessage, uploadMediaWithProgress, UNLIMITED, type Media, type Plan } from '@/lib/api'
 import { formatBytes } from '@/lib/format'
 import { measureVideo } from '@/lib/media'
-import { useUsage } from '@/lib/queries'
+import { uploadLimitMessage } from '@/lib/notify'
+import { usePlans, useUsage } from '@/lib/queries'
 
 export interface UploadItem {
   key: string
@@ -25,6 +26,14 @@ const ACCEPTED =
 
 export const MEDIA_ACCEPT =
   'image/png,image/jpeg,image/gif,image/webp,image/avif,video/mp4,video/webm,video/quicktime,audio/mpeg,audio/wav,audio/ogg,audio/mp4,.mp3,.wav,.ogg,.m4a'
+
+/** The first plan after `current` that takes files over `max`, as the API names it in its refusal. */
+export function biggerUploadPlan(plans: Plan[] | undefined, current: string, max: number) {
+  const after = plans?.slice(plans.findIndex((p) => p.id === current) + 1) ?? []
+  const p = after.find((x) => x.limits.max_upload_bytes === UNLIMITED || x.limits.max_upload_bytes > max)
+
+  return p && { name: p.name, max: p.limits.max_upload_bytes }
+}
 
 /** Uploads one file; a video or audio file then gets its size and length, measured here, stored with it. */
 async function send(file: File, onProgress: (share: number) => void, signal: AbortSignal) {
@@ -51,7 +60,9 @@ export function useMediaUpload(onUploaded?: (m: Media) => void) {
   const qc = useQueryClient()
   const usage = useUsage()
   const [items, setItems] = useState<UploadItem[]>([])
-  const maxBytes = usage.data?.plan?.limits?.max_upload_bytes ?? UNLIMITED
+  const plan = usage.data?.plan
+  const maxBytes = plan?.limits?.max_upload_bytes ?? UNLIMITED
+  const plans = usePlans({ enabled: maxBytes !== UNLIMITED })
   const aborts = useRef(new Map<string, AbortController>())
   const shares = useRef(new Map<string, number>())
   const frame = useRef(0)
@@ -93,7 +104,9 @@ export function useMediaUpload(onUploaded?: (m: Media) => void) {
         if (file.type && !ACCEPTED.test(file.type)) {
           error = `This file type can't be uploaded. Pictures, videos and audio can.`
         } else if (maxBytes !== UNLIMITED && maxBytes > 0 && file.size > maxBytes) {
-          error = `Too big: ${formatBytes(file.size)}. Your plan takes files up to ${formatBytes(maxBytes)}.`
+          const next = plan && biggerUploadPlan(plans.data, plan.id, maxBytes)
+
+          error = `Too big: ${formatBytes(file.size)}. ${uploadLimitMessage(plan?.name ?? 'current', maxBytes, next || undefined)}`
         }
 
         const item = { key, name: file.name, progress: 0, error, file }
@@ -135,7 +148,7 @@ export function useMediaUpload(onUploaded?: (m: Media) => void) {
           })
       }
     },
-    [maxBytes, onUploaded, qc],
+    [maxBytes, onUploaded, plan, plans.data, qc],
   )
 
   const clearDone = useCallback(() => setItems((xs) => xs.filter((x) => !x.media && !x.error)), [])
