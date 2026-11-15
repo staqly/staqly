@@ -43,10 +43,12 @@ export function XPostsNote({ x }: { x: XPosts }) {
 
 /**
  * Buy more, next to X's bar (for the account owner): opens the bundles. `blocked`: why nothing can be bought now (a
- * locked workspace); the button is disabled and says it.
+ * locked workspace, or no bundle sold in its currency); the button is disabled and says it.
  */
-export function BuyXPosts({ x, blocked }: { x: XPosts; blocked?: string }) {
+export function BuyXPosts({ x, blocked: locked }: { x: XPosts; blocked?: string }) {
   const [buying, setBuying] = useState(false)
+  // Only the bundles sold in the workspace's currency are listed: none, nothing to buy.
+  const blocked = locked ?? (x.bundles.length ? undefined : `No bundles are sold in ${x.currency.toUpperCase()} yet.`)
 
   return (
     <>

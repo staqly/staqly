@@ -4279,6 +4279,8 @@ export interface components {
              * @enum {string|null}
              */
             ended_for: "payment_failed" | null;
+            /** @description A payment of the workspace is in a chargeback that isn't closed yet. Everything keeps working meanwhile; a lost dispute ends the subscription it paid at once, or takes back the extra posts left of the bundle it paid. Owners and admins get one email per dispute. */
+            disputed: boolean;
         };
         XPosts: {
             /**
@@ -4605,6 +4607,8 @@ export interface components {
              * @example eur
              */
             currency: string;
+            /** @description Intervals whose Stripe price isn't sold in currency (left out when every interval is): their amount is the built-in one, and checkout answers 409 not_available */
+            unavailable?: ("month" | "year")[];
             /** @description The plan the picker suggests */
             highlight: boolean;
             limits: components["schemas"]["PlanLimits"];

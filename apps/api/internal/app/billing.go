@@ -88,6 +88,9 @@ const priceCacheTTL = 10 * time.Minute
 // paid a few hours late does not suspend the workspace in between.
 const billingGrace = 3 * 24 * time.Hour
 
+// stripeVersion: the Stripe API version every request names, so the account's default can't change the shapes read.
+const stripeVersion = "2026-09-30.endive"
+
 // stripeSignatureTolerance: maximum age of a webhook signature.
 const stripeSignatureTolerance = 5 * time.Minute
 
@@ -216,9 +219,10 @@ func stripeParam(err error) string {
 
 // withLivePrices: a plan with the amounts Stripe actually charges (per seat, monthly and yearly) in a currency,
 // so what people read is what they pay. The built-in amounts are the same number in every currency; Stripe's
-// stand in when billing is on, from the price's currency options (its own currency when it has none in that
-// one: what Checkout then charges). Without billing, or when Stripe can't be reached or a price is missing or
-// not in whole units, the plan keeps its built-in amounts (and the reason is logged).
+// stand in when billing is on, from the price's own currency or its currency options. A price Stripe has but not
+// in that currency, or doesn't have, can't be bought: its interval is listed in Unavailable. Without billing, or
+// when Stripe can't be reached or a price is not in whole units, the plan keeps its built-in amounts (and the
+// reason is logged).
 func (s *Service) withLivePrices(ctx context.Context, p Plan, currency string) Plan {
 	p.Currency = currency
 	if !s.BillingEnabled() || p.Hidden {
@@ -231,13 +235,14 @@ func (s *Service) withLivePrices(ctx context.Context, p Plan, currency string) P
 	defer cancel()
 	for _, iv := range []string{IntervalMonth, IntervalYear} {
 		pr, err := s.livePrice(ctx, p, iv)
-		cur, cents := pr.in(currency)
-		if err != nil || cents <= 0 || cents%100 != 0 {
-			s.logger(ctx).Warn("billing: showing the built-in price", "plan", p.ID, "interval", iv, "err", err, "cents", cents, "currency", cur)
+		cents, sold := pr.in(currency)
+		if (err == nil && !sold) || notAvailable(err) {
+			p.Unavailable = append(p.Unavailable, iv)
 			continue
 		}
-		if cur != "" {
-			p.Currency = cur
+		if err != nil || cents <= 0 || cents%100 != 0 {
+			s.logger(ctx).Warn("billing: showing the built-in price", "plan", p.ID, "interval", iv, "err", err, "cents", cents, "currency", currency)
+			continue
 		}
 		if iv == IntervalMonth {
 			p.PriceMonth = int(cents / 100)
@@ -246,6 +251,17 @@ func (s *Service) withLivePrices(ctx context.Context, p Plan, currency string) P
 		}
 	}
 	return p
+}
+
+// notAvailable: err says a price isn't set up for payment (lookupPrice's 409).
+func notAvailable(err error) bool {
+	var e *Error
+	return errors.As(err, &e) && e.Code == "not_available"
+}
+
+// errNotSoldIn: a price Stripe has, but not in the currency the workspace pays in.
+func errNotSoldIn(what, currency string) *Error {
+	return &Error{Code: "not_available", Status: 409, Message: fmt.Sprintf("%s is not sold in %s on this instance", what, strings.ToUpper(currency))}
 }
 
 // LivePlans: the offered plans with their charged amounts in a currency (see withLivePrices and PlansCurrency);
@@ -329,6 +345,8 @@ type Billing struct {
 	// EndedFor: "payment_failed" when the subscription ended (or is unpaid) because a payment failed, as Stripe
 	// says (cancellation_details.reason); null otherwise, and once the workspace subscribes again.
 	EndedFor *string `json:"ended_for"`
+	// Disputed: a payment of the workspace is in a chargeback not closed yet (disputes.go); everything keeps working.
+	Disputed bool `json:"disputed"`
 }
 
 // Trial availability (Billing.Trial).
@@ -420,6 +438,11 @@ func (s *Service) GetBilling(ctx context.Context, p Principal) (Billing, error) 
 		b.EndedFor = &w.SubscriptionEndedFor.String
 	}
 	b.TrialEndsAt = s.trialEndsAt(w)
+	disputes, err := s.Q.CountOpenDisputes(ctx, p.WorkspaceID)
+	if err != nil {
+		return Billing{}, err
+	}
+	b.Disputed = disputes > 0
 	if b.TrialRevoked, b.TrialReview, err = s.trialState(ctx, p.WorkspaceID); err != nil {
 		return Billing{}, err
 	}
@@ -465,14 +488,17 @@ func (s *Service) CheckoutSession(ctx context.Context, p Principal, planID, inte
 	if err != nil {
 		return "", err
 	}
+	// A price is sold only in the currencies it carries: never charged in another than the workspace's.
+	currency := s.workspaceCurrency(ctx, w.ID, "")
+	if pr, err := s.livePrice(ctx, plan, interval); err == nil {
+		if _, ok := pr.in(currency); !ok {
+			return "", errNotSoldIn(fmt.Sprintf("the %s plan billed %sly", plan.Name, interval), currency)
+		}
+	}
 	promo := ""
 	if code := strings.TrimSpace(opt.PromotionCode); code != "" {
 		if err := s.noDiscount(ctx, w); err != nil {
 			return "", err
-		}
-		currency := s.workspaceCurrency(ctx, w.ID, "")
-		if pr, err := s.livePrice(ctx, plan, interval); err == nil {
-			currency, _ = pr.in(currency) // what Checkout charges (setCheckoutCurrency)
 		}
 		promo, err = s.promotionCodeID(ctx, code, plan, price, currency)
 		if found, ok := s.unpinnedPrice(ctx, plan, interval, err); ok { // a stale STRIPE_PRICE_* (as below)
@@ -546,9 +572,7 @@ func (s *Service) CheckoutSession(ctx context.Context, p Principal, planID, inte
 		form.Set("subscription_data[trial_settings][end_behavior][missing_payment_method]", "cancel")
 	}
 	form.Set("payment_method_collection", "always")
-	if pr, err := s.livePrice(ctx, plan, interval); err == nil {
-		s.setCheckoutCurrency(ctx, form, w.ID, pr)
-	}
+	form.Set("currency", currency)
 	s.checkoutTax(form)
 	err = s.stripe(ctx, "POST", "/v1/checkout/sessions", form, &cs)
 	if found, ok := s.unpinnedPrice(ctx, plan, interval, err); ok {
@@ -697,11 +721,12 @@ func (s *Service) switchSubscription(ctx context.Context, workspaceID, subscript
 		n++
 	}
 	// Leaving the trial for another plan: the trial ends now and the new plan is charged at once; the change
-	// waits for that payment (a pending update), so a card that fails leaves the trial as it was.
-	trial := sub.Status == "trialing"
+	// waits for that payment (a pending update), so a card that fails leaves the trial as it was. The trial plan's
+	// other interval keeps the trial: nothing is due until it ends.
 	cur, known := s.planOf(sub.Items.Data[i].Price)
+	trial := sub.Status == "trialing" && !(known && cur == planID)
 	toYear := interval == IntervalYear && sub.Items.Data[i].Price.Recurring.Interval == IntervalMonth
-	payNow := toYear || sub.Status == "active" && known && planRank(planID) > planRank(cur)
+	payNow := sub.Status != "trialing" && (toYear || sub.Status == "active" && known && planRank(planID) > planRank(cur))
 	keeps := "your current plan"
 	if trial {
 		form.Set("trial_end", "now")
@@ -748,14 +773,22 @@ type stripeCoupon struct {
 	} `json:"applies_to"`
 }
 
-// promotion: the active promotion code `code` (as typed): its id and its coupon (nil when Stripe sent none).
+// promotion: the active promotion code `code` (trimmed and upper-cased, as codes are made): its id and its coupon
+// (nil when Stripe sent none). Refused when expired, used up or its coupon is no longer valid.
 func (s *Service) promotion(ctx context.Context, code string) (string, *stripeCoupon, error) {
 	notValid := invalid("promotion_code", "this code isn't valid (or has been used up)")
+	code = strings.ToUpper(strings.TrimSpace(code))
+	if code == "" || len(code) > 100 {
+		return "", nil, invalid("promotion_code", "type the code, such as SPRING20")
+	}
 	var list struct {
 		Data []struct {
-			ID     string          `json:"id"`
-			Code   string          `json:"code"`
-			Coupon json.RawMessage `json:"coupon"` // before API 2025-09: the coupon (an object)
+			ID             string          `json:"id"`
+			Code           string          `json:"code"`
+			ExpiresAt      int64           `json:"expires_at"`
+			MaxRedemptions int64           `json:"max_redemptions"`
+			TimesRedeemed  int64           `json:"times_redeemed"`
+			Coupon         json.RawMessage `json:"coupon"` // before API 2025-09: the coupon (an object)
 			// From API 2025-09: promotion.coupon (an id).
 			Promotion struct {
 				Coupon string `json:"coupon"`
@@ -766,11 +799,15 @@ func (s *Service) promotion(ctx context.Context, code string) (string, *stripeCo
 	if err := s.stripe(ctx, "GET", "/v1/promotion_codes?"+q.Encode(), nil, &list); err != nil {
 		return "", nil, err
 	}
-	// Stripe finds codes whatever their case; staqly takes a code only as it was made (SPRING20, not spring20).
+	// Stripe lists active codes only, whatever their case; staqly takes only the code as it was made (SPRING20).
+	// Expiry and redemptions are checked here too: Stripe may still list a code as active for a moment after either.
 	if len(list.Data) == 0 || list.Data[0].Code != code {
 		return "", nil, notValid
 	}
 	pc := list.Data[0]
+	if (pc.ExpiresAt > 0 && pc.ExpiresAt <= s.Now().Unix()) || (pc.MaxRedemptions > 0 && pc.TimesRedeemed >= pc.MaxRedemptions) {
+		return "", nil, notValid
+	}
 	couponID := pc.Promotion.Coupon
 	if couponID == "" {
 		var c struct {
@@ -886,7 +923,7 @@ func (s *Service) CheckPromotionCode(ctx context.Context, p Principal, code stri
 	if !s.BillingEnabled() {
 		return PromotionCode{}, errBillingOff
 	}
-	code = strings.TrimSpace(code)
+	code = strings.ToUpper(strings.TrimSpace(code))
 	if code == "" || len(code) > 100 {
 		return PromotionCode{}, invalid("promotion_code", "type the code, such as SPRING20")
 	}
@@ -1173,7 +1210,7 @@ func (s *Service) HandleStripeWebhook(ctx context.Context, payload []byte, signa
 		// The session carries only the id; the subscription itself is read below (with the card it is paid with).
 		sub.ID, sub.Customer = cs.Subscription, cs.Customer
 	case "customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted",
-		"customer.subscription.paused", "customer.subscription.resumed":
+		"customer.subscription.paused", "customer.subscription.resumed", "customer.subscription.trial_will_end":
 		if err := json.Unmarshal(ev.Data.Object, &sub); err != nil || sub.ID == "" {
 			return invalid("body", "bad subscription object")
 		}
@@ -1189,28 +1226,18 @@ func (s *Service) HandleStripeWebhook(ctx context.Context, payload []byte, signa
 	case "payment_method.attached":
 		// A card added to a customer: fingerprinted, and checked while the workspace is in its trial.
 		return s.paymentMethodAttached(ctx, ev.ID, ev.Data.Object)
-	case "charge.refunded", "charge.dispute.created":
-		// A refunded or disputed bundle of extra posts: its unused posts go back in the refunded share. Read
-		// outside the transaction (it asks Stripe); unreachable Stripe fails the event so it is retried.
-		r, err := s.decodeCreditRefund(ctx, ev.Type, ev.Data.Object)
-		if err != nil {
-			return err
+	case "charge.refunded", "charge.dispute.created", "charge.dispute.updated", "charge.dispute.closed":
+		// Read again from Stripe (outside any transaction); unreachable Stripe fails the event so it is retried.
+		var obj struct {
+			ID string `json:"id"`
 		}
-		cs, err := s.creditSessionOf(ctx, r.PaymentIntent)
-		if err != nil || cs == nil {
-			return err
+		if err := json.Unmarshal(ev.Data.Object, &obj); err != nil || obj.ID == "" {
+			return invalid("body", "bad charge or dispute object")
 		}
-		expires := s.creditsExpiry(ctx, firstNonEmpty(cs.Metadata["workspace_id"], cs.ClientReferenceID))
-		return s.tx(ctx, func(q *db.Queries) error {
-			if n, err := q.InsertStripeEvent(ctx, db.InsertStripeEventParams{ID: ev.ID, CreatedAt: s.now()}); err != nil || n == 0 {
-				return err
-			}
-			// A refund can arrive before Checkout's paid event: create its grant before lowering it.
-			if err := s.grantCredits(ctx, q, *cs, expires); err != nil {
-				return err
-			}
-			return s.revokeCredits(ctx, q, *cs, r, ev.Type)
-		})
+		if ev.Type == "charge.refunded" {
+			return s.refund(ctx, ev.ID, obj.ID)
+		}
+		return s.dispute(ctx, ev.ID, obj.ID)
 	case "entitlements.active_entitlement_summary.updated":
 		// The customer's features changed (an add-on, a plan switch, a deal set in the Dashboard): the job reads
 		// the current set, so events arriving out of order can't leave an old one.
@@ -1330,6 +1357,12 @@ func (s *Service) applySubscription(ctx context.Context, q *db.Queries, sub stri
 	}
 	if err := s.settleTrial(ctx, q, ws, sub); err != nil {
 		return err
+	}
+	// Stripe's notice three days before the trial ends: the owners hear once (the event is applied once).
+	if eventType == "customer.subscription.trial_will_end" && sub.Status == "trialing" {
+		if err := s.queueWelcome(ctx, q, ws, emailTrialEnding, ""); err != nil {
+			return err
+		}
 	}
 	// The quantity follows the members: a subscription whose seats differ (changed at Stripe, or a join that
 	// raced the checkout) is put right by the seat sync job, after this transaction.
@@ -1675,6 +1708,7 @@ func (s *Service) stripeOnce(ctx context.Context, method, path string, form url.
 		return 0, nil, false, err
 	}
 	req.SetBasicAuth(s.Cfg.Billing.SecretKey, "")
+	req.Header.Set("Stripe-Version", stripeVersion)
 	if form != nil {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}

@@ -304,7 +304,7 @@ func TestPublishingAllowanceReleaseKeepsRefundedCreditsRefunded(t *testing.T) {
 			// charge.refunded for the whole purchase, as HandleStripeWebhook applies it.
 			cs := creditSession{ID: "cs_1", Metadata: map[string]string{"staqly_posts": strconv.FormatInt(tc.units, 10)}}
 			if err := s.tx(ctx, func(q *db.Queries) error {
-				return s.revokeCredits(ctx, q, cs, creditRefund{PaymentIntent: "pi_1", Amount: 900, Taken: 900}, "charge.refunded")
+				return s.revokeCredits(ctx, q, cs, 900, 900, "charge.refunded")
 			}); err != nil {
 				t.Fatal(err)
 			}

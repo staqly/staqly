@@ -18,11 +18,13 @@ const (
 	CurrencyUSD = "usd"
 )
 
-// euCountries: the 27 EU member states (ISO 3166-1 alpha-2).
+// euCountries: the 27 EU member states (ISO 3166-1 alpha-2), with their outermost regions.
 var euCountries = map[string]bool{
 	"AT": true, "BE": true, "BG": true, "HR": true, "CY": true, "CZ": true, "DK": true, "EE": true, "FI": true,
 	"FR": true, "DE": true, "GR": true, "HU": true, "IE": true, "IT": true, "LV": true, "LT": true, "LU": true,
 	"MT": true, "NL": true, "PL": true, "PT": true, "RO": true, "SK": true, "SI": true, "ES": true, "SE": true,
+	// The outermost regions Cloudflare names apart from their country.
+	"AX": true, "GF": true, "GP": true, "MQ": true, "RE": true, "YT": true, "MF": true,
 }
 
 // currencyForCountry: CHF for CH and LI, EUR for the EU, USD for any other country or an unknown one.
@@ -37,7 +39,7 @@ func currencyForCountry(country string) string {
 }
 
 // zoneCountries: the time zones of Switzerland, Liechtenstein and the EU member states (in Europe, the Azores,
-// Madeira, the Canaries and Ceuta included) with their country. Any other zone counts as "elsewhere" (USD), so
+// Madeira, the Canaries, Ceuta and the outermost regions included) with their country. Any other zone counts as "elsewhere" (USD), so
 // only these need listing.
 var zoneCountries = map[string]string{
 	"Europe/Zurich": "CH", "Europe/Vaduz": "LI",
@@ -50,6 +52,8 @@ var zoneCountries = map[string]string{
 	"Europe/Warsaw": "PL", "Europe/Lisbon": "PT", "Atlantic/Madeira": "PT", "Atlantic/Azores": "PT",
 	"Europe/Bucharest": "RO", "Europe/Bratislava": "SK", "Europe/Ljubljana": "SI", "Europe/Madrid": "ES",
 	"Africa/Ceuta": "ES", "Atlantic/Canary": "ES", "Europe/Stockholm": "SE",
+	"America/Cayenne": "GF", "America/Guadeloupe": "GP", "America/Martinique": "MQ", "America/Marigot": "MF",
+	"Indian/Reunion": "RE", "Indian/Mayotte": "YT",
 }
 
 type countryKey struct{}
@@ -113,14 +117,6 @@ func (s *Service) workspaceCurrency(ctx context.Context, workspaceID, fallbackZo
 	return currencyForZones(tz, fallbackZone)
 }
 
-// setCheckoutCurrency: a new Checkout charges the workspace's currency (workspaceCurrency) when the price has it,
-// else the price's own.
-func (s *Service) setCheckoutCurrency(ctx context.Context, form url.Values, workspaceID string, pr priceCacheEntry) {
-	if cur, _ := pr.in(s.workspaceCurrency(ctx, workspaceID, "")); cur != "" {
-		form.Set("currency", cur)
-	}
-}
-
 // customerCurrencies: Stripe customer (per account) -> its currency, once it has one (it never changes then).
 var customerCurrencies sync.Map
 
@@ -143,11 +139,12 @@ func (s *Service) customerCurrency(ctx context.Context, customer string) string 
 	return c.Currency
 }
 
-// in: the price's amount (cents) in a currency, from its currency options; its own currency and amount when it
-// has none in that one (a price made before the options, a STRIPE_PRICE_* pin), so what is shown is charged.
-func (pr priceCacheEntry) in(currency string) (string, int64) {
-	if c, ok := pr.options[currency]; ok && c > 0 {
-		return currency, c
+// in: the price's amount (cents) in a currency, and whether it is sold in it at all: its own currency or one of its
+// currency options. Nothing is shown or charged in another currency than the workspace's.
+func (pr priceCacheEntry) in(currency string) (int64, bool) {
+	if currency == pr.currency {
+		return pr.cents, true
 	}
-	return pr.currency, pr.cents
+	c, ok := pr.options[currency]
+	return c, ok && c > 0
 }

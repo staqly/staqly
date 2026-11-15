@@ -32,6 +32,8 @@ const PROMOTIONS: Record<string, unknown> = {
   SPRING20: { code: 'SPRING20', percent_off: 20, duration: 'repeating', duration_in_months: 3, plans: ['plus', 'pro'] },
 }
 
+const chooseCta = () => <button type="button">Choose</button>
+
 function render(paying: boolean, trial = paying ? 'none' : 'available', sub: object = SUB, plans = PLANS) {
   const client = makeClient()
 
@@ -64,7 +66,7 @@ function render(paying: boolean, trial = paying ? 'none' : 'available', sub: obj
       has_more_invoices: false,
     },
     'POST /v1/billing/checkout': { url: 'https://checkout.stripe.test/cs_1' },
-    // Case sensitive, like the API: SPRING20, not spring20.
+    // Codes as they were made (the API upper-cases what is typed; this mock does not).
     'POST /v1/billing/promotion-code': ({ body }: { body: { promotion_code: string } }) =>
       PROMOTIONS[body.promotion_code] ?? {
         status: 422,
@@ -236,6 +238,19 @@ describe('per user pricing', () => {
     expect(within(screen.getByTestId('plan-plus')).getByText('Most popular')).toBeInTheDocument()
     rerender(<PlanGrid plans={PLANS} currentPlanId="pro" />)
     expect(screen.queryByText('Most popular')).not.toBeInTheDocument()
+  })
+
+  it('a plan not sold in the currency for an interval shows no price there and cannot be chosen', () => {
+    const plans = PLANS.map((p) => (p.id === 'pro' ? { ...p, unavailable: ['year' as const] } : p))
+    const { rerender } = renderPlain(<PlanGrid plans={plans} interval="year" renderCta={chooseCta} />)
+    const pro = screen.getByTestId('plan-pro')
+
+    expect(within(pro).getByTestId('plan-unavailable-pro')).toHaveTextContent(/Not available yearly in [A-Z]{3}/)
+    expect(within(pro).queryByTestId('plan-price-pro')).not.toBeInTheDocument()
+    expect(within(pro).getByRole('button', { name: 'Not available' })).toBeDisabled()
+    rerender(<PlanGrid plans={plans} interval="month" renderCta={chooseCta} />)
+    expect(within(screen.getByTestId('plan-pro')).getByTestId('plan-price-pro')).toBeInTheDocument()
+    expect(within(screen.getByTestId('plan-pro')).getByRole('button', { name: 'Choose' })).toBeEnabled()
   })
 
   it('while a discount is on, no other code can be added: the plans page says which and until when', async () => {

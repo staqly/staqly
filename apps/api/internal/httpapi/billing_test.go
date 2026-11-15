@@ -161,7 +161,7 @@ func TestStripeBillingLifecycle(t *testing.T) {
 				fmt.Fprint(w, `{"data":[]}`)
 				return
 			}
-			fmt.Fprintf(w, `{"data":[{"id":"price_%s"}]}`, strings.TrimPrefix(key, "staqly_"))
+			fmt.Fprintf(w, `{"data":[{"id":"price_%s","currency":"usd"}]}`, strings.TrimPrefix(key, "staqly_"))
 		case "POST /v1/customers":
 			customer = r.Form
 			fmt.Fprint(w, `{"id":"cus_1"}`)
@@ -514,7 +514,7 @@ func TestPinnedPriceFallsBackToLookupKey(t *testing.T) {
 		r.ParseForm()
 		switch r.Method + " " + r.URL.Path {
 		case "GET /v1/prices":
-			fmt.Fprint(w, `{"data":[{"id":"price_live_plus","unit_amount":2900,"currency":"eur"}]}`)
+			fmt.Fprint(w, `{"data":[{"id":"price_live_plus","unit_amount":2900,"currency":"usd"}]}`)
 		case "POST /v1/customers":
 			fmt.Fprint(w, `{"id":"cus_p"}`)
 		case "POST /v1/checkout/sessions":

@@ -5175,7 +5175,7 @@ components:
             failed: { type: integer, description: Gave up after every retry }
     Billing:
       type: object
-      required: [enabled, plan, subscription_status, plan_expires_at, trial_ends_at, suspended, has_customer, seats, trial, trial_revoked, trial_review, ended_for]
+      required: [enabled, plan, subscription_status, plan_expires_at, trial_ends_at, suspended, has_customer, seats, trial, trial_revoked, trial_review, ended_for, disputed]
       properties:
         enabled: { type: boolean, description: Billing is configured on this instance }
         plan: { type: string, description: "starter, plus, pro or business (cloud; an operator may also set a plan of their own), unlocked (Community Edition)", examples: [plus] }
@@ -5204,6 +5204,7 @@ components:
           type: [string, "null"]
           enum: [payment_failed, null]
           description: "payment_failed when the subscription ended, or is held unpaid, because a payment failed (Stripe's cancellation_details.reason; subscription_status is canceled or unpaid); null otherwise, also for a subscription the customer cancelled, and again once the workspace subscribes"
+        disputed: { type: boolean, description: "A payment of the workspace is in a chargeback that isn't closed yet. Everything keeps working meanwhile; a lost dispute ends the subscription it paid at once, or takes back the extra posts left of the bundle it paid. Owners and admins get one email per dispute." }
     XPosts:
       type: object
       required: [period, period_end, unlimited, included, used, included_left, credits_left, credits_expire_at, left, bundles, currency, link_post_weight]
@@ -5395,6 +5396,10 @@ components:
         price_month: { type: integer, description: "Price per user (each workspace member is a seat) per month billed monthly, in whole units of currency (euros)", examples: [29] }
         price_year: { type: integer, description: "Price per user per year billed yearly: twelve whole months at 20 % off or a little more (rounded down)", examples: [276] }
         currency: { type: string, description: "ISO 4217 code, lower case", examples: [eur] }
+        unavailable:
+          type: array
+          items: { type: string, enum: [month, year] }
+          description: "Intervals whose Stripe price isn't sold in currency (left out when every interval is): their amount is the built-in one, and checkout answers 409 not_available"
         highlight: { type: boolean, description: The plan the picker suggests }
         limits: { $ref: "#/components/schemas/PlanLimits" }
         features: { type: array, items: { type: string } }

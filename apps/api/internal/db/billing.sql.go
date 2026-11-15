@@ -10,6 +10,18 @@ import (
 	"database/sql"
 )
 
+const countOpenDisputes = `-- name: CountOpenDisputes :one
+SELECT COUNT(*) FROM billing_disputes
+WHERE workspace_id = ? AND status NOT IN ('won', 'lost', 'warning_closed')
+`
+
+func (q *Queries) CountOpenDisputes(ctx context.Context, workspaceID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countOpenDisputes, workspaceID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countOwnersOtherTrials = `-- name: CountOwnersOtherTrials :one
 SELECT COUNT(*) FROM workspaces w
 WHERE w.id <> ?1 AND w.subscription_status = 'trialing'
@@ -70,6 +82,32 @@ func (q *Queries) GetWorkspaceIDByStripeCustomer(ctx context.Context, stripeCust
 	return id, err
 }
 
+const insertBillingDispute = `-- name: InsertBillingDispute :execrows
+INSERT INTO billing_disputes (id, workspace_id, status, updated_at) VALUES (?, ?, ?, ?)
+ON CONFLICT (id) DO NOTHING
+`
+
+type InsertBillingDisputeParams struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+	Status      string `json:"status"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+// A dispute seen for the first time (0 rows: known already).
+func (q *Queries) InsertBillingDispute(ctx context.Context, arg InsertBillingDisputeParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, insertBillingDispute,
+		arg.ID,
+		arg.WorkspaceID,
+		arg.Status,
+		arg.UpdatedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const insertStripeEvent = `-- name: InsertStripeEvent :execrows
 INSERT OR IGNORE INTO stripe_events (id, created_at) VALUES (?, ?)
 `
@@ -125,6 +163,21 @@ func (q *Queries) ListBillingToReconcile(ctx context.Context, now sql.NullString
 		return nil, err
 	}
 	return items, nil
+}
+
+const setBillingDisputeStatus = `-- name: SetBillingDisputeStatus :exec
+UPDATE billing_disputes SET status = ?, updated_at = ? WHERE id = ?
+`
+
+type SetBillingDisputeStatusParams struct {
+	Status    string `json:"status"`
+	UpdatedAt string `json:"updated_at"`
+	ID        string `json:"id"`
+}
+
+func (q *Queries) SetBillingDisputeStatus(ctx context.Context, arg SetBillingDisputeStatusParams) error {
+	_, err := q.db.ExecContext(ctx, setBillingDisputeStatus, arg.Status, arg.UpdatedAt, arg.ID)
+	return err
 }
 
 const setStripeCustomer = `-- name: SetStripeCustomer :exec

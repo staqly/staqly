@@ -34,3 +34,15 @@ WHERE stripe_customer_id IS NOT NULL AND stripe_customer_id <> ''
   AND (subscription_status IS NULL OR plan_expires_at < sqlc.arg(now))
 ORDER BY CASE WHEN subscription_status IS NULL THEN 1 WHEN subscription_status IN ('canceled', 'incomplete_expired') THEN 2 ELSE 0 END, id
 LIMIT 500;
+
+-- name: InsertBillingDispute :execrows
+-- A dispute seen for the first time (0 rows: known already).
+INSERT INTO billing_disputes (id, workspace_id, status, updated_at) VALUES (?, ?, ?, ?)
+ON CONFLICT (id) DO NOTHING;
+
+-- name: SetBillingDisputeStatus :exec
+UPDATE billing_disputes SET status = ?, updated_at = ? WHERE id = ?;
+
+-- name: CountOpenDisputes :one
+SELECT COUNT(*) FROM billing_disputes
+WHERE workspace_id = ? AND status NOT IN ('won', 'lost', 'warning_closed');

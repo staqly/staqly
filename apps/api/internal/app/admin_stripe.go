@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -72,8 +73,14 @@ type AdminPromoInput struct {
 	Duration         string  `json:"duration"`
 	DurationInMonths int     `json:"duration_in_months"`
 	MaxRedemptions   int     `json:"max_redemptions"`
-	ExpiresAt        string  `json:"expires_at"`
+	ExpiresAt        string  `json:"expires_at"` // YYYY-MM-DD (to the end of that day, UTC) or RFC3339
+	// FirstTime: only for customers who never paid before. Plans: only these plans (none: every plan).
+	FirstTime bool     `json:"first_time"`
+	Plans     []string `json:"plans"`
 }
+
+// promoCurrencies: an amount off is the same figure in each currency plans are sold in (currency.go).
+var promoCurrencies = []string{CurrencyCHF, CurrencyEUR, CurrencyUSD}
 
 func unixRFC3339(ts int64) string {
 	if ts == 0 {
@@ -258,17 +265,28 @@ func (s *Service) AdminCreatePromotionCode(ctx context.Context, a Admin, in Admi
 			if expires, err = time.Parse("2006-01-02", in.ExpiresAt); err != nil {
 				return AdminPromo{}, invalid("expires_at", "use YYYY-MM-DD or RFC3339")
 			}
+			expires = expires.Add(24*time.Hour - time.Second) // the whole day, UTC
 		}
 		if !expires.After(s.Now()) {
 			return AdminPromo{}, invalid("expires_at", "must be in the future")
 		}
 	}
-	cf := url.Values{"duration": {in.Duration}}
+	products, err := s.planProducts(ctx, in.Plans)
+	if err != nil {
+		return AdminPromo{}, err
+	}
+	cf := url.Values{"duration": {in.Duration}, "applies_to[products][]": products}
 	if in.PercentOff > 0 {
 		cf.Set("percent_off", strconv.FormatFloat(in.PercentOff, 'f', -1, 64))
 	} else {
 		cf.Set("amount_off", strconv.FormatInt(in.AmountOff, 10))
 		cf.Set("currency", in.Currency)
+		// Stripe refuses an amount-off coupon on a payment in a currency it has no amount for.
+		for _, cur := range promoCurrencies {
+			if cur != in.Currency {
+				cf.Set("currency_options["+cur+"][amount_off]", strconv.FormatInt(in.AmountOff, 10))
+			}
+		}
 	}
 	if in.Duration == "repeating" {
 		cf.Set("duration_in_months", strconv.Itoa(in.DurationInMonths))
@@ -288,6 +306,9 @@ func (s *Service) AdminCreatePromotionCode(ctx context.Context, a Admin, in Admi
 	if !expires.IsZero() {
 		pf.Set("expires_at", strconv.FormatInt(expires.Unix(), 10))
 	}
+	if in.FirstTime {
+		pf.Set("restrictions[first_time_transaction]", "true")
+	}
 	var p stripePromo
 	if err := s.stripe(ctx, "POST", "/v1/promotion_codes", pf, &p); err != nil {
 		// Best effort: a coupon without its code is unreachable clutter in Stripe.
@@ -299,7 +320,41 @@ func (s *Service) AdminCreatePromotionCode(ctx context.Context, a Admin, in Admi
 	res := p.admin()
 	return res, s.AdminAudit(ctx, a, "create_promotion_code", "", res.ID, map[string]any{
 		"code": res.Code, "coupon": res.Coupon, "max_redemptions": res.MaxRedemptions, "expires_at": res.ExpiresAt,
+		"first_time": in.FirstTime, "plans": in.Plans,
 	})
+}
+
+// planProducts: the Stripe products of the plans a code is limited to (both intervals' prices), none for none.
+func (s *Service) planProducts(ctx context.Context, plans []string) ([]string, error) {
+	var products []string
+	for _, id := range plans {
+		plan, ok := PlanByID(id)
+		if !ok || plan.Hidden {
+			return nil, invalid("plans", "unknown plan: use starter, plus, pro or business")
+		}
+		for _, iv := range []string{IntervalMonth, IntervalYear} {
+			price, err := s.priceID(ctx, plan, iv)
+			if notAvailable(err) {
+				continue // not sold in this interval
+			}
+			if err != nil {
+				return nil, err
+			}
+			var pr struct {
+				Product string `json:"product"`
+			}
+			if err := s.stripe(ctx, "GET", "/v1/prices/"+url.PathEscape(price), nil, &pr); err != nil {
+				return nil, err
+			}
+			if pr.Product != "" && !slices.Contains(products, pr.Product) {
+				products = append(products, pr.Product)
+			}
+		}
+	}
+	if len(plans) > 0 && len(products) == 0 {
+		return nil, invalid("plans", "these plans are not set up for payment on this instance")
+	}
+	return products, nil
 }
 
 func (s *Service) AdminDeactivatePromotionCode(ctx context.Context, a Admin, id string) (AdminPromo, error) {

@@ -69,7 +69,9 @@ type Plan struct {
 	PriceMonth int    `json:"price_month"`
 	PriceYear  int    `json:"price_year"`
 	Currency   string `json:"currency"`
-	Highlight  bool   `json:"highlight"`
+	// Unavailable: the intervals (month, year) whose Stripe price isn't sold in Currency; checkout answers 409.
+	Unavailable []string `json:"unavailable,omitempty"`
+	Highlight   bool     `json:"highlight"`
 	// Hidden plans can be given by the operator (`server set-plan`) but are not offered or listed.
 	Hidden   bool       `json:"-"`
 	Limits   PlanLimits `json:"limits"`

@@ -23,7 +23,7 @@ func TestBillingSyncWithoutWebhook(t *testing.T) {
 		r.ParseForm()
 		switch r.Method + " " + r.URL.Path {
 		case "GET /v1/prices":
-			fmt.Fprintf(w, `{"data":[{"id":"price_%s","unit_amount":1500,"currency":"eur"}]}`, strings.TrimPrefix(r.URL.Query().Get("lookup_keys[]"), "staqly_"))
+			fmt.Fprintf(w, `{"data":[{"id":"price_%s","unit_amount":1500,"currency":"usd"}]}`, strings.TrimPrefix(r.URL.Query().Get("lookup_keys[]"), "staqly_"))
 		case "POST /v1/customers":
 			fmt.Fprint(w, `{"id":"cus_s"}`)
 		case "POST /v1/checkout/sessions":
@@ -85,7 +85,7 @@ func TestBillingRefreshesKeepNewestSnapshot(t *testing.T) {
 	stripe := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method + " " + r.URL.Path {
 		case "GET /v1/prices":
-			fmt.Fprint(w, `{"data":[{"id":"price_1"}]}`)
+			fmt.Fprint(w, `{"data":[{"id":"price_1","currency":"usd"}]}`)
 		case "POST /v1/customers":
 			fmt.Fprint(w, `{"id":"cus_1"}`)
 		case "POST /v1/checkout/sessions":

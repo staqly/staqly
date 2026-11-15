@@ -268,34 +268,36 @@ func TestPlansShowStripeAmounts(t *testing.T) {
 		lookups++
 		switch key {
 		case "staqly_plus_month":
-			fmt.Fprint(w, `{"data":[{"id":"price_pm","unit_amount":3100}]}`)
+			fmt.Fprint(w, `{"data":[{"id":"price_pm","unit_amount":3100,"currency":"usd"}]}`)
 		case "staqly_plus_year":
-			fmt.Fprint(w, `{"data":[{"id":"price_py","unit_amount":29700}]}`)
+			fmt.Fprint(w, `{"data":[{"id":"price_py","unit_amount":29700,"currency":"eur","currency_options":{"usd":{"unit_amount":29700}}}]}`)
 		case "staqly_pro_month":
 			w.WriteHeader(500) // Stripe failing: the built-in price
 		case "staqly_business_month":
-			// No option in the workspace's currency (USD: its zone is UTC): shown in the price's own, as charged.
+			// No option in the workspace's currency (USD: its zone is UTC): not sold there, never shown in its own.
 			fmt.Fprint(w, `{"data":[{"id":"price_eur","unit_amount":12000,"currency":"eur"}]}`)
 		case "staqly_pro_year":
-			fmt.Fprint(w, `{"data":[{"id":"price_bad","unit_amount":4750}]}`) // not whole dollars: the built-in price
+			fmt.Fprint(w, `{"data":[{"id":"price_bad","unit_amount":4750,"currency":"usd"}]}`) // not whole dollars: the built-in price
+		case "staqly_business_year":
+			fmt.Fprint(w, `{"data":[{"id":"price_by","unit_amount":115200,"currency":"usd"}]}`)
 		default:
-			fmt.Fprint(w, `{"data":[]}`) // not set up: the built-in price
+			fmt.Fprint(w, `{"data":[]}`) // not set up: can't be bought
 		}
 	}))
 	defer stripe.Close()
 	e.svc.Cfg.Billing = app.BillingConfig{SecretKey: "sk_test_plans", WebhookSecret: testWhsec, APIBase: stripe.URL}
 	e.do(nil, "GET", "/v1/plans", e.key, nil, 200, &plans)
-	if p := price("plus"); p.PriceMonth != 31 || p.PriceYear != 297 {
+	if p := price("plus"); p.PriceMonth != 31 || p.PriceYear != 297 || p.Currency != "usd" || len(p.Unavailable) != 0 {
 		t.Fatalf("plus from Stripe: %+v", p)
 	}
-	if p := price("pro"); p.PriceMonth != 59 || p.PriceYear != 564 {
+	if p := price("pro"); p.PriceMonth != 59 || p.PriceYear != 564 || len(p.Unavailable) != 0 {
 		t.Fatalf("pro falls back: %+v", p)
 	}
-	if p := price("business"); p.PriceMonth != 120 || p.Currency != "eur" {
-		t.Fatalf("a price without the currency is shown in its own: %+v", p)
+	if p := price("business"); p.Currency != "usd" || strings.Join(p.Unavailable, ",") != "month" || p.PriceYear != 1152 {
+		t.Fatalf("a price without the currency is unavailable: %+v", p)
 	}
-	if p := price("starter"); p.PriceMonth != 15 {
-		t.Fatalf("starter falls back: %+v", p)
+	if p := price("starter"); strings.Join(p.Unavailable, ",") != "month,year" {
+		t.Fatalf("starter without prices is unavailable: %+v", p)
 	}
 	n := lookups
 	e.do(nil, "GET", "/v1/plans", e.key, nil, 200, &plans)

@@ -5,7 +5,7 @@ import { useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { emptyPromo, promoPayload, serverPromoErrors, validatePromo, type PromoForm } from '@/lib/promo'
+import { emptyPromo, PROMO_PLANS, promoPayload, serverPromoErrors, validatePromo, type PromoForm } from '@/lib/promo'
 
 function Field({ id, label, error, children }: { id: string; label: string; error?: string; children: ReactNode }) {
   return (
@@ -94,7 +94,7 @@ export function PromoFormView({
         </Field>
       ) : (
         <div className="grid grid-cols-[1fr_6rem] gap-3">
-          <Field id="pf-amount" label="Amount off" error={errors.amount}>
+          <Field id="pf-amount" label="Amount off (the same in CHF, EUR and USD)" error={errors.amount}>
             <Input
               id="pf-amount"
               inputMode="decimal"
@@ -147,7 +147,7 @@ export function PromoFormView({
             {...err('maxRedemptions')}
           />
         </Field>
-        <Field id="pf-expires" label="Expires (optional)" error={errors.expiresAt}>
+        <Field id="pf-expires" label="Expires (optional, end of the day UTC)" error={errors.expiresAt}>
           <Input
             id="pf-expires"
             type="date"
@@ -157,6 +157,32 @@ export function PromoFormView({
           />
         </Field>
       </div>
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-medium">Applies to (none: every plan)</legend>
+        <div className="flex flex-wrap gap-4 text-sm">
+          {PROMO_PLANS.map((p) => (
+            <label key={p.id} className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={f.plans.includes(p.id)}
+                onChange={(e) =>
+                  set({ plans: e.target.checked ? [...f.plans, p.id] : f.plans.filter((id) => id !== p.id) })
+                }
+              />
+              {p.name}
+            </label>
+          ))}
+        </div>
+        {errors.plans && (
+          <p role="alert" className="text-sm text-destructive">
+            {errors.plans}
+          </p>
+        )}
+      </fieldset>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={f.firstTime} onChange={(e) => set({ firstTime: e.target.checked })} />
+        First-time customers only
+      </label>
       {serverError && Object.keys(mapped).length === 0 && (
         <p role="alert" className="text-sm text-destructive">
           {serverError}

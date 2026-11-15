@@ -9,8 +9,18 @@ export type PromoForm = {
   duration: 'once' | 'repeating' | 'forever'
   months: string
   maxRedemptions: string
-  expiresAt: string // yyyy-mm-dd
+  expiresAt: string // yyyy-mm-dd: the code ends with that day (UTC)
+  firstTime: boolean // only for customers who never paid before
+  plans: string[] // only these plans; none: every plan
 }
+
+/** The plans a code can be limited to (the API's plan ids). */
+export const PROMO_PLANS = [
+  { id: 'starter', name: 'Starter' },
+  { id: 'plus', name: 'Plus' },
+  { id: 'pro', name: 'Pro' },
+  { id: 'business', name: 'Business' },
+] as const
 
 export const emptyPromo: PromoForm = {
   code: '',
@@ -22,6 +32,8 @@ export const emptyPromo: PromoForm = {
   months: '',
   maxRedemptions: '',
   expiresAt: '',
+  firstTime: false,
+  plans: [],
 }
 
 const CODE = /^[A-Z0-9_-]{3,40}$/
@@ -62,7 +74,7 @@ export function validatePromo(f: PromoForm, now = new Date()): Record<string, st
     e.maxRedemptions = 'Enter a whole number above 0, or leave empty.'
   }
 
-  if (f.expiresAt && !(new Date(`${f.expiresAt}T23:59:59`).getTime() > now.getTime())) {
+  if (f.expiresAt && !(new Date(`${f.expiresAt}T23:59:59Z`).getTime() > now.getTime())) {
     e.expiresAt = 'Pick a date in the future.'
   }
 
@@ -88,7 +100,15 @@ export function promoPayload(f: PromoForm): Record<string, unknown> {
   }
 
   if (f.expiresAt) {
-    body.expires_at = new Date(`${f.expiresAt}T23:59:59`).toISOString()
+    body.expires_at = f.expiresAt // the server ends the code with that day, UTC
+  }
+
+  if (f.firstTime) {
+    body.first_time = true
+  }
+
+  if (f.plans.length > 0) {
+    body.plans = f.plans
   }
 
   return body
@@ -101,6 +121,7 @@ const SERVER_FIELD: Record<string, keyof PromoForm> = {
   duration_in_months: 'months',
   max_redemptions: 'maxRedemptions',
   expires_at: 'expiresAt',
+  plans: 'plans',
 }
 
 // serverPromoErrors maps the API's 422 `fields` (JSON names) onto the form's inputs; percent_off also reports "set exactly one".

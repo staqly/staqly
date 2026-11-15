@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -68,6 +69,7 @@ type trialStripe struct {
 	charge   string
 	ended    []string // subscriptions whose trial was ended early
 	checkout url.Values
+	objects  map[string]any // more objects to GET, by path (charges, disputes, invoices)
 }
 
 func withTrialStripe(t *testing.T, e *env) *trialStripe {
@@ -85,6 +87,10 @@ func withTrialStripe(t *testing.T, e *env) *trialStripe {
 		case isSub && sub != nil && r.Method == "DELETE": // a deleted workspace's subscription is cancelled
 			sub["status"] = "canceled"
 			json.NewEncoder(w).Encode(sub)
+		case isSub && sub != nil && r.Method == "POST" && r.PostForm.Has("items[0][quantity]") && !r.PostForm.Has("trial_end"):
+			// A seat sync (someone joined): the quantity follows.
+			sub["items"].(map[string]any)["data"].([]any)[0].(map[string]any)["quantity"], _ = strconv.Atoi(r.PostForm.Get("items[0][quantity]"))
+			json.NewEncoder(w).Encode(sub)
 		case isSub && sub != nil && r.Method == "POST":
 			if r.PostForm.Get("trial_end") != "now" {
 				t.Errorf("subscription update without trial_end=now: %v", r.PostForm)
@@ -95,8 +101,10 @@ func withTrialStripe(t *testing.T, e *env) *trialStripe {
 			f.ended = append(f.ended, id)
 			sub["status"] = f.charge
 			json.NewEncoder(w).Encode(sub)
+		case r.Method == "GET" && f.objects[r.URL.Path] != nil:
+			json.NewEncoder(w).Encode(f.objects[r.URL.Path])
 		case r.URL.Path == "/v1/prices":
-			fmt.Fprint(w, `{"data":[{"id":"price_starter_month"}]}`)
+			fmt.Fprint(w, `{"data":[{"id":"price_starter_month","currency":"usd"}]}`)
 		case strings.HasPrefix(r.URL.Path, "/v1/customers"):
 			fmt.Fprint(w, `{"id":"cus_new"}`)
 		case r.URL.Path == "/v1/checkout/sessions":
