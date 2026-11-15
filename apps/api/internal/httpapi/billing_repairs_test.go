@@ -485,7 +485,7 @@ func TestIntervalChangeMovesAddons(t *testing.T) {
 		switch r.Method + " " + r.URL.Path {
 		case "GET /v1/prices":
 			key := r.URL.Query().Get("lookup_keys[]")
-			fmt.Fprintf(w, `{"data":[{"id":"price_%s","unit_amount":900,"currency":"eur"}]}`, strings.TrimPrefix(key, "staqly_"))
+			fmt.Fprintf(w, `{"data":[{"id":"price_%s","unit_amount":900,"currency":"eur","currency_options":{"eur":{"unit_amount":900},"chf":{"unit_amount":900},"usd":{"unit_amount":900}}}]}`, strings.TrimPrefix(key, "staqly_"))
 		case "POST /v1/customers", "POST /v1/customers/cus_1":
 			fmt.Fprint(w, `{"id":"cus_1"}`)
 		case "GET /v1/checkout/sessions":
@@ -534,7 +534,7 @@ func TestAddonsNeedAPaidPlanAndCountTheirQuantity(t *testing.T) {
 		}}
 	})
 	f.set("GET /v1/prices", func() (int, any) {
-		return 200, map[string]any{"data": []any{map[string]any{"id": "price_addon", "unit_amount": 900, "currency": "eur"}}}
+		return 200, map[string]any{"data": []any{map[string]any{"id": "price_addon", "unit_amount": 900, "currency": "eur", "currency_options": map[string]any{"usd": map[string]any{"unit_amount": 900}}}}}
 	})
 	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "pro"}, 200, nil) // cus_1
 	f.set("POST /v1/subscriptions/sub_1", func() (int, any) { return 200, map[string]string{"id": "sub_1"} })

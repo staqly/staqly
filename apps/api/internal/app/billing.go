@@ -74,9 +74,10 @@ var priceIDs = struct {
 
 type priceCacheEntry struct {
 	id       string
-	cents    int64  // unit amount per seat, in cents of currency
-	currency string // e.g. eur
-	err      error  // a price Stripe doesn't have, or a failed lookup (kept a minute, so pages don't hammer Stripe)
+	cents    int64            // unit amount per seat, in cents of currency
+	currency string           // e.g. eur
+	options  map[string]int64 // currency -> unit amount in its cents (the price's currency_options); see in
+	err      error            // a price Stripe doesn't have, or a failed lookup (kept a minute, so pages don't hammer Stripe)
 	exp      time.Time
 }
 
@@ -151,14 +152,17 @@ func (s *Service) lookupPrice(ctx context.Context, key, pinned, missing string) 
 		return c, c.err
 	}
 	type price struct {
-		ID         string `json:"id"`
-		Active     *bool  `json:"active"`
-		UnitAmount int64  `json:"unit_amount"`
-		Currency   string `json:"currency"`
+		ID              string `json:"id"`
+		Active          *bool  `json:"active"`
+		UnitAmount      int64  `json:"unit_amount"`
+		Currency        string `json:"currency"`
+		CurrencyOptions map[string]struct {
+			UnitAmount int64 `json:"unit_amount"`
+		} `json:"currency_options"` // only when expanded
 	}
 	var found price
 	if pinned != "" {
-		if err := s.stripe(ctx, "GET", "/v1/prices/"+url.PathEscape(pinned), nil, &found); err != nil {
+		if err := s.stripe(ctx, "GET", "/v1/prices/"+url.PathEscape(pinned)+"?expand[]=currency_options", nil, &found); err != nil {
 			return remember(priceCacheEntry{err: err, exp: s.Now().Add(time.Minute)})
 		}
 		found.ID = pinned
@@ -173,7 +177,7 @@ func (s *Service) lookupPrice(ctx context.Context, key, pinned, missing string) 
 		var list struct {
 			Data []price `json:"data"`
 		}
-		if err := s.stripe(ctx, "GET", "/v1/prices?active=true&limit=1&lookup_keys[]="+url.QueryEscape(key), nil, &list); err != nil {
+		if err := s.stripe(ctx, "GET", "/v1/prices?active=true&limit=1&expand[]=data.currency_options&lookup_keys[]="+url.QueryEscape(key), nil, &list); err != nil {
 			return remember(priceCacheEntry{err: err, exp: s.Now().Add(time.Minute)})
 		}
 		if len(list.Data) == 0 {
@@ -181,7 +185,11 @@ func (s *Service) lookupPrice(ctx context.Context, key, pinned, missing string) 
 		}
 		found = list.Data[0]
 	}
-	return remember(priceCacheEntry{id: found.ID, cents: found.UnitAmount, currency: found.Currency, exp: s.Now().Add(priceCacheTTL)})
+	options := map[string]int64{}
+	for cur, o := range found.CurrencyOptions {
+		options[cur] = o.UnitAmount
+	}
+	return remember(priceCacheEntry{id: found.ID, cents: found.UnitAmount, currency: found.Currency, options: options, exp: s.Now().Add(priceCacheTTL)})
 }
 
 // priceCacheKey: one Stripe account's price by lookup key (and pinned id) in priceIDs.
@@ -206,10 +214,13 @@ func stripeParam(err error) string {
 	return param
 }
 
-// withLivePrices: a plan with the amounts Stripe actually charges (per seat, monthly and yearly) when billing
-// is on, so what people read is what they pay. Without billing, or when Stripe can't be reached or a price is
-// missing, not in whole units or in another currency, the plan keeps its amounts from Plans (and the reason is logged).
-func (s *Service) withLivePrices(ctx context.Context, p Plan) Plan {
+// withLivePrices: a plan with the amounts Stripe actually charges (per seat, monthly and yearly) in a currency,
+// so what people read is what they pay. The built-in amounts are the same number in every currency; Stripe's
+// stand in when billing is on, from the price's currency options (its own currency when it has none in that
+// one: what Checkout then charges). Without billing, or when Stripe can't be reached or a price is missing or
+// not in whole units, the plan keeps its built-in amounts (and the reason is logged).
+func (s *Service) withLivePrices(ctx context.Context, p Plan, currency string) Plan {
+	p.Currency = currency
 	if !s.BillingEnabled() || p.Hidden {
 		return p
 	}
@@ -220,27 +231,32 @@ func (s *Service) withLivePrices(ctx context.Context, p Plan) Plan {
 	defer cancel()
 	for _, iv := range []string{IntervalMonth, IntervalYear} {
 		pr, err := s.livePrice(ctx, p, iv)
-		if err != nil || pr.cents <= 0 || pr.cents%100 != 0 || (pr.currency != "" && pr.currency != Currency) {
-			s.logger(ctx).Warn("billing: showing the built-in price", "plan", p.ID, "interval", iv, "err", err, "cents", pr.cents, "currency", pr.currency)
+		cur, cents := pr.in(currency)
+		if err != nil || cents <= 0 || cents%100 != 0 {
+			s.logger(ctx).Warn("billing: showing the built-in price", "plan", p.ID, "interval", iv, "err", err, "cents", cents, "currency", cur)
 			continue
 		}
+		if cur != "" {
+			p.Currency = cur
+		}
 		if iv == IntervalMonth {
-			p.PriceMonth = int(pr.cents / 100)
+			p.PriceMonth = int(cents / 100)
 		} else {
-			p.PriceYear = int(pr.cents / 100)
+			p.PriceYear = int(cents / 100)
 		}
 	}
 	return p
 }
 
-// LivePlans: the offered plans with their charged amounts (see withLivePrices); GET /plans, MCP, the dashboard.
-func (s *Service) LivePlans(ctx context.Context) ([]Plan, error) {
+// LivePlans: the offered plans with their charged amounts in a currency (see withLivePrices and PlansCurrency);
+// GET /plans, MCP, the dashboard.
+func (s *Service) LivePlans(ctx context.Context, currency string) ([]Plan, error) {
 	out, err := s.withLimits(ctx, OfferedPlans())
 	if err != nil {
 		return nil, err
 	}
 	for i := range out {
-		out[i] = s.withLivePrices(ctx, out[i])
+		out[i] = s.withLivePrices(ctx, out[i], currency)
 	}
 	return out, nil
 }
@@ -454,10 +470,14 @@ func (s *Service) CheckoutSession(ctx context.Context, p Principal, planID, inte
 		if err := s.noDiscount(ctx, w); err != nil {
 			return "", err
 		}
-		promo, err = s.promotionCodeID(ctx, code, plan, price)
+		currency := s.workspaceCurrency(ctx, w.ID, "")
+		if pr, err := s.livePrice(ctx, plan, interval); err == nil {
+			currency, _ = pr.in(currency) // what Checkout charges (setCheckoutCurrency)
+		}
+		promo, err = s.promotionCodeID(ctx, code, plan, price, currency)
 		if found, ok := s.unpinnedPrice(ctx, plan, interval, err); ok { // a stale STRIPE_PRICE_* (as below)
 			price = found
-			promo, err = s.promotionCodeID(ctx, code, plan, price)
+			promo, err = s.promotionCodeID(ctx, code, plan, price, currency)
 		}
 		if err != nil {
 			return "", err
@@ -526,6 +546,9 @@ func (s *Service) CheckoutSession(ctx context.Context, p Principal, planID, inte
 		form.Set("subscription_data[trial_settings][end_behavior][missing_payment_method]", "cancel")
 	}
 	form.Set("payment_method_collection", "always")
+	if pr, err := s.livePrice(ctx, plan, interval); err == nil {
+		s.setCheckoutCurrency(ctx, form, w.ID, pr)
+	}
 	s.checkoutTax(form)
 	err = s.stripe(ctx, "POST", "/v1/checkout/sessions", form, &cs)
 	if found, ok := s.unpinnedPrice(ctx, plan, interval, err); ok {
@@ -716,7 +739,11 @@ type stripeCoupon struct {
 	Currency         string  `json:"currency"`
 	Duration         string  `json:"duration"`
 	DurationInMonths int64   `json:"duration_in_months"`
-	AppliesTo        *struct {
+	// CurrencyOptions: an amount-off coupon's amounts in its other currencies (when expanded).
+	CurrencyOptions map[string]struct {
+		AmountOff int64 `json:"amount_off"`
+	} `json:"currency_options"`
+	AppliesTo *struct {
 		Products []string `json:"products"`
 	} `json:"applies_to"`
 }
@@ -757,13 +784,31 @@ func (s *Service) promotion(ctx context.Context, code string) (string, *stripeCo
 		return pc.ID, nil, nil
 	}
 	var coupon stripeCoupon
-	if err := s.stripe(ctx, "GET", "/v1/coupons/"+url.PathEscape(couponID)+"?expand[]=applies_to", nil, &coupon); err != nil {
+	if err := s.stripe(ctx, "GET", "/v1/coupons/"+url.PathEscape(couponID)+"?expand[]=applies_to&expand[]=currency_options", nil, &coupon); err != nil {
 		return "", nil, err
 	}
 	if !coupon.Valid {
 		return "", nil, notValid
 	}
 	return pc.ID, &coupon, nil
+}
+
+// amountIn: what an amount-off coupon takes off in a currency (cents; 0 for a percent-off coupon), and whether it
+// can be used there at all: Stripe refuses an amount-off coupon on a payment in a currency it has no amount for.
+func (c *stripeCoupon) amountIn(currency string) (int64, bool) {
+	switch {
+	case c == nil || c.AmountOff == 0:
+		return 0, true
+	case c.Currency == currency:
+		return c.AmountOff, true
+	}
+	o, ok := c.CurrencyOptions[currency]
+	return o.AmountOff, ok && o.AmountOff > 0
+}
+
+// errCouponCurrency: an amount-off code made for payments in other currencies than the workspace's.
+func errCouponCurrency(c *stripeCoupon) *Error {
+	return invalid("promotion_code", "this code is for payments in "+strings.ToUpper(c.Currency))
 }
 
 // couponFits: whether a coupon covers a plan's price (a coupon limited to products names the price's product).
@@ -781,11 +826,15 @@ func (s *Service) couponFits(ctx context.Context, coupon *stripeCoupon, price st
 }
 
 // promotionCodeID: the id of the active promotion code `code` (as typed), checked against the plan the person
-// picked: a code limited to other plans is refused here rather than giving nothing at Stripe.
-func (s *Service) promotionCodeID(ctx context.Context, code string, plan Plan, price string) (string, error) {
+// picked and the currency they pay in: a code limited to other plans, or an amount off in another currency, is
+// refused here rather than by Stripe.
+func (s *Service) promotionCodeID(ctx context.Context, code string, plan Plan, price, currency string) (string, error) {
 	id, coupon, err := s.promotion(ctx, code)
 	if err != nil {
 		return "", err
+	}
+	if _, ok := coupon.amountIn(currency); !ok {
+		return "", errCouponCurrency(coupon)
 	}
 	fits, err := s.couponFits(ctx, coupon, price)
 	if err != nil {
@@ -854,7 +903,16 @@ func (s *Service) CheckPromotionCode(ctx context.Context, p Principal, code stri
 	}
 	out := PromotionCode{Code: code, Plans: []string{}}
 	if coupon != nil {
-		out.PercentOff, out.AmountOff, out.Currency = coupon.PercentOff, coupon.AmountOff, coupon.Currency
+		// An amount off is told in the workspace's currency, the one its prices are shown and charged in.
+		currency := s.workspaceCurrency(ctx, p.WorkspaceID, "")
+		amount, ok := coupon.amountIn(currency)
+		if !ok {
+			return PromotionCode{}, errCouponCurrency(coupon)
+		}
+		out.PercentOff, out.AmountOff = coupon.PercentOff, amount
+		if amount > 0 {
+			out.Currency = currency
+		}
 		out.Duration, out.DurationInMonths = coupon.Duration, coupon.DurationInMonths
 	}
 	for _, plan := range OfferedPlans() {
@@ -936,6 +994,7 @@ type stripeSubscription struct {
 	ID                 string            `json:"id"`
 	Customer           string            `json:"customer"`
 	Status             string            `json:"status"`
+	Currency           string            `json:"currency"`
 	CurrentPeriodStart int64             `json:"current_period_start"`
 	CurrentPeriodEnd   int64             `json:"current_period_end"`
 	EndedAt            int64             `json:"ended_at"`

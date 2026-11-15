@@ -398,6 +398,17 @@ paths:
         Public: no key needed, and any origin may read it (`Access-Control-Allow-Origin: *`), so a pricing page
         can show the live prices and limits. The limits are the ones the operator set (admin panel); `features`
         is made from them.
+
+        Prices are the same number in every currency; the currency follows the country: CHF for Switzerland and
+        Liechtenstein, EUR for the EU, USD for everyone else. A workspace whose Stripe customer has a currency keeps
+        it. Otherwise the country is Cloudflare's (`CF-IPCountry`, believed only on requests from Cloudflare's
+        addresses), else the workspace's time zone (signed in), else the `timezone` sent.
+      parameters:
+        - name: timezone
+          in: query
+          required: false
+          description: The visitor's IANA time zone (e.g. Europe/Zurich), which picks the currency; USD without one.
+          schema: { type: string, examples: [Europe/Zurich] }
       responses:
         "200": { description: OK, content: { application/json: { schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: "#/components/schemas/Plan" } } } } } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -5279,7 +5290,7 @@ components:
       properties:
         code: { type: string, examples: ["SPRING20"] }
         percent_off: { type: number, description: "Percent taken off; absent for an amount off." }
-        amount_off: { type: integer, description: "Amount taken off per invoice, in cents of `currency`; absent for a percent off." }
+        amount_off: { type: integer, description: "Amount taken off per invoice, in cents of `currency` (the workspace's: a code with no amount in it is refused, 422); absent for a percent off." }
         currency: { type: string, examples: ["eur"] }
         duration: { type: string, enum: [once, repeating, forever], description: "How long the discount lasts." }
         duration_in_months: { type: integer, description: "Months the discount lasts when `duration` is `repeating`." }

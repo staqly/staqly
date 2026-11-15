@@ -270,6 +270,11 @@ export interface paths {
          * @description Public: no key needed, and any origin may read it (`Access-Control-Allow-Origin: *`), so a pricing page
          *     can show the live prices and limits. The limits are the ones the operator set (admin panel); `features`
          *     is made from them.
+         *
+         *     Prices are the same number in every currency; the currency follows the country: CHF for Switzerland and
+         *     Liechtenstein, EUR for the EU, USD for everyone else. A workspace whose Stripe customer has a currency keeps
+         *     it. Otherwise the country is Cloudflare's (`CF-IPCountry`, believed only on requests from Cloudflare's
+         *     addresses), else the workspace's time zone (signed in), else the `timezone` sent.
          */
         get: operations["listPlans"];
         put?: never;
@@ -4437,7 +4442,7 @@ export interface components {
             code: string;
             /** @description Percent taken off; absent for an amount off. */
             percent_off?: number;
-            /** @description Amount taken off per invoice, in cents of `currency`; absent for a percent off. */
+            /** @description Amount taken off per invoice, in cents of `currency` (the workspace's: a code with no amount in it is refused, 422); absent for a percent off. */
             amount_off?: number;
             /** @example eur */
             currency?: string;
@@ -7059,7 +7064,10 @@ export interface operations {
     };
     listPlans: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The visitor's IANA time zone (e.g. Europe/Zurich), which picks the currency; USD without one. */
+                timezone?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;

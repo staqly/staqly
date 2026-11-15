@@ -59,7 +59,7 @@ func TestEntitlementsAndAddons(t *testing.T) {
 				fmt.Fprint(w, `{"data":[]}`)
 				return
 			}
-			fmt.Fprintf(w, `{"data":[{"id":"price_%s","unit_amount":900,"currency":"eur"}]}`, strings.TrimPrefix(key, "staqly_"))
+			fmt.Fprintf(w, `{"data":[{"id":"price_%s","unit_amount":900,"currency":"eur","currency_options":{"eur":{"unit_amount":900},"chf":{"unit_amount":900},"usd":{"unit_amount":900}}}]}`, strings.TrimPrefix(key, "staqly_"))
 		case "POST /v1/checkout/sessions":
 			fmt.Fprint(w, `{"url":"https://checkout.stripe.test/cs_1"}`)
 		case "GET /v1/entitlements/active_entitlements":

@@ -174,7 +174,7 @@ describe('plan & usage', () => {
     })
 
     expect(within(summary).getByTestId('next-payment')).toHaveTextContent(`$90 on ${due}`)
-    expect(within(summary).getByTestId('next-payment')).toHaveTextContent('3 users × $30, incl. VAT')
+    expect(within(summary).getByTestId('next-payment')).toHaveTextContent('3 users × $30, incl. applicable taxes')
     expect(within(summary).getByRole('button', { name: /manage billing/i })).toBeInTheDocument()
     expect(within(summary).getByRole('link', { name: 'Change plan' })).toHaveAttribute('href', '/plans')
     expect(screen.getByTestId('payment-methods')).toHaveTextContent('4242')

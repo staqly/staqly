@@ -69,8 +69,15 @@ func (s *Server) listPlans(w http.ResponseWriter, r *http.Request) {
 	if w.Header().Get("Access-Control-Allow-Origin") == "" {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 	}
-	w.Header().Set("Cache-Control", "public, max-age=300")
-	plans, err := s.svc.LivePlans(r.Context())
+	// Signed in, the prices are in the workspace's currency, and through Cloudflare in the visitor's country's: the
+	// same URL answers differently per caller, so not for shared caches (Cloudflare's cache ignores Vary).
+	p := principal(r)
+	if p.WorkspaceID != "" || s.clientCountry(r) != "" {
+		w.Header().Set("Cache-Control", "private, max-age=300")
+	} else {
+		w.Header().Set("Cache-Control", "public, max-age=300")
+	}
+	plans, err := s.svc.LivePlans(r.Context(), s.svc.PlansCurrency(r.Context(), p, r.URL.Query().Get("timezone")))
 	respond(w, r, 200, map[string]any{"data": plans}, err)
 }
 

@@ -118,20 +118,44 @@ export const X_BUNDLES: { posts: number; price: number }[] = [
   { posts: 4000, price: 150 },
 ]
 
-/** €12, €15: prices are whole euros (others with two decimals). */
-export function eur(n: number) {
-  return Number.isInteger(n) ? `€${n}` : `€${n.toFixed(2)}`
+/**
+ * Prices are the same number in every currency; the currency follows the country: CHF in Switzerland and
+ * Liechtenstein, EUR in the EU, USD everywhere else. The static page shows USD; the live plans (GET /v1/plans with
+ * the visitor's time zone, live-plans.ts) bring the visitor's currency.
+ */
+export const DEFAULT_CURRENCY = 'usd'
+
+/** Where each currency applies, for text that can't know the visitor (metadata, FAQs, llms.txt). */
+export const CURRENCY_NOTE = 'in CHF in Switzerland and Liechtenstein, EUR in the EU and USD elsewhere'
+
+/** €12, CHF 15, $15: whole amounts without cents (others with two decimals). */
+export function money(n: number, currency: string) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: currency.toUpperCase(),
+    minimumFractionDigits: Number.isInteger(n) ? 0 : 2,
+    maximumFractionDigits: 2,
+  }).format(n)
 }
 
-/** Prices include VAT (Stripe works out the VAT part from the billing address). */
-export const VAT_NOTE = 'incl. VAT'
+/** Prices include tax (Stripe works it out from the billing address): Swiss VAT in CHF, VAT in EUR, else sales tax. */
+export function taxNote(currency: string) {
+  switch (currency) {
+    case 'chf':
+      return 'incl. Swiss VAT'
+    case 'eur':
+      return 'incl. VAT'
+    default:
+      return 'incl. applicable taxes'
+  }
+}
 
 /** The price per month: billed monthly, or the yearly price spread over twelve months. */
 export function perMonth(p: SitePlan, interval: Interval) {
   return interval === 'year' ? p.year / 12 : p.month
 }
 
-/** The cheapest price per month, billed yearly ("from €12 a month"). */
+/** The cheapest price per month, billed yearly ("from 12 a month"). */
 export const FROM = Math.min(...PLANS.map((p) => perMonth(p, 'year')))
 
 export type Cell = string | boolean
@@ -310,7 +334,7 @@ export const FAQ: [string, string][] = [
   ],
   [
     'Which plans have a free trial?',
-    `Starter: ${TRIAL_DAYS} days free. You add a card when you start; nothing is charged until the trial ends, and you can cancel anytime before. Plus, Pro and Business are paid from the first day. Prices are per user and include VAT.`,
+    `Starter: ${TRIAL_DAYS} days free. You add a card when you start; nothing is charged until the trial ends, and you can cancel anytime before. Plus, Pro and Business are paid from the first day. Prices are per user and include tax.`,
   ],
   [
     'What happens when the trial ends?',
@@ -318,7 +342,7 @@ export const FAQ: [string, string][] = [
   ],
   [
     'How much does yearly billing save?',
-    'Yearly billing saves 20 % or a little more on twelve monthly payments, per user: Starter is €12 a month (€144 a year), Plus €23 (€276), Pro €47 (€564) and Business €79 (€948).',
+    `Yearly billing saves 20 % or a little more on twelve monthly payments, per user: Starter is 12 a month (144 a year), Plus 23 (276), Pro 47 (564) and Business 79 (948), ${CURRENCY_NOTE}.`,
   ],
   [
     'Can I change plans or cancel?',
@@ -326,11 +350,11 @@ export const FAQ: [string, string][] = [
   ],
   [
     'How does per user pricing work?',
-    "Every person in the workspace pays the plan's price, whatever their role: a team of three on Plus pays 3 × €29 = €87 a month. Inviting someone adds a seat once they accept, removing someone takes it away, and both are prorated for the rest of the period. During the Starter trial seats are free. Agents and API keys do not add seats. All usage limits are shared by the workspace and do not multiply with seats; external agent subscriptions are separate.",
+    "Every person in the workspace pays the plan's price, whatever their role: a team of three on Plus pays 3 × 29 = 87 a month. Inviting someone adds a seat once they accept, removing someone takes it away, and both are prorated for the rest of the period. During the Starter trial seats are free. Agents and API keys do not add seats. All usage limits are shared by the workspace and do not multiply with seats; external agent subscriptions are separate.",
   ],
   [
     'Why are posts to X counted?',
-    'X charges for each API post, so each plan includes X credits a month (thread replies count too; a post with a clickable link counts 14, as X charges about 14 times more for it). Need more? Extra posts come in one-time bundles: 200 for €10, 1,000 for €40 or 4,000 for €150. They are used after the included ones and expire at the end of the billing period.',
+    'X charges for each API post, so each plan includes X credits a month (thread replies count too; a post with a clickable link counts 14, as X charges about 14 times more for it). Need more? Extra posts come in one-time bundles: 200 for 10, 1,000 for 40 or 4,000 for 150, in the currency of your plan. They are used after the included ones and expire at the end of the billing period.',
   ],
   [
     'Why are posts to LinkedIn counted?',

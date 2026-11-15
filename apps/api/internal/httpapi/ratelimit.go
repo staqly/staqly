@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/netip"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
@@ -87,22 +86,24 @@ func (l *rateLimiter) evict(now time.Time) {
 // by your own proxy; anything to its left is client-controlled). IPv6
 // clients are keyed by their /64, since one host typically owns a whole /64.
 func (s *Server) clientIP(r *http.Request) string {
-	if s.cfg.TrustProxy || s.fromRelay(r) {
-		if xff := r.Header.Values("X-Forwarded-For"); len(xff) > 0 {
-			parts := strings.Split(xff[len(xff)-1], ",")
-			if ip, err := netip.ParseAddr(strings.TrimSpace(parts[len(parts)-1])); err == nil {
-				return rateKeyIP(ip)
-			}
-		}
+	if ip, err := netip.ParseAddr(web.ClientIP(r, s.cfg.TrustProxy || s.fromRelay(r))); err == nil {
+		return rateKeyIP(ip)
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		host = r.RemoteAddr
 	}
-	if ip, err := netip.ParseAddr(host); err == nil {
-		return rateKeyIP(ip)
-	}
 	return host
+}
+
+// clientCountry: the browser's country as Cloudflare saw it ("" when the request didn't come through
+// Cloudflare): from the dashboard, the one it relays (web.CountryHeader); otherwise CF-IPCountry when the
+// peer (with TRUST_PROXY, the address your proxy saw) is Cloudflare's.
+func (s *Server) clientCountry(r *http.Request) string {
+	if s.fromRelay(r) {
+		return r.Header.Get(web.CountryHeader)
+	}
+	return web.ClientCountry(r, s.cfg.TrustProxy)
 }
 
 func rateKeyIP(ip netip.Addr) string {

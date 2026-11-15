@@ -334,6 +334,7 @@ func (s *Server) logRequests(next http.Handler) http.Handler {
 			attrs = append(attrs, "cf_ray", ray)
 		}
 		ctx = app.WithClientIP(ctx, s.clientIP(r))
+		ctx = app.WithCountry(ctx, s.clientCountry(r))
 		path := logctx.RedactPath(r.URL.Path)
 		attrs = append(attrs, "method", r.Method, "path", path)
 		l := s.log.With(attrs...)

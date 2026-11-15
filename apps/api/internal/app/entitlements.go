@@ -330,6 +330,17 @@ type Addon struct {
 	Currency   string `json:"currency"`
 	// Active: on the workspace's subscription now.
 	Active bool `json:"active"`
+	// amounts: currency -> the monthly and yearly price in its cents (0: not sold in that interval), from the
+	// prices' currency options; in picks the workspace's.
+	amounts map[string][2]int64
+}
+
+// in: the add-on as sold in a currency, and whether it is sold in it at all: Stripe refuses a price without that
+// currency on a subscription billed in it.
+func (a Addon) in(currency string) (Addon, bool) {
+	am := a.amounts[currency]
+	a.Currency, a.PriceMonth, a.PriceYear = currency, int(am[0]/100), int(am[1]/100)
+	return a, a.PriceMonth > 0 || a.PriceYear > 0
 }
 
 // AddonLookupKey: the Stripe lookup key of an add-on's price, staqly_addon_ai_pack_month.
@@ -371,22 +382,28 @@ func (s *Service) stripeAddons(ctx context.Context) ([]Addon, error) {
 		if p.Metadata["staqly_kind"] != "addon" || id == "" {
 			continue
 		}
-		a := Addon{ID: id, Name: p.Name, Description: p.Description, Currency: Currency, Features: []string{}}
+		a := Addon{ID: id, Name: p.Name, Description: p.Description, Currency: Currency, Features: []string{}, amounts: map[string][2]int64{}}
 		for _, f := range p.MarketingFeatures {
 			a.Features = append(a.Features, f.Name)
 		}
-		for _, iv := range []string{IntervalMonth, IntervalYear} {
+		for i, iv := range []string{IntervalMonth, IntervalYear} {
 			pr, err := s.lookupPrice(ctx, AddonLookupKey(id, iv), "", "")
-			if err != nil || pr.cents <= 0 || (pr.currency != "" && pr.currency != Currency) {
+			if err != nil || pr.cents <= 0 {
 				continue
 			}
-			if iv == IntervalMonth {
-				a.PriceMonth = int(pr.cents / 100)
-			} else {
-				a.PriceYear = int(pr.cents / 100)
+			for cur, cents := range pr.options {
+				if cents > 0 && cents%100 == 0 {
+					am := a.amounts[cur]
+					am[i] = cents
+					a.amounts[cur] = am
+				}
+			}
+			if am := a.amounts[pr.currency]; am[i] == 0 && pr.cents%100 == 0 { // a price read without its options
+				am[i] = pr.cents
+				a.amounts[pr.currency] = am
 			}
 		}
-		if a.PriceMonth > 0 || a.PriceYear > 0 {
+		if len(a.amounts) > 0 {
 			out = append(out, a)
 		}
 	}
@@ -460,7 +477,14 @@ func (s *Service) ListAddons(ctx context.Context, p Principal) ([]Addon, error) 
 	if err != nil {
 		return nil, err
 	}
-	out := append([]Addon{}, all...)
+	// An add-on joins the subscription, which bills in the customer's currency: only those sold in it are offered.
+	cur := s.workspaceCurrency(ctx, p.WorkspaceID, "")
+	out := []Addon{}
+	for _, a := range all {
+		if a, ok := a.in(cur); ok {
+			out = append(out, a)
+		}
+	}
 	if sub, err := s.liveSubscriptionOf(ctx, p.WorkspaceID); err == nil {
 		for i := range out {
 			_, out[i].Active = addonItem(sub, out[i].ID)
@@ -489,7 +513,8 @@ func (s *Service) AddAddon(ctx context.Context, p Principal, id string) error {
 	if err != nil {
 		return err
 	}
-	if !slices.ContainsFunc(all, func(a Addon) bool { return a.ID == id }) {
+	i := slices.IndexFunc(all, func(a Addon) bool { return a.ID == id })
+	if i < 0 {
 		return notFound("add-on")
 	}
 	// In the trial, as staqly knows it: refused before Stripe is asked anything about the subscription.
@@ -509,6 +534,9 @@ func (s *Service) AddAddon(ctx context.Context, p Principal, id string) error {
 		return errHasAddon
 	}
 	interval := s.subscriptionInterval(sub)
+	if a, _ := all[i].in(firstNonEmpty(sub.Currency, s.workspaceCurrency(ctx, p.WorkspaceID, ""))); (interval == IntervalMonth && a.PriceMonth == 0) || (interval == IntervalYear && a.PriceYear == 0) {
+		return &Error{Code: "not_available", Status: 409, Message: fmt.Sprintf("this add-on is not sold %sly in %s on this instance", interval, strings.ToUpper(a.Currency))}
+	}
 	key, missing := AddonLookupKey(id, interval), fmt.Sprintf("this add-on is not sold %sly on this instance", interval)
 	pr, err := s.lookupPrice(ctx, key, "", missing)
 	if err != nil {

@@ -22,12 +22,12 @@ import { useLivePlans } from '@/lib/live-plans'
 import {
   PLANS as STATIC_PLANS,
   ctaLabel,
+  money,
   perMonth,
-  eur,
+  taxNote,
   type Cell,
   type CompareRow,
   type Interval,
-  VAT_NOTE,
 } from '@/lib/plans'
 import { SIGNUP, btnPrimary, btnSecondary, signupFor } from '@/lib/site'
 
@@ -91,7 +91,7 @@ function RowLabel({ row }: { row: CompareRow }) {
 export function CompareTable() {
   const [interval, setInterval] = useState<Interval>('year')
   // Every row, by category: rows equal on every plan stay in (checks read fast and show what's included).
-  const { plans: PLANS, compare: SECTIONS } = useLivePlans()
+  const { plans: PLANS, compare: SECTIONS, currency } = useLivePlans()
   const [closed, setClosed] = useState<Set<string>>(new Set())
   const toggle = (category: string) =>
     setClosed((prev) => {
@@ -124,7 +124,7 @@ export function CompareTable() {
             >
               <span className="block text-lg font-semibold tracking-tight text-foreground">Compare plans</span>
               <span className="mt-1 block text-xs font-normal text-muted-foreground">
-                Limits are shared per workspace. Prices per user, {VAT_NOTE}.
+                Limits are shared per workspace. Prices per user, {taxNote(currency)}.
               </span>
               <div className="mt-4">
                 <IntervalToggle value={interval} onChange={setInterval} />
@@ -159,11 +159,11 @@ export function CompareTable() {
                     <div className="mt-1.5 text-base font-bold text-foreground">{p.name}</div>
                     {/* Narrow columns: the price, then one short line each, never wrapping into the button. */}
                     <div className="mt-1 text-3xl font-semibold tracking-tight text-foreground tabular-nums">
-                      {eur(perMonth(p, interval))}
+                      {money(perMonth(p, interval), currency)}
                     </div>
                     <div className="text-xs whitespace-nowrap text-muted-foreground">per user / month</div>
                     <div className="mt-2 rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[11px] font-medium whitespace-nowrap text-foreground/80 tabular-nums">
-                      {interval === 'year' ? `${eur(p.year)} a year` : 'Billed monthly'}
+                      {interval === 'year' ? `${money(p.year, currency)} a year` : 'Billed monthly'}
                     </div>
                     <a
                       href={signupFor(p.id, interval)}
@@ -232,7 +232,7 @@ export function CompareTable() {
 /** Phones and tablets: pick a plan, see its values section by section. */
 export function ComparePicker() {
   const [index, setIndex] = useState(Math.max(POPULAR, 0))
-  const { plans: PLANS, compare: SECTIONS } = useLivePlans()
+  const { plans: PLANS, compare: SECTIONS, currency } = useLivePlans()
   const plan = PLANS[index]!
 
   return (
@@ -267,10 +267,11 @@ export function ComparePicker() {
           )}
         </div>
         <p className="mt-1 text-3xl font-semibold tracking-tight tabular-nums">
-          {eur(plan.month)} <span className="text-sm font-normal text-muted-foreground">per user / month</span>
+          {money(plan.month, currency)}{' '}
+          <span className="text-sm font-normal text-muted-foreground">per user / month</span>
         </p>
         <p className="text-xs text-muted-foreground tabular-nums">
-          {eur(perMonth(plan, 'year'))} per user a month billed yearly
+          {money(perMonth(plan, 'year'), currency)} per user a month billed yearly
         </p>
         <a href={SIGNUP} className={`${plan.highlight ? btnPrimary : btnSecondary} mt-4 w-full justify-center`}>
           {ctaLabel(plan)}

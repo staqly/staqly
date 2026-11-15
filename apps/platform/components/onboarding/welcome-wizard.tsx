@@ -18,6 +18,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { PublicShell } from '@/components/auth/public-shell'
+import { taxNote } from '@/components/billing/tax-note'
 import { ConnectForm } from '@/components/channels/add-channel-sheet'
 import { ProviderGrid } from '@/components/channels/provider-grid'
 import { Callout } from '@/components/common/callout'
@@ -793,7 +794,7 @@ function PlanStep({
       </StepHeader>
       <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
         <IntervalToggle value={interval} onChange={setInterval} />
-        <span className="text-xs text-muted-foreground">Per user a month, incl. VAT</span>
+        <span className="text-xs text-muted-foreground">Per user a month, {taxNote(list[0]?.currency)}</span>
       </div>
       <div role="radiogroup" aria-label="Plan" className="mt-4 grid gap-2.5">
         {plans.isPending && <SkeletonList count={4} className="h-20 rounded-2xl" />}
