@@ -143,6 +143,7 @@ export function usage(plan: Plan, u: Partial<WorkspaceUsage['usage']> = {}): Wor
     },
     plan_expires_at: null,
     trial_ends_at: null,
+    trial_discount: null,
     suspended: false,
     posts_by_status: { scheduled: 2, published: 1 },
     webhook_deliveries: { queued: 0, retrying: 0, failed: 1 },

@@ -451,3 +451,104 @@ test('a workspace: no plan, trial, paid, add-on, second seat, failed renewal, lo
   ).toEqual([])
   await ed.ctx.close()
 })
+
+// Screenshots of the card go where UI_SHOTS points (a reviewer's look), else into the test's output.
+const shot = (p: Page, name: string) =>
+  p.getByTestId('trial-banner').screenshot({ path: join(process.env.UI_SHOTS ?? test.info().outputDir, `${name}.png`) })
+
+/** The trial card as a page shows it now. */
+const card = async (p: Page, message: string | RegExp) => {
+  await p.reload()
+  await expect(p.getByTestId('trial-message')).toHaveText(message)
+}
+
+test('the trial card tells owner and member what a promotion code makes of the trial', async ({ page, browser }) => {
+  test.setTimeout(120_000)
+  const run = Date.now().toString(36)
+  const owner = `trial-owner-${run}@example.com`
+  const editor = `trial-editor-${run}@example.com`
+
+  await signUp(page, owner)
+  const me = await asBrowser(page)
+
+  await page.goto('/schedule')
+  await ready(page, 'Welcome to Staqly')
+  await page.getByLabel('What should we call you?').fill('Tina Trial')
+  await page.getByRole('button', { name: /Continue/ }).click()
+  await ready(page, 'Name your workspace')
+  await page.getByLabel(/Workspace name/).fill('Trial Studio')
+  await page.getByRole('button', { name: /Continue/ }).click()
+  await ready(page, 'Where do you post?')
+  await page.getByRole('button', { name: /Continue/ }).click()
+  await ready(page, 'Connect an agent')
+  await page.getByRole('button', { name: 'Not now' }).click()
+  await ready(page, 'Invite your team')
+  await page.getByRole('button', { name: 'Skip', exact: true }).click()
+  await ready(page, 'Choose a plan')
+  await page.getByTestId('welcome-plan-starter').click()
+  await page.getByTestId('start-trial').click()
+  await ready(page, 'You are all set')
+  await page.getByRole('button', { name: /Go to the calendar/ }).click()
+  await ready(page, 'Schedule')
+
+  const ed = await newBrowser(browser)
+  const inv = await me.post('/invitations', { email: editor, role: 'editor' })
+
+  expect(inv.status()).toBe(201)
+  const link = new URL(((await inv.json()) as { link: string }).link)
+
+  await ed.page.goto(link.pathname + link.search)
+  await ready(ed.page, 'Join Trial Studio')
+  await ed.page.getByTestId('accept-with-code').click()
+  await ready(ed.page, 'Check your email')
+  await ed.page.getByRole('textbox', { name: 'Code' }).fill(await devCode(editor))
+  await ready(ed.page, 'Welcome to Staqly')
+  await ed.page.getByRole('button', { name: 'Skip for now' }).click()
+  await ready(ed.page, 'Schedule')
+  await expect.poll(async () => (await subsOf(me.workspace))[0]?.items.data[0]?.quantity).toBe(2)
+  const [sub] = await subsOf(me.workspace)
+
+  /** Stripe puts a promotion code on the trialing subscription (an inline coupon, as before API 2025-09). */
+  const withCode = async (discount: Record<string, unknown> | null) => {
+    expect(await stripeSays(sub!.id, { discounts: discount ? [{ end: null, ...discount }] : [] })).toBe(200)
+  }
+
+  await test.step('100% off forever: free forever, for the owner with View plan, for the member without', async () => {
+    await withCode({ promotion_code: { code: 'FRIENDS' }, coupon: { percent_off: 100, duration: 'forever' } })
+    await card(page, /^Starter until .+, then free forever with code FRIENDS\.$/)
+    await expect(page.getByTestId('trial-banner').getByRole('link', { name: 'View plan' })).toHaveAttribute(
+      'href',
+      '/settings/plan',
+    )
+    await card(ed.page, /^Starter until .+, then free forever with code FRIENDS\.$/)
+    await expect(ed.page.getByTestId('trial-banner').getByRole('link')).toHaveCount(0)
+    await shot(page, 'trial-card-owner-free-forever')
+    await shot(ed.page, 'trial-card-member-free-forever')
+  })
+
+  await test.step('20% off for 3 months: the owner sees the charge for two seats, the member the terms', async () => {
+    await withCode({
+      promotion_code: { code: 'SPRING20' },
+      coupon: { percent_off: 20, duration: 'repeating', duration_in_months: 3 },
+    })
+    await card(page, /^Starter until .+, then €24 \/ month with code SPRING20 \(20% off for 3 months\)\.$/)
+    await card(ed.page, /^Starter until .+, then code SPRING20 \(20% off for 3 months\) applies\.$/)
+    await shot(page, 'trial-card-owner-20-off')
+    await shot(ed.page, 'trial-card-member-20-off')
+  })
+
+  await test.step('no code: Upgrade for the owner, ask an owner or admin for the member', async () => {
+    await withCode(null)
+    await card(page, 'Pick a plan to keep posting without a break and get more channels.')
+    await expect(page.getByTestId('trial-banner').getByRole('link', { name: /Upgrade/ })).toHaveAttribute(
+      'href',
+      '/plans',
+    )
+    await card(ed.page, 'Ask an owner or admin to pick a plan before it ends.')
+    await shot(page, 'trial-card-owner-no-code')
+    await shot(ed.page, 'trial-card-member-no-code')
+  })
+
+  expect((await stripe()).unknown).toEqual([])
+  await ed.ctx.close()
+})

@@ -421,6 +421,9 @@ type Usage struct {
 	// TrialEndsAt: when the free trial ends (null = not in one). Stripe's trial_end for a Stripe trial, whose
 	// PlanExpiresAt adds the payment grace; the end of the server-side trial without billing.
 	TrialEndsAt *string `json:"trial_ends_at"`
+	// TrialDiscount: the promotion code's terms a trialing subscription not set to cancel carries (null otherwise),
+	// so every member learns what the trial turns into, not only those who may read the billing details.
+	TrialDiscount *SubscriptionDiscount `json:"trial_discount"`
 	// Suspended: the period ended unpaid; the workspace is read-only.
 	Suspended bool `json:"suspended"`
 	// ItemsByStatus: items created this period, by their current status.
@@ -438,6 +441,7 @@ func (s *Service) GetUsage(ctx context.Context, p Principal) (Usage, error) {
 		return Usage{}, err
 	}
 	var expiresAt, trialEnds *string
+	var trialDiscount *SubscriptionDiscount
 	if expires != "" {
 		expiresAt = &expires
 	}
@@ -447,6 +451,10 @@ func (s *Service) GetUsage(ctx context.Context, p Principal) (Usage, error) {
 			return Usage{}, err
 		}
 		trialEnds = s.trialEndsAt(w)
+		// Stripe out of reach costs the trial card its discount, not the usage.
+		if trialDiscount, err = s.trialDiscount(ctx, w); err != nil {
+			s.Log.Warn("trial discount not read", "workspace_id", p.WorkspaceID, "err", err)
+		}
 	}
 	period := s.period()
 	posts, err := s.Q.GetUsage(ctx, db.GetUsageParams{WorkspaceID: p.WorkspaceID, Period: period, Metric: LimitPostsPerMonth})
@@ -501,8 +509,8 @@ func (s *Service) GetUsage(ctx context.Context, p Principal) (Usage, error) {
 	if err != nil {
 		return Usage{}, err
 	}
-	return Usage{Plan: s.withLivePrices(ctx, plan, s.workspaceCurrency(ctx, p.WorkspaceID, "")), Period: period, PlanExpiresAt: expiresAt, TrialEndsAt: trialEnds, Suspended: suspended,
-		PostsByStatus: byStatus, Deliveries: deliveries, Usage: map[string]int64{
+	return Usage{Plan: s.withLivePrices(ctx, plan, s.workspaceCurrency(ctx, p.WorkspaceID, "")), Period: period, PlanExpiresAt: expiresAt, TrialEndsAt: trialEnds, TrialDiscount: trialDiscount,
+		Suspended: suspended, PostsByStatus: byStatus, Deliveries: deliveries, Usage: map[string]int64{
 			LimitPostsPerMonth: posts, LimitChannels: channels, UsageSeats: seats, LimitXPosts: xPosts,
 			LimitLinkedInPosts: liPosts, LimitLinkedInVideos: liVideos, LimitAlerts: alerts, LimitWebhooks: hooks, LimitAPIKeys: keys, LimitStorage: storage}}, nil
 }

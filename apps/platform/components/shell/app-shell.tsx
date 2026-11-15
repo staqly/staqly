@@ -76,7 +76,7 @@ import {
 import { useLazyDialog } from '@/hooks/use-lazy-dialog'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { useAiStatus } from '@/lib/ai-status'
-import { api, setCsrfToken, type BillingDetails, type MyWorkspace } from '@/lib/api'
+import { api, setCsrfToken, type BillingDetails, type MyWorkspace, type SubscriptionDiscount } from '@/lib/api'
 import { pluralize } from '@/lib/format'
 import { planName, toastApiError } from '@/lib/notify'
 import { LIVE_SUBSCRIPTION, promotionSummary } from '@/lib/plans'
@@ -520,12 +520,15 @@ const TRIAL_DAYS = 7
 
 type Subscription = NonNullable<BillingDetails['subscription']>
 
-/** What the trial turns into under the subscription's promotion code: "free forever with code X". */
-export function afterDiscount(sub: Subscription, discount: NonNullable<Subscription['discount']>) {
-  const total = sub.amount * Math.max(sub.quantity, 1)
-  const amountOff = discount.currency === sub.currency ? (discount.amount_off ?? 0) : 0
+/**
+ * What the trial turns into under the subscription's promotion code: "free forever with code X", with the charge
+ * when the subscription (only owners and admins read it) tells the price.
+ */
+export function afterDiscount(sub: Subscription | undefined, discount: SubscriptionDiscount) {
+  const total = sub ? sub.amount * Math.max(sub.quantity, 1) : 0
+  const amountOff = discount.currency === sub?.currency ? (discount.amount_off ?? 0) : 0
   const charge =
-    sub.amount > 0
+    total > 0
       ? discount.percent_off
         ? Math.round((total * (100 - discount.percent_off)) / 100)
         : Math.max(0, total - amountOff)
@@ -538,7 +541,7 @@ export function afterDiscount(sub: Subscription, discount: NonNullable<Subscript
 
   const terms = `${code} (${promotionSummary(discount)})`
 
-  return charge !== null && sub.interval
+  return sub && charge !== null && sub.interval
     ? `${cents(charge, sub.currency)} / ${sub.interval} with ${terms}`
     : `${terms} applies`
 }
@@ -548,11 +551,9 @@ function SidebarTrial() {
   const { isLocal } = useMode()
   const { canManagePeople } = useRole()
   const usage = useUsage()
-  const billing = useBilling({ enabled: !isLocal && canManagePeople })
-  // Only owners and admins may read the subscription, so only they learn about its promotion code.
-  const details = useBillingDetails({
-    enabled: canManagePeople && billing.data?.subscription_status === 'trialing',
-  })
+  const discount = usage.data?.trial_discount
+  // Every member learns the promotion code from the usage; owners and admins also read the price it leaves.
+  const details = useBillingDetails({ enabled: canManagePeople && !!discount })
   const { setOpenMobile } = useSidebar()
   const [now] = useState(Date.now)
   const ends = usage.data?.trial_ends_at
@@ -563,11 +564,8 @@ function SidebarTrial() {
 
   const days = daysLeft(ends, now)
   const left = days === 0 ? 'Your trial ends today' : `${pluralize(days, 'day')} left in your trial`
-  const sub = details.data?.subscription
-  const discounted =
-    sub?.discount && !sub.cancel_at_period_end
-      ? `${usage.data?.plan.name} until ${shortDate(ends)}, then ${afterDiscount(sub, sub.discount)}.`
-      : null
+  const after = discount ? afterDiscount(details.data?.subscription ?? undefined, discount) : null
+  const discounted = after ? `${usage.data?.plan.name} until ${shortDate(ends)}, then ${after}.` : null
   const action = discounted ? { label: 'View plan', href: '/settings/plan' } : { label: 'Upgrade', href: '/plans' }
 
   return (
@@ -586,7 +584,11 @@ function SidebarTrial() {
               </Link>
             </SidebarMenuButton>
           ) : (
-            <SidebarMenuButton tooltip={left} className="text-brand" data-testid="trial-icon">
+            <SidebarMenuButton
+              tooltip={after ? `${left}, then ${after}` : left}
+              className="text-brand"
+              data-testid="trial-icon"
+            >
               <Clock /> <span>{left}</span>
             </SidebarMenuButton>
           )}

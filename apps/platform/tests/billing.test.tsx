@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { BillingRedirect } from '@/components/settings/billing-redirect'
 import { PlanUsagePage } from '@/components/settings/plan-usage-page'
 import { afterDiscount, AppShell } from '@/components/shell/app-shell'
-import type { Billing, BillingDetails, XPosts } from '@/lib/api'
+import type { Billing, BillingDetails, SubscriptionDiscount, XPosts } from '@/lib/api'
 import { qk } from '@/lib/queries'
 
 import { nav } from './navigation'
@@ -565,25 +565,31 @@ describe('plan & usage', () => {
   })
 })
 
-// The subscription was read and its answer rendered: an unchanged card is not just one still loading.
-const settled = async (details: () => unknown) => {
-  await waitFor(() => expect(details).toHaveBeenCalled())
-  await new Promise((resolve) => setTimeout(resolve, 50))
-}
-const withDiscount = (
-  discount: NonNullable<BillingDetails['subscription']>['discount'],
-  extra = {},
-): BillingDetails => ({
+// The banner shows once the usage is in; a moment more lets a wrong subscription read show.
+const settled = () => new Promise((resolve) => setTimeout(resolve, 50))
+const withDiscount = (discount: SubscriptionDiscount | null): BillingDetails => ({
   ...DETAILS,
-  subscription: { ...SUBSCRIPTION, status: 'trialing', amount: 1500, quantity: 2, discount, ...extra },
+  subscription: { ...SUBSCRIPTION, status: 'trialing', amount: 1500, quantity: 2, discount },
 })
+const FRIENDS: SubscriptionDiscount = { code: 'FRIENDS', end: null, percent_off: 100, duration: 'forever' }
+const SPRING20: SubscriptionDiscount = {
+  code: 'SPRING20',
+  end: null,
+  percent_off: 20,
+  duration: 'repeating',
+  duration_in_months: 3,
+}
 
 // In the free Starter trial (an end date, no subscription) unless a billing state is given.
 function shell(
   plan = PLANS[0],
   billing: unknown = { ...BILLING_PRO, plan: 'starter', subscription_status: null },
   onboarded = true,
-  { details, role = 'owner' }: { details?: unknown; role?: string } = {},
+  {
+    details,
+    role = 'owner',
+    discount = null,
+  }: { details?: unknown; role?: string; discount?: SubscriptionDiscount | null } = {},
 ) {
   const client = makeClient()
   const status = (billing as { subscription_status: string | null }).subscription_status
@@ -597,6 +603,7 @@ function shell(
       ...usage(plan),
       plan_expires_at: trial ? '2026-10-27T10:00:00Z' : null,
       trial_ends_at: trial ? inDays(3) : null,
+      trial_discount: discount,
     },
     'GET /v1/billing': billing,
     'GET /v1/plans': { data: PLANS },
@@ -645,9 +652,7 @@ describe('user menu', () => {
     const trialing = { ...BILLING_PRO, plan: 'starter', subscription_status: 'trialing' }
 
     it('100% off forever: free forever with the code, and View plan instead of Upgrade', async () => {
-      shell(PLANS[0], trialing, true, {
-        details: withDiscount({ code: 'FRIENDS', end: null, percent_off: 100, duration: 'forever' }),
-      })
+      shell(PLANS[0], trialing, true, { discount: FRIENDS, details: withDiscount(FRIENDS) })
 
       const banner = await screen.findByTestId('trial-banner')
 
@@ -661,15 +666,7 @@ describe('user menu', () => {
     })
 
     it('20% off for 3 months: the discounted charge and the code', async () => {
-      shell(PLANS[0], trialing, true, {
-        details: withDiscount({
-          code: 'SPRING20',
-          end: null,
-          percent_off: 20,
-          duration: 'repeating',
-          duration_in_months: 3,
-        }),
-      })
+      shell(PLANS[0], trialing, true, { discount: SPRING20, details: withDiscount(SPRING20) })
 
       const banner = await screen.findByTestId('trial-banner')
 
@@ -681,34 +678,42 @@ describe('user menu', () => {
       expect(within(banner).getByRole('link', { name: 'View plan' })).toHaveAttribute('href', '/settings/plan')
     })
 
-    it('cancelling at the trial end: unchanged, Upgrade to the plans', async () => {
-      const details = vi.fn<() => BillingDetails>(() =>
-        withDiscount(
-          { code: 'FRIENDS', end: null, percent_off: 100, duration: 'forever' },
-          { cancel_at_period_end: true },
-        ),
-      )
+    it('no discount in the usage (none, or set to cancel): unchanged, Upgrade, the subscription not read', async () => {
+      const details = vi.fn<() => BillingDetails>(() => withDiscount(FRIENDS))
 
       shell(PLANS[0], trialing, true, { details })
-
       const banner = await screen.findByTestId('trial-banner')
 
-      await settled(details)
+      await settled()
 
       expect(within(banner).getByTestId('trial-message')).toHaveTextContent('Pick a plan to keep posting')
       expect(within(banner).getByRole('link', { name: /Upgrade/ })).toHaveAttribute('href', '/plans')
+      expect(details).not.toHaveBeenCalled()
     })
 
-    it('without a discount: unchanged, Upgrade to the plans', async () => {
-      const details = vi.fn<() => BillingDetails>(() => withDiscount(null))
+    it.each([
+      [FRIENDS, /^Starter until .+, then free forever with code FRIENDS\.$/],
+      [SPRING20, /^Starter until .+, then code SPRING20 \(20% off for 3 months\) applies\.$/],
+    ])('a member learns the code %#: no price, no button, no billing details read', async (discount, message) => {
+      const details = vi.fn<() => BillingDetails>(() => withDiscount(discount))
 
-      shell(PLANS[0], trialing, true, { details })
+      shell(PLANS[0], trialing, true, { role: 'editor', discount, details })
       const banner = await screen.findByTestId('trial-banner')
 
-      await settled(details)
+      await waitFor(() => expect(within(banner).getByTestId('trial-message')).toHaveTextContent(message))
+      expect(within(banner).queryByRole('link')).not.toBeInTheDocument()
+      expect(screen.getByTestId('trial-icon').tagName).not.toBe('A')
+      expect(details).not.toHaveBeenCalled()
+    })
 
-      expect(within(banner).getByTestId('trial-message')).toHaveTextContent('Pick a plan to keep posting')
-      expect(within(banner).getByRole('link', { name: /Upgrade/ })).toHaveAttribute('href', '/plans')
+    it('a member without a discount: still asks an owner or admin', async () => {
+      shell(PLANS[0], trialing, true, { role: 'viewer' })
+      const banner = await screen.findByTestId('trial-banner')
+
+      await settled()
+
+      expect(within(banner).getByTestId('trial-message')).toHaveTextContent('Ask an owner or admin')
+      expect(within(banner).queryByRole('link')).not.toBeInTheDocument()
     })
 
     it('what the trial turns into: free when an amount covers the price, no price when it is unknown', () => {
@@ -726,6 +731,10 @@ describe('user menu', () => {
       expect(
         afterDiscount({ ...sub, amount: 0 }, { code: 'HALF', end: null, percent_off: 50, duration: 'forever' }),
       ).toBe('code HALF (50% off) applies')
+      expect(afterDiscount(undefined, FRIENDS)).toBe('free forever with code FRIENDS')
+      expect(
+        afterDiscount(undefined, { code: 'BIG', end: null, amount_off: 5000, currency: 'usd', duration: 'forever' }),
+      ).toBe('code BIG ($50 off) applies')
     })
   })
 

@@ -426,7 +426,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [plan, period, usage, plan_expires_at, trial_ends_at, suspended, posts_by_status, webhook_deliveries]
+                required: [plan, period, usage, plan_expires_at, trial_ends_at, trial_discount, suspended, posts_by_status, webhook_deliveries]
                 properties:
                   plan: { $ref: "#/components/schemas/Plan" }
                   period: { type: string, examples: ["2026-10"] }
@@ -456,6 +456,13 @@ paths:
                     description: |
                       When the 7-day free trial ends: Stripe's `trial_end` for a Stripe trial, the end of the server-side
                       trial on a server without billing; null when the workspace is in no trial.
+                  trial_discount:
+                    description: |
+                      The promotion code a trialing subscription carries, what the trial turns into when it ends; null when
+                      not in a Stripe trial, when the subscription is set to cancel or carries no discount. Every member reads it.
+                    oneOf:
+                      - type: "null"
+                      - $ref: "#/components/schemas/SubscriptionDiscount"
                   suspended:
                     type: boolean
                     description: |
@@ -5110,7 +5117,7 @@ components:
     Usage:
       description: Plan, monthly usage and trial/suspension state (also returned inline by GET /v1/workspace/usage)
       type: object
-      required: [plan, period, usage, plan_expires_at, trial_ends_at, suspended, posts_by_status, webhook_deliveries]
+      required: [plan, period, usage, plan_expires_at, trial_ends_at, trial_discount, suspended, posts_by_status, webhook_deliveries]
       properties:
         plan: { $ref: "#/components/schemas/Plan" }
         period: { type: string, examples: ["2026-10"] }
@@ -5140,6 +5147,13 @@ components:
           description: |
             When the 7-day free trial ends: Stripe's `trial_end` for a Stripe trial, the end of the server-side
             trial on a server without billing; null when the workspace is in no trial.
+        trial_discount:
+          description: |
+            The promotion code a trialing subscription carries, what the trial turns into when it ends; null when
+            not in a Stripe trial, when the subscription is set to cancel or carries no discount. Every member reads it.
+          oneOf:
+            - type: "null"
+            - $ref: "#/components/schemas/SubscriptionDiscount"
         suspended:
           type: boolean
           description: |
@@ -5246,16 +5260,18 @@ components:
           description: The subscription's discount while it lasts; no other promotion code is taken meanwhile
           oneOf:
             - type: "null"
-            - type: object
-              required: [code, end]
-              properties:
-                code: { type: string, description: The promotion code behind it (empty when it was set on a coupon in Stripe), examples: [SPRING20] }
-                end: { type: [string, "null"], description: When it ends (null = never) }
-                percent_off: { type: number, description: "Percent taken off; absent for an amount off." }
-                amount_off: { type: integer, description: "Amount taken off per invoice, in cents of `currency` (the subscription's); absent for a percent off." }
-                currency: { type: string, examples: ["eur"] }
-                duration: { type: string, enum: [once, repeating, forever], description: "How long the discount lasts." }
-                duration_in_months: { type: integer, description: "Months the discount lasts when `duration` is `repeating`." }
+            - $ref: "#/components/schemas/SubscriptionDiscount"
+    SubscriptionDiscount:
+      type: object
+      required: [code, end]
+      properties:
+        code: { type: string, description: The promotion code behind it (empty when it was set on a coupon in Stripe), examples: [SPRING20] }
+        end: { type: [string, "null"], description: When it ends (null = never) }
+        percent_off: { type: number, description: "Percent taken off; absent for an amount off." }
+        amount_off: { type: integer, description: "Amount taken off per invoice, in cents of `currency` (the subscription's); absent for a percent off." }
+        currency: { type: string, examples: ["eur"] }
+        duration: { type: string, enum: [once, repeating, forever], description: "How long the discount lasts." }
+        duration_in_months: { type: integer, description: "Months the discount lasts when `duration` is `repeating`." }
     ProviderCheck:
       type: object
       required: [provider, ok, checks]
