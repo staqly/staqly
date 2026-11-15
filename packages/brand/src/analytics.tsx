@@ -7,8 +7,10 @@ import ReactGA from 'react-ga4'
 // counts visitors from a daily hash, so PostHog needs no consent banner.
 const POSTHOG_TOKEN = 'phc_pMwZQ0lfoTklsPLfB1W3RD4GUDOBVN2FDVMcgKmZHSO'
 
-// Google Analytics (GA4). Page views of client-side navigation come from its enhanced measurement (history changes).
-const GA_ID = 'G-JQGZS84PME'
+// Google Analytics (GA4): the measurement id baked in at build time (NEXT_PUBLIC_GA_ID; empty = off, so another
+// installation sends nothing to Google). Page views of client-side navigation come from its enhanced measurement
+// (history changes).
+const GA_ID = process.env.NEXT_PUBLIC_GA_ID
 
 // Every analytics tool of staqly.ai and docs.staqly.ai: PostHog (page views, clicks, web vitals) and Google Analytics.
 // Off everywhere else (local dev, previews, forks), and loaded after hydration so it stays out of the first bundle.
@@ -20,7 +22,7 @@ export function Analytics() {
       return
     }
 
-    if (!ReactGA.isInitialized) {
+    if (GA_ID && !ReactGA.isInitialized) {
       ReactGA.initialize(GA_ID)
     }
 
