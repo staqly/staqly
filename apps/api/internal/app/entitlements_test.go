@@ -8,12 +8,12 @@ import (
 func TestApplyEntitlements(t *testing.T) {
 	// The limits as the database seeds them (migration 00006); ApplyEntitlements is pure, so they are set here.
 	plus, _ := PlanByID("plus")
-	plus.Limits = PlanLimits{PostsPerMonth: 1500, Channels: 15, Alerts: 10, Webhooks: 10, APIKeyCount: 10, StorageBytes: 10 * gb,
+	plus.Limits = PlanLimits{PostsPerMonth: 1500, Channels: 15, Alerts: 10, Webhooks: 10, Keys: 10, StorageBytes: 10 * gb,
 		MaxUploadBytes: 100 << 20, DataExport: true, XPostsPerPeriod: 100, LinkedInPostsPerPeriod: 300,
 		LinkedInVideosPerPeriod: 15, AIMonthlyCents: 200}
 	business := UnlockedPlan
 	starter, _ := PlanByID("starter")
-	starter.Limits = PlanLimits{PostsPerMonth: 300, Channels: 5, Alerts: 3, Webhooks: 3, APIKeyCount: 2, StorageBytes: 2 * gb,
+	starter.Limits = PlanLimits{PostsPerMonth: 300, Channels: 5, Alerts: 3, Webhooks: 3, Keys: 2, StorageBytes: 2 * gb,
 		MaxUploadBytes: 25 << 20, XPostsPerPeriod: 50, LinkedInPostsPerPeriod: 100, LinkedInVideosPerPeriod: 5,
 		AIMonthlyCents: 100}
 	pack := func(key, name string, md map[string]string) Entitlement {
