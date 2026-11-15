@@ -5214,6 +5214,11 @@ components:
               properties:
                 code: { type: string, description: The promotion code behind it (empty when it was set on a coupon in Stripe), examples: [SPRING20] }
                 end: { type: [string, "null"], description: When it ends (null = never) }
+                percent_off: { type: number, description: "Percent taken off; absent for an amount off." }
+                amount_off: { type: integer, description: "Amount taken off per invoice, in cents of `currency` (the subscription's); absent for a percent off." }
+                currency: { type: string, examples: ["eur"] }
+                duration: { type: string, enum: [once, repeating, forever], description: "How long the discount lasts." }
+                duration_in_months: { type: integer, description: "Months the discount lasts when `duration` is `repeating`." }
     ProviderCheck:
       type: object
       required: [provider, ok, checks]

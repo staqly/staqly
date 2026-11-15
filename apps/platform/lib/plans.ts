@@ -1,3 +1,5 @@
+import type { PromotionCode } from '@/lib/api'
+
 /** Subscription statuses that pay (or are about to): a plan change switches them instead of a new checkout. */
 export const LIVE_SUBSCRIPTION = ['active', 'trialing', 'past_due', 'incomplete']
 
@@ -9,6 +11,25 @@ export function money(n: number, currency = 'eur') {
     minimumFractionDigits: Number.isInteger(n) ? 0 : 2,
     maximumFractionDigits: 2,
   }).format(n)
+}
+
+/** "20% off" or "€10 off", then how long: "for 3 months", "on the first payment". */
+export function promotionSummary(
+  promo: Pick<PromotionCode, 'percent_off' | 'amount_off' | 'currency' | 'duration' | 'duration_in_months'>,
+) {
+  const off = promo.percent_off
+    ? `${promo.percent_off}% off`
+    : promo.amount_off
+      ? `${money(promo.amount_off / 100, promo.currency)} off`
+      : 'Discount'
+  const time =
+    promo.duration === 'once'
+      ? ' the first payment'
+      : promo.duration === 'repeating' && promo.duration_in_months
+        ? ` for ${promo.duration_in_months === 1 ? '1 month' : `${promo.duration_in_months} months`}`
+        : ''
+
+  return off + time
 }
 
 /**

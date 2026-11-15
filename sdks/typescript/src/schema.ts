@@ -4333,6 +4333,19 @@ export interface components {
                 code: string;
                 /** @description When it ends (null = never) */
                 end: string | null;
+                /** @description Percent taken off; absent for an amount off. */
+                percent_off?: number;
+                /** @description Amount taken off per invoice, in cents of `currency` (the subscription's); absent for a percent off. */
+                amount_off?: number;
+                /** @example eur */
+                currency?: string;
+                /**
+                 * @description How long the discount lasts.
+                 * @enum {string}
+                 */
+                duration?: "once" | "repeating" | "forever";
+                /** @description Months the discount lasts when `duration` is `repeating`. */
+                duration_in_months?: number;
             };
         };
         ProviderCheck: {
