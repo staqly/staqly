@@ -491,3 +491,62 @@ func TestOperatorPlanSurvivesEndedSubscription(t *testing.T) {
 		})
 	}
 }
+
+// Two first checkouts of a workspace at once (a double click, two tabs) send the same customer idempotency key, and
+// Stripe answers the second 409 idempotency_key_in_use while the first is in flight; a 429 (lock_timeout, rate
+// limit) means the request wasn't processed either. Both are sent again instead of failing the checkout with a 502.
+// A refusal Stripe says not to repeat is not.
+func TestStripeRequestsRetriedWhenStripeSaysSo(t *testing.T) {
+	e := newEnv(t)
+	var mu sync.Mutex
+	customers, sessions := 0, 0
+	stripe := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch r.Method + " " + r.URL.Path {
+		case "GET /v1/prices":
+			fmt.Fprintf(w, `{"data":[{"id":"price_%s","unit_amount":2900,"currency":"eur"}]}`, r.URL.Query().Get("lookup_keys[]"))
+		case "POST /v1/customers":
+			customers++
+			if customers == 1 {
+				w.WriteHeader(409)
+				fmt.Fprint(w, `{"error":{"type":"idempotency_error","code":"idempotency_key_in_use"}}`)
+				return
+			}
+			fmt.Fprint(w, `{"id":"cus_r"}`)
+		case "POST /v1/checkout/sessions":
+			sessions++
+			switch sessions {
+			case 1:
+				w.WriteHeader(429)
+				fmt.Fprint(w, `{"error":{"type":"invalid_request_error","code":"lock_timeout"}}`)
+				return
+			case 3:
+				w.Header().Set("Stripe-Should-Retry", "false")
+				w.WriteHeader(429)
+				fmt.Fprint(w, `{"error":{"type":"invalid_request_error","code":"rate_limit"}}`)
+				return
+			}
+			fmt.Fprint(w, `{"url":"https://checkout.stripe.test/r"}`)
+		default:
+			fmt.Fprint(w, `{"data":[]}`)
+		}
+	}))
+	defer stripe.Close()
+	e.svc.Cfg.Billing = app.BillingConfig{SecretKey: "sk_test_retry", WebhookSecret: testWhsec, APIBase: stripe.URL}
+
+	var out struct{ URL string }
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "plus"}, 200, &out)
+	mu.Lock()
+	if out.URL == "" || customers != 2 || sessions != 2 {
+		t.Errorf("url %q after %d customer and %d session requests, want 2 and 2", out.URL, customers, sessions)
+	}
+	mu.Unlock()
+	// Stripe-Should-Retry: false is a refusal like any other.
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "plus"}, 502, nil)
+	mu.Lock()
+	if sessions != 3 {
+		t.Errorf("a request Stripe said not to repeat was sent %d times", sessions-2)
+	}
+	mu.Unlock()
+}
