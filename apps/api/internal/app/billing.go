@@ -1609,18 +1609,70 @@ func (s *Service) stripe(ctx context.Context, method, path string, form url.Valu
 	return s.stripeKeyed(ctx, method, path, form, out, "")
 }
 
-// stripeKeyed is stripe with an Idempotency-Key ("" for none).
+// stripeRetries: how often a request Stripe asks to repeat is sent again (see stripeKeyed), and the pause before
+// each attempt, doubled every time.
+const (
+	stripeRetries    = 3
+	stripeRetryPause = 300 * time.Millisecond
+)
+
+// stripeKeyed is stripe with an Idempotency-Key ("" for none). A request Stripe didn't process and says may be sent
+// again is retried a few times: Stripe-Should-Retry: true, a 429 (rate limit, or lock_timeout: another request is
+// changing the same object, such as the invoice of a subscription Stripe just cancelled) and a 409
+// idempotency_key_in_use (the same key still in flight: two first checkouts of a workspace at once).
 func (s *Service) stripeKeyed(ctx context.Context, method, path string, form url.Values, out any, idempotencyKey string) error {
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	for attempt := 0; ; attempt++ {
+		status, raw, retry, err := s.stripeOnce(ctx, method, path, form, idempotencyKey)
+		if err != nil {
+			return err
+		}
+		if status < 300 {
+			if out == nil {
+				return nil
+			}
+			return json.Unmarshal(raw, out)
+		}
+		var e struct {
+			Error struct {
+				Type  string `json:"type"`
+				Code  string `json:"code"`
+				Param string `json:"param"`
+			} `json:"error"`
+		}
+		_ = json.Unmarshal(raw, &e)
+		retry = retry || (status == http.StatusConflict && e.Error.Code == "idempotency_key_in_use")
+		if retry && attempt < stripeRetries {
+			select {
+			case <-ctx.Done():
+			case <-time.After(stripeRetryPause << attempt):
+				continue
+			}
+		}
+		// Never the query string (ids, a typed promotion code) nor Stripe's message, which may quote them.
+		logPath, _, _ := strings.Cut(path, "?")
+		level := slog.LevelError
+		if known, _ := ctx.Value(stripeHandledKey{}).(func(int, string) bool); known != nil && known(status, e.Error.Param) {
+			level = slog.LevelWarn
+		}
+		s.logger(ctx).Log(ctx, level, "stripe request failed", "path", logPath, "status", status, "code", e.Error.Code, "type", e.Error.Type)
+		return &Error{Code: "payment_provider_error", Status: 502, Message: "the payment provider rejected the request",
+			Details: map[string]any{"provider_code": e.Error.Code, "provider_param": e.Error.Param}}
+	}
+}
+
+// stripeOnce sends one Stripe request: its status, body (at most 1 MiB) and whether Stripe says it may be sent
+// again (Stripe-Should-Retry, else a 429).
+func (s *Service) stripeOnce(ctx context.Context, method, path string, form url.Values, idempotencyKey string) (int, []byte, bool, error) {
 	base := firstNonEmpty(s.Cfg.Billing.APIBase, "https://api.stripe.com")
 	var body io.Reader
 	if form != nil {
 		body = strings.NewReader(form.Encode())
 	}
-	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
-	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, method, base+path, body)
 	if err != nil {
-		return err
+		return 0, nil, false, err
 	}
 	req.SetBasicAuth(s.Cfg.Billing.SecretKey, "")
 	if form != nil {
@@ -1631,33 +1683,15 @@ func (s *Service) stripeKeyed(ctx context.Context, method, path string, form url
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("stripe: %w", err)
+		return 0, nil, false, fmt.Errorf("stripe: %w", err)
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode >= 300 {
-		var e struct {
-			Error struct {
-				Type  string `json:"type"`
-				Code  string `json:"code"`
-				Param string `json:"param"`
-			} `json:"error"`
-		}
-		_ = json.Unmarshal(raw, &e)
-		// Never the query string (ids, a typed promotion code) nor Stripe's message, which may quote them.
-		logPath, _, _ := strings.Cut(path, "?")
-		level := slog.LevelError
-		if known, _ := ctx.Value(stripeHandledKey{}).(func(int, string) bool); known != nil && known(resp.StatusCode, e.Error.Param) {
-			level = slog.LevelWarn
-		}
-		s.logger(ctx).Log(ctx, level, "stripe request failed", "path", logPath, "status", resp.StatusCode, "code", e.Error.Code, "type", e.Error.Type)
-		return &Error{Code: "payment_provider_error", Status: 502, Message: "the payment provider rejected the request",
-			Details: map[string]any{"provider_code": e.Error.Code, "provider_param": e.Error.Param}}
+	retry := resp.StatusCode == http.StatusTooManyRequests
+	if h := resp.Header.Get("Stripe-Should-Retry"); h != "" {
+		retry = h == "true"
 	}
-	if out == nil {
-		return nil
-	}
-	return json.Unmarshal(raw, out)
+	return resp.StatusCode, raw, retry, nil
 }
 
 // verifyStripeSignature checks the Stripe-Signature header ("t=...,v1=..."):
