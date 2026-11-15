@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
+import { toast } from 'sonner'
 
 import { PublicShell } from '@/components/auth/public-shell'
 import { daysLeft, shortDate } from '@/components/billing/billing-format'
@@ -56,6 +57,13 @@ export function usePlanActions() {
       if (e instanceof ApiError && e.code === 'payment_failed') {
         qc.setQueryData<PendingPayment>(qk.pendingPayment, { ...e.details, pending: true })
         router.push(PAYMENT_FAILED)
+
+        return
+      }
+
+      // A smaller plan than what the workspace has: the message says what to remove first.
+      if (e instanceof ApiError && e.code === 'plan_limits_exceeded') {
+        toast.warning('Too much for this plan', { id: 'plan-limits', description: e.message, duration: 10_000 })
 
         return
       }

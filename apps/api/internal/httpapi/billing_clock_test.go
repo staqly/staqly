@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/staqly/staqly/apps/api/internal/app"
+	"github.com/staqly/staqly/apps/api/internal/db"
 )
 
 // The dunning clock at its edges. A paid period keeps the workspace open for three days past its end, to the
@@ -133,5 +134,83 @@ func TestSwitchOfSubscriptionWithoutItems(t *testing.T) {
 	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "pro"}, 409, &errBody)
 	if errBody.Error.Code != "conflict" || f.called("POST /v1/subscriptions/sub_1") != 0 || f.called("POST /v1/checkout/sessions") != 0 {
 		t.Fatalf("a subscription without items: %+v, Stripe asked %v", errBody.Error, f.calls)
+	}
+}
+
+// A switch to a plan the workspace has more on than it allows is refused before Stripe is asked, with what to
+// reduce; an add-on that stays counts, and the same plan's other interval is never blocked.
+func TestSwitchToPlanBelowUsageRefused(t *testing.T) {
+	e := newEnv(t)
+	f := withStripe(t, e)
+	e.svc.Cfg.Billing.Prices["starter_month"] = "price_starter_month"
+	ws := workspaceID(e)
+	ctx := context.Background()
+	e.keyWith(app.ScopeAdmin)
+	e.keyWith(app.ScopeAdmin) // with the env's own key: at least 3 live API keys
+	var usage app.Usage
+	e.do(nil, "GET", "/v1/workspace/usage", e.key, nil, 200, &usage)
+	keys := usage.Usage[app.LimitAPIKeys]
+	if err := e.svc.W.UpsertLimitPlan(ctx, db.UpsertLimitPlanParams{LimitKey: app.LimitAPIKeys, PlanID: "starter", Value: 1, UpdatedAt: "2026-01-01T00:00:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+	e.stripeEvent("evt_1", "customer.subscription.created", subObject("sub_1", ws, "active", "pro", "month"), testWhsec)
+	f.set("GET /v1/subscriptions/sub_1", func() (int, any) { return 200, subObject("sub_1", ws, "active", "pro", "month") })
+
+	var errBody struct{ Error app.Error }
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "starter"}, 409, &errBody)
+	want := fmt.Sprintf("Starter allows 1 API key; this workspace has %d. Revoke %d API keys first.", keys, keys-1)
+	over, _ := errBody.Error.Details["overages"].([]any)
+	if errBody.Error.Code != "plan_limits_exceeded" || errBody.Error.Message != want || errBody.Error.Details["plan"] != "starter" ||
+		len(over) != 1 || fmt.Sprint(over[0]) != fmt.Sprintf("map[limit:api_keys max:1 used:%d]", keys) {
+		t.Fatalf("refusal: %+v, want %q", errBody.Error, want)
+	}
+	if f.called("POST /v1/subscriptions/sub_1") != 0 {
+		t.Fatalf("Stripe was asked: %v", f.calls)
+	}
+
+	// An add-on of 10 API keys stays with the subscription: Starter then holds them.
+	if _, err := e.svc.DB.Exec(`UPDATE workspaces SET entitlements = ? WHERE id = ?`,
+		`[{"lookup_key":"staqly_addon_keys","name":"Keys","metadata":{"staqly_limit_api_keys":"+10"}}]`, ws); err != nil {
+		t.Fatal(err)
+	}
+	f.set("POST /v1/subscriptions/sub_1", func() (int, any) { return 200, subObject("sub_1", ws, "active", "starter", "month") })
+	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "starter"}, 200, nil)
+	if f.called("POST /v1/subscriptions/sub_1") != 1 {
+		t.Fatalf("the switch that fits was not sent: %v", f.calls)
+	}
+}
+
+// During a Stripe API version switch an old and a new endpoint both deliver, each signing with its own secret
+// (STRIPE_WEBHOOK_SECRET=whsec_new,whsec_old): both verify, and the same event id from the second endpoint is a
+// no-op even when Stripe's state moved in between; a new event id still applies.
+func TestStripeWebhookTwoEndpointsSameEvent(t *testing.T) {
+	e := newEnv(t)
+	f := withStripe(t, e)
+	const oldSecret = "whsec_old_endpoint"
+	e.svc.Cfg.Billing.WebhookSecret = testWhsec + " , " + oldSecret
+	ws := workspaceID(e)
+	admin := e.keyWith(app.ScopeAdmin)
+	if code := e.stripeEvent("evt_same", "customer.subscription.created", subObject("sub_1", ws, "active", "pro", "month"), testWhsec); code != 200 {
+		t.Fatalf("new endpoint: %d", code)
+	}
+	if b := e.billing(admin); b.Plan != "pro" {
+		t.Fatalf("not applied: %+v", b)
+	}
+	f.set("GET /v1/invoices", func() (int, any) { return 200, map[string]any{"data": []any{}} })
+	canceled := subObject("sub_1", ws, "canceled", "pro", "month")
+	if code := e.stripeEvent("evt_same", "customer.subscription.created", canceled, oldSecret); code != 200 {
+		t.Fatalf("old endpoint: %d", code)
+	}
+	if b := e.billing(admin); b.Plan != "pro" || b.SubscriptionStatus == nil || *b.SubscriptionStatus != "active" {
+		t.Fatalf("the second delivery of evt_same changed billing: %+v", b)
+	}
+	if code := e.stripeEvent("evt_same", "customer.subscription.created", canceled, "whsec_unknown"); code != 400 {
+		t.Fatalf("a secret not configured: %d", code)
+	}
+	if code := e.stripeEvent("evt_next", "customer.subscription.deleted", canceled, oldSecret); code != 200 {
+		t.Fatalf("next event: %d", code)
+	}
+	if b := e.billing(admin); b.SubscriptionStatus == nil || *b.SubscriptionStatus != "canceled" {
+		t.Fatalf("a new event id must apply: %+v", b)
 	}
 }

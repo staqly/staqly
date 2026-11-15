@@ -34,7 +34,13 @@ const PROMOTIONS: Record<string, unknown> = {
 
 const chooseCta = () => <button type="button">Choose</button>
 
-function render(paying: boolean, trial = paying ? 'none' : 'available', sub: object = SUB, plans = PLANS) {
+function render(
+  paying: boolean,
+  trial = paying ? 'none' : 'available',
+  sub: object = SUB,
+  plans = PLANS,
+  checkout: unknown = { url: 'https://checkout.stripe.test/cs_1' },
+) {
   const client = makeClient()
 
   client.setQueryData(qk.session, {
@@ -65,7 +71,7 @@ function render(paying: boolean, trial = paying ? 'none' : 'available', sub: obj
       invoices: [],
       has_more_invoices: false,
     },
-    'POST /v1/billing/checkout': { url: 'https://checkout.stripe.test/cs_1' },
+    'POST /v1/billing/checkout': checkout,
     // Codes as they were made (the API upper-cases what is typed; this mock does not).
     'POST /v1/billing/promotion-code': ({ body }: { body: { promotion_code: string } }) =>
       PROMOTIONS[body.promotion_code] ?? {
@@ -130,6 +136,29 @@ describe('plan picker', () => {
     await waitFor(() =>
       expect(api.find('POST', '/v1/billing/checkout')[0]?.body).toEqual({ plan: 'pro', interval: 'month' }),
     )
+  })
+
+  it('a switch to a plan smaller than the workspace says what to remove first', async () => {
+    const message = 'Starter allows 5 channels; this workspace has 7. Remove 2 channels first.'
+
+    render(true, 'none', SUB, PLANS, {
+      status: 409,
+      body: {
+        error: {
+          code: 'plan_limits_exceeded',
+          message,
+          details: { plan: 'starter', overages: [{ limit: 'channels', used: 7, max: 5 }] },
+        },
+      },
+    })
+    const user = userEvent.setup()
+
+    await user.click(
+      within(await screen.findByTestId('plan-starter')).getByRole('button', { name: 'Switch to Starter' }),
+    )
+    expect(await screen.findByText(message)).toBeInTheDocument()
+    expect(screen.getByText('Too much for this plan')).toBeInTheDocument()
+    expect(assign).not.toHaveBeenCalled()
   })
 
   it('a promotion code goes with a switch, and can be applied to the current plan', async () => {

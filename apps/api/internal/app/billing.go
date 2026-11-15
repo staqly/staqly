@@ -28,7 +28,7 @@ import (
 // setup it needs; Prices overrides a lookup with a price id (STRIPE_PRICE_<PLAN>_<MONTHLY|YEARLY>).
 type BillingConfig struct {
 	SecretKey     string            // STRIPE_SECRET_KEY (sk_test_... or sk_live_...)
-	WebhookSecret string            // STRIPE_WEBHOOK_SECRET (whsec_...)
+	WebhookSecret string            // STRIPE_WEBHOOK_SECRET (whsec_...; several comma-separated while switching endpoints)
 	Prices        map[string]string // "<plan>_<interval>" -> price id, from STRIPE_PRICE_<PLAN>_<MONTHLY|YEARLY>
 	// ManagedPayments (STRIPE_MANAGED_PAYMENTS): checkouts use Stripe Managed Payments, so Stripe (through Link)
 	// is the merchant of record and handles tax, invoices to the customer, fraud and disputes. The account must
@@ -510,6 +510,13 @@ func (s *Service) CheckoutSession(ctx context.Context, p Principal, planID, inte
 		}
 	}
 	if w.SubscriptionStatus.Valid && liveSubscription(w.SubscriptionStatus.String) && w.StripeSubscriptionID.Valid {
+		// Another plan must hold what the workspace has; refused before Stripe is asked. The same plan (another
+		// interval, a code) always may, even over limits an operator lowered since.
+		if plan.ID != w.Plan {
+			if err := s.planFits(ctx, s.Q, w.ID, plan); err != nil {
+				return "", err
+			}
+		}
 		err := s.switchSubscription(ctx, w.ID, w.StripeSubscriptionID.String, price, plan.ID, interval, promo)
 		if found, ok := s.unpinnedPrice(ctx, plan, interval, err); ok {
 			err = s.switchSubscription(ctx, w.ID, w.StripeSubscriptionID.String, found, plan.ID, interval, promo)
@@ -1730,7 +1737,7 @@ func (s *Service) stripeOnce(ctx context.Context, method, path string, form url.
 
 // verifyStripeSignature checks the Stripe-Signature header ("t=...,v1=..."):
 // HMAC-SHA256 of "<t>.<payload>" with the endpoint secret, at most 5 minutes old.
-func verifyStripeSignature(payload []byte, header, secret string, now time.Time) error {
+func verifyStripeSignature(payload []byte, header, secrets string, now time.Time) error {
 	var ts int64
 	var sigs [][]byte
 	for _, part := range strings.Split(header, ",") {
@@ -1750,13 +1757,20 @@ func verifyStripeSignature(payload []byte, header, secret string, now time.Time)
 	if d := now.Sub(time.Unix(ts, 0)); d > stripeSignatureTolerance || d < -stripeSignatureTolerance {
 		return errors.New("timestamp outside the tolerance")
 	}
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write([]byte(strconv.FormatInt(ts, 10) + "."))
-	mac.Write(payload)
-	want := mac.Sum(nil)
-	for _, sig := range sigs {
-		if hmac.Equal(sig, want) {
-			return nil
+	// secrets: one or more, comma-separated, so the old and the new endpoint both verify while Stripe moves to
+	// another API version (each endpoint signs with its own secret).
+	for _, secret := range strings.Split(secrets, ",") {
+		if secret = strings.TrimSpace(secret); secret == "" {
+			continue
+		}
+		mac := hmac.New(sha256.New, []byte(secret))
+		mac.Write([]byte(strconv.FormatInt(ts, 10) + "."))
+		mac.Write(payload)
+		want := mac.Sum(nil)
+		for _, sig := range sigs {
+			if hmac.Equal(sig, want) {
+				return nil
+			}
 		}
 	}
 	return errors.New("no matching signature")

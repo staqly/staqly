@@ -550,6 +550,9 @@ paths:
         `customer.subscription.updated` event arrives. 409 for the plan and interval it already has. A lower plan
         on the same interval, and yearly to monthly on the same or a lower plan, are settled by Stripe's proration
         at once: the credit goes to the customer's balance at Stripe, which pays the next invoices (an upgrade's too).
+        A plan the workspace has more on than it allows (channels, alerts, webhooks, API keys, storage; with the
+        add-ons it keeps) is refused before Stripe is asked: 409 `plan_limits_exceeded`, whose message says what to
+        reduce and whose `details` are `{plan, overages: [{limit, used, max}]}`. Monthly allowances don't block.
 
         An upgrade (a paying subscription moving to a higher plan) charges the prorated difference at once,
         monthly to yearly on any plan charges the year at once (less the unused rest of the month), and
@@ -830,7 +833,8 @@ paths:
       summary: Stripe webhook endpoint
       description: |
         Called by Stripe, not by clients. Verified with the `Stripe-Signature` header and
-        `STRIPE_WEBHOOK_SECRET`; each event is applied once. Handles
+        `STRIPE_WEBHOOK_SECRET` (several comma-separated while an old and a new endpoint both deliver); each
+        event id is applied once, so the same event from two endpoints counts once. Handles
         `checkout.session.completed` and `customer.subscription.*`.
       security: []
       parameters:
