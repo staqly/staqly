@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/staqly/staqly/apps/api/internal/db"
 )
 
 // invoicesPerPage: how many invoices one billing details answer lists.
@@ -57,6 +59,82 @@ type SubscriptionDiscount struct {
 	Currency         string  `json:"currency,omitempty"`
 	Duration         string  `json:"duration,omitempty"`
 	DurationInMonths int64   `json:"duration_in_months,omitempty"`
+}
+
+// stripeDiscount: a subscription's discount as Stripe sends it (read with expand[]=discounts.promotion_code).
+type stripeDiscount struct {
+	End           int64 `json:"end"`
+	PromotionCode *struct {
+		Code string `json:"code"`
+	} `json:"promotion_code"`
+	Coupon *stripeCoupon `json:"coupon"` // before API 2025-09
+	// From API 2025-09: source.coupon (an id).
+	Source struct {
+		Coupon string `json:"coupon"`
+	} `json:"source"`
+}
+
+// subscriptionDiscount: the first of a subscription's discounts with its coupon's terms, an amount told in
+// `currency` (the subscription's); nil without one.
+func (s *Service) subscriptionDiscount(ctx context.Context, discounts []stripeDiscount, currency string) (*SubscriptionDiscount, error) {
+	if len(discounts) == 0 {
+		return nil, nil
+	}
+	d := discounts[0]
+	out := &SubscriptionDiscount{End: unixTime(d.End)}
+	if d.PromotionCode != nil {
+		out.Code = d.PromotionCode.Code
+	}
+	coupon := d.Coupon
+	if coupon == nil && d.Source.Coupon != "" {
+		coupon = &stripeCoupon{}
+		if err := s.stripe(ctx, "GET", "/v1/coupons/"+url.PathEscape(d.Source.Coupon)+"?expand[]=currency_options", nil, coupon); err != nil {
+			return nil, err
+		}
+	}
+	if coupon != nil {
+		amount, _ := coupon.amountIn(currency)
+		out.PercentOff, out.AmountOff = coupon.PercentOff, amount
+		if amount > 0 {
+			out.Currency = currency
+		}
+		out.Duration, out.DurationInMonths = coupon.Duration, coupon.DurationInMonths
+	}
+	return out, nil
+}
+
+// trialDiscount: the discount of a trialing subscription that isn't set to cancel, what the trial turns into;
+// nil otherwise. Members read it in their usage, so it carries the coupon's terms only.
+func (s *Service) trialDiscount(ctx context.Context, w db.GetWorkspaceBillingRow) (*SubscriptionDiscount, error) {
+	if !s.BillingEnabled() || !w.StripeSubscriptionID.Valid || w.SubscriptionStatus.String != "trialing" {
+		return nil, nil
+	}
+	var sub struct {
+		Status            string           `json:"status"`
+		CancelAtPeriodEnd bool             `json:"cancel_at_period_end"`
+		CancelAt          int64            `json:"cancel_at"`
+		Currency          string           `json:"currency"`
+		Discounts         []stripeDiscount `json:"discounts"`
+		Items             struct {
+			Data []struct {
+				Price struct {
+					Currency string `json:"currency"`
+				} `json:"price"`
+			} `json:"data"`
+		} `json:"items"`
+	}
+	if err := s.stripe(ctx, "GET", "/v1/subscriptions/"+url.PathEscape(w.StripeSubscriptionID.String)+
+		"?expand[]=discounts.promotion_code", nil, &sub); err != nil {
+		return nil, err
+	}
+	if sub.Status != "trialing" || sub.CancelAtPeriodEnd || sub.CancelAt != 0 {
+		return nil, nil
+	}
+	currency := sub.Currency
+	if currency == "" && len(sub.Items.Data) > 0 {
+		currency = sub.Items.Data[0].Price.Currency
+	}
+	return s.subscriptionDiscount(ctx, sub.Discounts, currency)
 }
 
 // PaymentMethod is a card on file: brand and last four digits only.
@@ -119,28 +197,18 @@ func (s *Service) GetBillingDetails(ctx context.Context, p Principal, after stri
 
 	if w.StripeSubscriptionID.Valid && after == "" {
 		var sub struct {
-			Status             string          `json:"status"`
-			CurrentPeriodStart int64           `json:"current_period_start"`
-			CurrentPeriodEnd   int64           `json:"current_period_end"`
-			CancelAtPeriodEnd  bool            `json:"cancel_at_period_end"`
-			Currency           string          `json:"currency"`
-			CancelAt           int64           `json:"cancel_at"`
-			CanceledAt         int64           `json:"canceled_at"`
-			TrialEnd           int64           `json:"trial_end"`
-			DefaultPM          string          `json:"default_payment_method"`
-			LatestInvoice      json.RawMessage `json:"latest_invoice"`
-			Discounts          []struct {
-				End           int64 `json:"end"`
-				PromotionCode *struct {
-					Code string `json:"code"`
-				} `json:"promotion_code"`
-				Coupon *stripeCoupon `json:"coupon"` // before API 2025-09
-				// From API 2025-09: source.coupon (an id).
-				Source struct {
-					Coupon string `json:"coupon"`
-				} `json:"source"`
-			} `json:"discounts"`
-			Items struct {
+			Status             string           `json:"status"`
+			CurrentPeriodStart int64            `json:"current_period_start"`
+			CurrentPeriodEnd   int64            `json:"current_period_end"`
+			CancelAtPeriodEnd  bool             `json:"cancel_at_period_end"`
+			Currency           string           `json:"currency"`
+			CancelAt           int64            `json:"cancel_at"`
+			CanceledAt         int64            `json:"canceled_at"`
+			TrialEnd           int64            `json:"trial_end"`
+			DefaultPM          string           `json:"default_payment_method"`
+			LatestInvoice      json.RawMessage  `json:"latest_invoice"`
+			Discounts          []stripeDiscount `json:"discounts"`
+			Items              struct {
 				Data []struct {
 					CurrentPeriodStart int64 `json:"current_period_start"`
 					CurrentPeriodEnd   int64 `json:"current_period_end"`
@@ -186,27 +254,8 @@ func (s *Service) GetBillingDetails(ctx context.Context, p Principal, after stri
 		} else if sub.Status == "past_due" && latest.unpaidRenewal() {
 			bs.PastDueFor = "renewal"
 		}
-		if len(sub.Discounts) > 0 {
-			d := sub.Discounts[0]
-			bs.Discount = &SubscriptionDiscount{End: unixTime(d.End)}
-			if d.PromotionCode != nil {
-				bs.Discount.Code = d.PromotionCode.Code
-			}
-			coupon := d.Coupon
-			if coupon == nil && d.Source.Coupon != "" {
-				coupon = &stripeCoupon{}
-				if err := s.stripe(ctx, "GET", "/v1/coupons/"+url.PathEscape(d.Source.Coupon)+"?expand[]=currency_options", nil, coupon); err != nil {
-					return out, err
-				}
-			}
-			if coupon != nil {
-				amount, _ := coupon.amountIn(bs.Currency)
-				bs.Discount.PercentOff, bs.Discount.AmountOff = coupon.PercentOff, amount
-				if amount > 0 {
-					bs.Discount.Currency = bs.Currency
-				}
-				bs.Discount.Duration, bs.Discount.DurationInMonths = coupon.Duration, coupon.DurationInMonths
-			}
+		if bs.Discount, err = s.subscriptionDiscount(ctx, sub.Discounts, bs.Currency); err != nil {
+			return out, err
 		}
 		out.Subscription = &bs
 

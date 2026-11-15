@@ -195,6 +195,7 @@ export type DeviceLink = JSONOf<'/v1/device-links', 'post', 201>
 export type Billing = JSONOf<'/v1/billing', 'get', 200> & { ended_for?: 'payment_failed' | null }
 export type PromotionCode = JSONOf<'/v1/billing/promotion-code', 'post', 200>
 export type BillingDetails = JSONOf<'/v1/billing/details', 'get', 200>
+export type SubscriptionDiscount = Schemas['SubscriptionDiscount']
 export type PendingPayment = JSONOf<'/v1/billing/pending-payment', 'get', 200>
 export type XPosts = JSONOf<'/v1/billing/x-posts', 'get', 200>
 /** How a plan is billed: `year` is twelve whole-dollar months at 20 % off or more. */

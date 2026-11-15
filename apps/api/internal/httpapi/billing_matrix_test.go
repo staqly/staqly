@@ -208,3 +208,71 @@ func TestBillingEndpointsWithBillingOff(t *testing.T) {
 		}
 	}
 }
+
+// Every member reads the promotion code's terms a trialing subscription carries in the usage (the billing details
+// stay admin only): none once the subscription is set to cancel, stops trialing or carries no discount.
+func TestUsageTrialDiscount(t *testing.T) {
+	e := newAccountsEnv(t, "")
+	owner, _, _, viewer, _ := e.team()
+	f := withStripe(t, e.env)
+	if _, err := e.svc.DB.Exec(`UPDATE workspaces SET stripe_customer_id = 'cus_1', stripe_subscription_id = 'sub_1',
+		subscription_status = 'trialing' WHERE id = ?`, e.session(owner).Workspace.ID); err != nil {
+		t.Fatal(err)
+	}
+	discount := map[string]any{"promotion_code": map[string]any{"code": "FREE"},
+		"coupon": map[string]any{"id": "co_free", "percent_off": 100, "duration": "forever"}}
+	sub := map[string]any{"id": "sub_1", "status": "trialing", "currency": "usd", "discounts": []any{discount}}
+	f.set("GET /v1/subscriptions/sub_1", func() (int, any) { return 200, sub })
+	f.set("GET /v1/coupons/co_off", func() (int, any) {
+		return 200, map[string]any{"id": "co_off", "amount_off": 1000, "currency": "eur",
+			"currency_options": map[string]any{"usd": map[string]any{"amount_off": 1200}}, "duration": "repeating", "duration_in_months": 3}
+	})
+	trialDiscount := func(p *person) *app.SubscriptionDiscount {
+		t.Helper()
+		var u app.Usage
+		e.as(p, "GET", "/v1/workspace/usage", nil, 200, &u)
+		return u.TrialDiscount
+	}
+
+	for _, p := range []*person{viewer, owner} {
+		if d := trialDiscount(p); d == nil || d.Code != "FREE" || d.PercentOff != 100 || d.Duration != "forever" {
+			t.Fatalf("trialing with a code: %+v", d)
+		}
+	}
+	e.as(viewer, "GET", "/v1/billing/details", nil, 403, nil)
+
+	// From API 2025-09 the coupon is read by its id, an amount off told in the subscription's currency.
+	delete(discount, "coupon")
+	discount["source"] = map[string]any{"type": "coupon", "coupon": "co_off"}
+	if d := trialDiscount(viewer); d == nil || d.AmountOff != 1200 || d.Currency != "usd" || d.Duration != "repeating" || d.DurationInMonths != 3 {
+		t.Fatalf("coupon by id: %+v", d)
+	}
+
+	for name, tweak := range map[string][2]any{
+		"set to cancel":    {"cancel_at_period_end", true},
+		"cancel at a date": {"cancel_at", time.Now().Add(48 * time.Hour).Unix()},
+		"no discount":      {"discounts", []any{}},
+		"stripe says paid": {"status", "active"},
+	} {
+		key := tweak[0].(string)
+		before, had := sub[key]
+		sub[key] = tweak[1]
+		if d := trialDiscount(viewer); d != nil {
+			t.Errorf("%s: %+v", name, d)
+		}
+		if had {
+			sub[key] = before
+		} else {
+			delete(sub, key)
+		}
+	}
+
+	// Not trialing: Stripe isn't asked.
+	if _, err := e.svc.DB.Exec(`UPDATE workspaces SET subscription_status = 'active'`); err != nil {
+		t.Fatal(err)
+	}
+	calls := f.called("GET /v1/subscriptions/sub_1")
+	if d := trialDiscount(viewer); d != nil || f.called("GET /v1/subscriptions/sub_1") != calls {
+		t.Fatalf("active: %+v", d)
+	}
+}

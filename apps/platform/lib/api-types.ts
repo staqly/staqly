@@ -4159,6 +4159,11 @@ export interface components {
              */
             trial_ends_at: string | null;
             /**
+             * @description The promotion code a trialing subscription carries, what the trial turns into when it ends; null when
+             *     not in a Stripe trial, when the subscription is set to cancel or carries no discount. Every member reads it.
+             */
+            trial_discount: null | components["schemas"]["SubscriptionDiscount"];
+            /**
              * @description The trial or paid period ended unpaid. The workspace is read-only:
              *     reads and exports work, other changes answer 402 `plan_expired` until it is
              *     a plan is paid for (`POST /v1/billing/checkout`).
@@ -4325,28 +4330,29 @@ export interface components {
              */
             past_due_for: "" | "renewal" | "extra";
             /** @description The subscription's discount while it lasts; no other promotion code is taken meanwhile */
-            discount: null | {
-                /**
-                 * @description The promotion code behind it (empty when it was set on a coupon in Stripe)
-                 * @example SPRING20
-                 */
-                code: string;
-                /** @description When it ends (null = never) */
-                end: string | null;
-                /** @description Percent taken off; absent for an amount off. */
-                percent_off?: number;
-                /** @description Amount taken off per invoice, in cents of `currency` (the subscription's); absent for a percent off. */
-                amount_off?: number;
-                /** @example eur */
-                currency?: string;
-                /**
-                 * @description How long the discount lasts.
-                 * @enum {string}
-                 */
-                duration?: "once" | "repeating" | "forever";
-                /** @description Months the discount lasts when `duration` is `repeating`. */
-                duration_in_months?: number;
-            };
+            discount: null | components["schemas"]["SubscriptionDiscount"];
+        };
+        SubscriptionDiscount: {
+            /**
+             * @description The promotion code behind it (empty when it was set on a coupon in Stripe)
+             * @example SPRING20
+             */
+            code: string;
+            /** @description When it ends (null = never) */
+            end: string | null;
+            /** @description Percent taken off; absent for an amount off. */
+            percent_off?: number;
+            /** @description Amount taken off per invoice, in cents of `currency` (the subscription's); absent for a percent off. */
+            amount_off?: number;
+            /** @example eur */
+            currency?: string;
+            /**
+             * @description How long the discount lasts.
+             * @enum {string}
+             */
+            duration?: "once" | "repeating" | "forever";
+            /** @description Months the discount lasts when `duration` is `repeating`. */
+            duration_in_months?: number;
         };
         ProviderCheck: {
             /** @example instagram */
@@ -7151,6 +7157,11 @@ export interface operations {
                          *     trial on a server without billing; null when the workspace is in no trial.
                          */
                         trial_ends_at: string | null;
+                        /**
+                         * @description The promotion code a trialing subscription carries, what the trial turns into when it ends; null when
+                         *     not in a Stripe trial, when the subscription is set to cancel or carries no discount. Every member reads it.
+                         */
+                        trial_discount: null | components["schemas"]["SubscriptionDiscount"];
                         /**
                          * @description The trial or paid period ended unpaid. The workspace is read-only:
                          *     reads and exports work, other changes answer 402 `plan_expired` until it is
