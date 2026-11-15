@@ -360,14 +360,22 @@ func (s *Server) createUploadTicket(w http.ResponseWriter, r *http.Request) {
 	respond(w, r, 201, out, err)
 }
 
-// refuseOversized answers 413 when the declared body is too big for any file the workspace may upload, so
-// nothing of it is read; true when it did.
+// maxDiscard: how much of a refused body is read and dropped so the client, still sending it, can read the 413
+// (closing mid-upload shows most clients a connection error instead). Larger bodies get the connection closed.
+const maxDiscard = 200 << 20
+
+// refuseOversized answers 413 when the declared body is too big for any file the workspace may upload, before
+// anything is staged or stored; true when it did. A client that sent Expect: 100-continue sends no body at all.
 func (s *Server) refuseOversized(w http.ResponseWriter, r *http.Request, p app.Principal) bool {
-	if err := s.svc.CheckUploadSize(r.Context(), p, r.ContentLength); err != nil {
-		writeErr(w, r, err)
-		return true
+	err := s.svc.CheckUploadSize(r.Context(), p, r.ContentLength)
+	if err == nil {
+		return false
 	}
-	return false
+	writeErr(w, r, err)
+	if r.Header.Get("Expect") == "" && r.ContentLength <= maxDiscard {
+		_, _ = io.Copy(io.Discard, r.Body)
+	}
+	return true
 }
 
 func (s *Server) receiveMedia(w http.ResponseWriter, r *http.Request, p app.Principal) {

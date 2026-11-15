@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"slices"
 	"strings"
 	"time"
 )
@@ -73,8 +74,9 @@ func (s *Service) UploadTicketPrincipal(ctx context.Context, raw string) (Princi
 	if err != nil {
 		return Principal{}, bad
 	}
-	t.P.WorkspaceID = ws.ID
-	return t.P, nil
+	// A fresh Principal: its workspace (which names storage paths) comes from the row, nothing else from the ticket.
+	return Principal{WorkspaceID: ws.ID, Kind: t.P.Kind, ID: t.P.ID, Name: t.P.Name, Scopes: slices.Clone(t.P.Scopes),
+		UserID: t.P.UserID, Role: t.P.Role, Guest: t.P.Guest}, nil
 }
 
 func (s *Service) ticketMAC(body string) string {

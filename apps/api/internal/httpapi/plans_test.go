@@ -114,14 +114,14 @@ func TestUploadRefusedByContentLength(t *testing.T) {
 	e.svc.Cfg.MaxUploadBytes = 200 << 20
 	e.plan("starter")
 	for _, path := range []string{"/v1/media", "/v1/media-projects"} {
-		// Headers only, no body: the answer must come from Content-Length alone.
+		// Headers only, as a client waiting for 100 Continue sends them: the answer must come from Content-Length alone.
 		conn, err := net.Dial("tcp", e.srv.Listener.Addr().String())
 		if err != nil {
 			t.Fatal(err)
 		}
 		conn.SetDeadline(time.Now().Add(5 * time.Second))
 		fmt.Fprintf(conn, "POST %s HTTP/1.1\r\nHost: test\r\nAuthorization: Bearer %s\r\n"+
-			"Content-Type: multipart/form-data; boundary=x\r\nContent-Length: %d\r\n\r\n", path, e.key, 50<<20)
+			"Content-Type: multipart/form-data; boundary=x\r\nExpect: 100-continue\r\nContent-Length: %d\r\n\r\n", path, e.key, 50<<20)
 		resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
 		if err != nil {
 			t.Fatalf("%s: %v", path, err)
