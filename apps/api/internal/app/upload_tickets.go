@@ -51,8 +51,9 @@ func (s *Service) MediaUploadTicket(ctx context.Context, p Principal) (UploadTic
 		ExpiresAt: formatTime(exp), MaxBytes: maxBytes}, nil
 }
 
-// UploadTicketPrincipal checks a ticket's signature and expiry and answers whom it was made for.
-func (s *Service) UploadTicketPrincipal(raw string) (Principal, error) {
+// UploadTicketPrincipal checks a ticket's signature and expiry and answers whom it was made for; the workspace
+// is read again, so a deleted one refuses the ticket and its id comes from the database, not the request.
+func (s *Service) UploadTicketPrincipal(ctx context.Context, raw string) (Principal, error) {
 	bad := &Error{Code: "unauthorized", Status: 401, Message: "the upload ticket is invalid or expired; ask for a new one"}
 	body, sig, ok := strings.Cut(raw, ".")
 	want, err := hex.DecodeString(sig)
@@ -68,6 +69,11 @@ func (s *Service) UploadTicketPrincipal(raw string) (Principal, error) {
 	if err != nil || json.Unmarshal(b, &t) != nil || s.Now().Unix() > t.Exp || t.P.WorkspaceID == "" {
 		return Principal{}, bad
 	}
+	ws, err := s.Q.GetWorkspace(ctx, t.P.WorkspaceID)
+	if err != nil {
+		return Principal{}, bad
+	}
+	t.P.WorkspaceID = ws.ID
 	return t.P, nil
 }
 

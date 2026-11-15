@@ -344,7 +344,7 @@ func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request) {
 // uploadMediaDirect: POST /v1/media/direct?ticket=..., a large file sent to the API's own address instead of
 // through the dashboard's proxy (app.MediaUploadTicket); no session or CSRF token, the ticket stands for them.
 func (s *Server) uploadMediaDirect(w http.ResponseWriter, r *http.Request) {
-	p, err := s.svc.UploadTicketPrincipal(r.URL.Query().Get("ticket"))
+	p, err := s.svc.UploadTicketPrincipal(r.Context(), r.URL.Query().Get("ticket"))
 	if err == nil {
 		err = s.svc.CheckWritable(r.Context(), p.WorkspaceID) // the workspace may have been suspended since
 	}
