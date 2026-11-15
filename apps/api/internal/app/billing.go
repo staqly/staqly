@@ -28,7 +28,7 @@ import (
 // setup it needs; Prices overrides a lookup with a price id (STRIPE_PRICE_<PLAN>_<MONTHLY|YEARLY>).
 type BillingConfig struct {
 	SecretKey     string            // STRIPE_SECRET_KEY (sk_test_... or sk_live_...)
-	WebhookSecret string            // STRIPE_WEBHOOK_SECRET (whsec_...; several comma-separated while switching endpoints)
+	WebhookSecret string            // STRIPE_WEBHOOK_SECRET (whsec_...; several comma-separated while two endpoints deliver)
 	Prices        map[string]string // "<plan>_<interval>" -> price id, from STRIPE_PRICE_<PLAN>_<MONTHLY|YEARLY>
 	// ManagedPayments (STRIPE_MANAGED_PAYMENTS): checkouts use Stripe Managed Payments, so Stripe (through Link)
 	// is the merchant of record and handles tax, invoices to the customer, fraud and disputes. The account must
@@ -1411,8 +1411,9 @@ func (s *Service) applySubscription(ctx context.Context, q *db.Queries, sub stri
 		// charge fails, the period wasn't paid for, so the end goes back to where the paid one stopped. An
 		// invoice of another kind left unpaid (a seat added mid-period) leaves the paid period alone, and so does
 		// the renewal of an add-on on a shorter interval than the plan (planPeriod).
+		// An unpaid first payment (incomplete) never grants its plan, nor touches the one the workspace has.
 		start, _, plans := s.planPeriod(sub)
-		if !sub.unpaidRenewal() || start == 0 || !plans {
+		if sub.Status == "incomplete" || !sub.unpaidRenewal() || start == 0 || !plans {
 			return nil
 		}
 		paidUntil := formatTime(time.Unix(start, 0).Add(billingGrace))
@@ -1444,8 +1445,12 @@ func (s *Service) applySubscription(ctx context.Context, q *db.Queries, sub stri
 			end = s.Now().Add(31 * 24 * time.Hour)
 		}
 		return s.changePlan(ctx, q, actor, planID, formatTime(end), reason)
+	case "incomplete_expired":
+		// The first payment never came, so this subscription never granted anything: it neither ends nor shortens
+		// the plan the workspace has (the operator's, another subscription's, a paid period left), nor sets one.
+		return nil
 	}
-	// Canceled, unpaid, paused, incomplete_expired: the plan ends now, so the
+	// Canceled, unpaid, paused: the plan ends now, so the
 	// workspace becomes read-only until it pays again. A plan the operator set since (server set-plan, the admin
 	// panel) stands: an ended subscription told again (a sync, a replayed event) or ending later must not undo it.
 	// shortcut: reads the latest workspace.plan_changed event, so event retention (off by default) forgets it;

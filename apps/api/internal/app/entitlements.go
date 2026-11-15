@@ -57,7 +57,7 @@ var limitFields = []struct {
 	{"channels", 1, LimitChannels, func(l *PlanLimits) *int64 { return &l.Channels }},
 	{"alerts", 1, LimitAlerts, func(l *PlanLimits) *int64 { return &l.Alerts }},
 	{"webhooks", 1, LimitWebhooks, func(l *PlanLimits) *int64 { return &l.Webhooks }},
-	{"api_keys", 1, LimitAPIKeys, func(l *PlanLimits) *int64 { return &l.APIKeys }},
+	{"api_keys", 1, LimitAPIKeys, func(l *PlanLimits) *int64 { return &l.APIKeyCount }},
 	{"posts_per_month", 1, LimitPostsPerMonth, func(l *PlanLimits) *int64 { return &l.PostsPerMonth }},
 	{"x_posts_per_period", 1, LimitXPosts, func(l *PlanLimits) *int64 { return &l.XPostsPerPeriod }},
 	{"linkedin_posts_per_period", 1, LimitLinkedInPosts, func(l *PlanLimits) *int64 { return &l.LinkedInPostsPerPeriod }},

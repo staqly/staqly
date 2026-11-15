@@ -361,8 +361,9 @@ func Load() (Config, error) {
 			// (staqly_<plan>_<month|year>); STRIPE_PRICE_<PLAN>_<MONTHLY|YEARLY> overrides one with a price id.
 			Billing: app.BillingConfig{
 				SecretKey: os.Getenv("STRIPE_SECRET_KEY"),
-				// One whsec_ secret, or several comma-separated (whsec_new,whsec_old): during an API version switch
-				// Stripe delivers from the old and the new endpoint, each signing with its own.
+				// One whsec_ secret, or several comma-separated (whsec_new,whsec_old) while two endpoints deliver, each
+				// signing with its own. An API version upgrade needs neither: the endpoint's version doesn't matter, as
+				// the handlers read objects back from Stripe.
 				WebhookSecret: os.Getenv("STRIPE_WEBHOOK_SECRET"),
 				Prices:        stripePrices(),
 				// Stripe Managed Payments: Stripe is the merchant of record (tax, invoices, disputes).

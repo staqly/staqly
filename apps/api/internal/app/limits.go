@@ -31,7 +31,7 @@ func limitField(l *PlanLimits, key string) (*int64, bool) {
 	case LimitWebhooks:
 		return &l.Webhooks, true
 	case LimitAPIKeys:
-		return &l.APIKeys, true
+		return &l.APIKeyCount, true
 	case LimitStorage:
 		return &l.StorageBytes, true
 	case LimitMaxUpload:

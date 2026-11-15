@@ -17,7 +17,8 @@ import (
 const billingSyncEvery = 10 * time.Minute
 
 // syncSubscription reads the customer's subscription from Stripe and applies it to the workspace: the newest live
-// one, else the newest (a cancelled duplicate is newer than the one that was kept: settleDuplicate).
+// one, else the newest (a cancelled duplicate is newer than the one that was kept: settleDuplicate) that ever ran:
+// an incomplete_expired one changes nothing, so it must not hide an older one's end whose event was lost.
 func (s *Service) syncSubscription(ctx context.Context, customer string) error {
 	var list struct {
 		Data []stripeSubscription `json:"data"`
@@ -37,6 +38,8 @@ func (s *Service) syncSubscription(ctx context.Context, customer string) error {
 	}
 	sub := list.Data[0]
 	if i := slices.IndexFunc(list.Data, func(s stripeSubscription) bool { return liveSubscription(s.Status) }); i >= 0 {
+		sub = list.Data[i]
+	} else if i := slices.IndexFunc(list.Data, func(s stripeSubscription) bool { return s.Status != "incomplete_expired" }); i >= 0 {
 		sub = list.Data[i]
 	}
 	if err := s.tx(ctx, func(q *db.Queries) error { return s.applySubscription(ctx, q, sub, "billing.sync") }); err != nil {

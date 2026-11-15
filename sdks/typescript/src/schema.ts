@@ -615,7 +615,9 @@ export interface paths {
          * Stripe webhook endpoint
          * @description Called by Stripe, not by clients. Verified with the `Stripe-Signature` header and
          *     `STRIPE_WEBHOOK_SECRET` (several comma-separated while an old and a new endpoint both deliver); each
-         *     event id is applied once, so the same event from two endpoints counts once. Handles
+         *     event id is applied once, so the same event from two endpoints counts once. Switching endpoints
+         *     is not needed for a Stripe API version upgrade: the endpoint's API version doesn't matter (objects
+         *     are read back from Stripe), so no secret change is required. Handles
          *     `checkout.session.completed` and `customer.subscription.*`.
          */
         post: operations["stripeWebhook"];

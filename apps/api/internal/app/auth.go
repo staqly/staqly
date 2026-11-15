@@ -600,7 +600,7 @@ func (s *Service) Recover(ctx context.Context, recoveryKey, userAgent string) (R
 // a lost key stops working. Unlimited plans keep every key.
 func (s *Service) revokeLostAdminKeys(ctx context.Context, q *db.Queries, sys Principal) ([]string, error) {
 	plan, err := s.planFor(ctx, q, sys.WorkspaceID)
-	if err != nil || plan.Limits.APIKeys == Unlimited {
+	if err != nil || plan.Limits.APIKeyCount == Unlimited {
 		return []string{}, err
 	}
 	keys, err := q.ListAPIKeys(ctx, sys.WorkspaceID)
@@ -833,7 +833,7 @@ func (s *Service) createKey(ctx context.Context, q *db.Queries, p Principal, nam
 	if err != nil {
 		return APIKey{}, err
 	}
-	if err := checkCount(plan, LimitAPIKeys, plan.Limits.APIKeys, n); err != nil {
+	if err := checkCount(plan, LimitAPIKeys, plan.Limits.APIKeyCount, n); err != nil {
 		return APIKey{}, err
 	}
 	key, err := s.insertKey(ctx, q, p, name, scopes, exp)

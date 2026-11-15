@@ -23,10 +23,10 @@ import (
 func TestPlanLimitValues(t *testing.T) {
 	const mb, gb = 1 << 20, 1 << 30
 	want := map[string]app.PlanLimits{
-		"starter":  {PostsPerMonth: 300, Channels: 5, Alerts: 3, Webhooks: 3, APIKeys: 2, StorageBytes: 2 * gb, MaxUploadBytes: 10 * mb, DataExport: false, XPostsPerPeriod: 50, LinkedInPostsPerPeriod: 100, LinkedInVideosPerPeriod: 5, AIMonthlyCents: 100},
-		"plus":     {PostsPerMonth: 1500, Channels: 15, Alerts: 10, Webhooks: 10, APIKeys: 10, StorageBytes: 10 * gb, MaxUploadBytes: 25 * mb, DataExport: true, XPostsPerPeriod: 100, LinkedInPostsPerPeriod: 300, LinkedInVideosPerPeriod: 15, AIMonthlyCents: 200},
-		"pro":      {PostsPerMonth: 5000, Channels: 40, Alerts: 25, Webhooks: 25, APIKeys: 25, StorageBytes: 30 * gb, MaxUploadBytes: 50 * mb, DataExport: true, XPostsPerPeriod: 250, LinkedInPostsPerPeriod: 600, LinkedInVideosPerPeriod: 30, AIMonthlyCents: 500},
-		"business": {PostsPerMonth: 15000, Channels: 100, Alerts: 50, Webhooks: 50, APIKeys: 50, StorageBytes: 100 * gb, MaxUploadBytes: 100 * mb, DataExport: true, XPostsPerPeriod: 500, LinkedInPostsPerPeriod: 900, LinkedInVideosPerPeriod: 60, AIMonthlyCents: 1000},
+		"starter":  {PostsPerMonth: 300, Channels: 5, Alerts: 3, Webhooks: 3, APIKeyCount: 2, StorageBytes: 2 * gb, MaxUploadBytes: 10 * mb, DataExport: false, XPostsPerPeriod: 50, LinkedInPostsPerPeriod: 100, LinkedInVideosPerPeriod: 5, AIMonthlyCents: 100},
+		"plus":     {PostsPerMonth: 1500, Channels: 15, Alerts: 10, Webhooks: 10, APIKeyCount: 10, StorageBytes: 10 * gb, MaxUploadBytes: 25 * mb, DataExport: true, XPostsPerPeriod: 100, LinkedInPostsPerPeriod: 300, LinkedInVideosPerPeriod: 15, AIMonthlyCents: 200},
+		"pro":      {PostsPerMonth: 5000, Channels: 40, Alerts: 25, Webhooks: 25, APIKeyCount: 25, StorageBytes: 30 * gb, MaxUploadBytes: 50 * mb, DataExport: true, XPostsPerPeriod: 250, LinkedInPostsPerPeriod: 600, LinkedInVideosPerPeriod: 30, AIMonthlyCents: 500},
+		"business": {PostsPerMonth: 15000, Channels: 100, Alerts: 50, Webhooks: 50, APIKeyCount: 50, StorageBytes: 100 * gb, MaxUploadBytes: 100 * mb, DataExport: true, XPostsPerPeriod: 500, LinkedInPostsPerPeriod: 900, LinkedInVideosPerPeriod: 60, AIMonthlyCents: 1000},
 	}
 	prices := map[string][2]int{"starter": {15, 144}, "plus": {29, 276}, "pro": {59, 564}, "business": {99, 948}}
 	for id, pr := range prices {
@@ -52,7 +52,7 @@ func TestPlanLimitValues(t *testing.T) {
 		t.Error("local installs must be able to export")
 	}
 	for name, v := range map[string]int64{"posts": ul.PostsPerMonth, "channels": ul.Channels, "alerts": ul.Alerts, "webhooks": ul.Webhooks,
-		"api_keys": ul.APIKeys, "storage": ul.StorageBytes, "upload": ul.MaxUploadBytes, "x_posts": ul.XPostsPerPeriod,
+		"api_keys": ul.APIKeyCount, "storage": ul.StorageBytes, "upload": ul.MaxUploadBytes, "x_posts": ul.XPostsPerPeriod,
 		"linkedin_posts": ul.LinkedInPostsPerPeriod, "linkedin_videos": ul.LinkedInVideosPerPeriod} {
 		if v != app.Unlimited {
 			t.Errorf("unlocked %s = %d, want unlimited", name, v)
