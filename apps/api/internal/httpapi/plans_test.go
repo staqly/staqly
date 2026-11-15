@@ -1,8 +1,11 @@
 package httpapi_test
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -20,9 +23,9 @@ import (
 func TestPlanLimitValues(t *testing.T) {
 	const mb, gb = 1 << 20, 1 << 30
 	want := map[string]app.PlanLimits{
-		"starter":  {PostsPerMonth: 300, Channels: 5, Alerts: 3, Webhooks: 3, APIKeys: 2, StorageBytes: 2 * gb, MaxUploadBytes: 25 * mb, DataExport: false, XPostsPerPeriod: 50, LinkedInPostsPerPeriod: 100, LinkedInVideosPerPeriod: 5, AIMonthlyCents: 100},
-		"plus":     {PostsPerMonth: 1500, Channels: 15, Alerts: 10, Webhooks: 10, APIKeys: 10, StorageBytes: 10 * gb, MaxUploadBytes: 100 * mb, DataExport: true, XPostsPerPeriod: 100, LinkedInPostsPerPeriod: 300, LinkedInVideosPerPeriod: 15, AIMonthlyCents: 200},
-		"pro":      {PostsPerMonth: 5000, Channels: 40, Alerts: 25, Webhooks: 25, APIKeys: 25, StorageBytes: 30 * gb, MaxUploadBytes: 100 * mb, DataExport: true, XPostsPerPeriod: 250, LinkedInPostsPerPeriod: 600, LinkedInVideosPerPeriod: 30, AIMonthlyCents: 500},
+		"starter":  {PostsPerMonth: 300, Channels: 5, Alerts: 3, Webhooks: 3, APIKeys: 2, StorageBytes: 2 * gb, MaxUploadBytes: 10 * mb, DataExport: false, XPostsPerPeriod: 50, LinkedInPostsPerPeriod: 100, LinkedInVideosPerPeriod: 5, AIMonthlyCents: 100},
+		"plus":     {PostsPerMonth: 1500, Channels: 15, Alerts: 10, Webhooks: 10, APIKeys: 10, StorageBytes: 10 * gb, MaxUploadBytes: 25 * mb, DataExport: true, XPostsPerPeriod: 100, LinkedInPostsPerPeriod: 300, LinkedInVideosPerPeriod: 15, AIMonthlyCents: 200},
+		"pro":      {PostsPerMonth: 5000, Channels: 40, Alerts: 25, Webhooks: 25, APIKeys: 25, StorageBytes: 30 * gb, MaxUploadBytes: 50 * mb, DataExport: true, XPostsPerPeriod: 250, LinkedInPostsPerPeriod: 600, LinkedInVideosPerPeriod: 30, AIMonthlyCents: 500},
 		"business": {PostsPerMonth: 15000, Channels: 100, Alerts: 50, Webhooks: 50, APIKeys: 50, StorageBytes: 100 * gb, MaxUploadBytes: 100 * mb, DataExport: true, XPostsPerPeriod: 500, LinkedInPostsPerPeriod: 900, LinkedInVideosPerPeriod: 60, AIMonthlyCents: 1000},
 	}
 	prices := map[string][2]int{"starter": {15, 144}, "plus": {29, 276}, "pro": {59, 564}, "business": {99, 948}}
@@ -62,19 +65,103 @@ func TestPlanLimitValues(t *testing.T) {
 	}
 }
 
-// The per-plan file size limit is enforced by the API (402), below the
-// operator's MAX_UPLOAD_MB.
+// The per-plan file size limit is enforced by the API (413 plan_limit_exceeded, naming the plan that takes
+// bigger files), below the operator's MAX_UPLOAD_MB.
 func TestPlanUploadLimit(t *testing.T) {
 	e := newEnv(t)
 	e.svc.Cfg.MaxUploadBytes = 200 << 20
 	file := func(mb int) []byte { return append(append([]byte{}, pngBytes...), make([]byte, mb<<20)...) }
+	var errBody struct {
+		Error struct {
+			Code    string         `json:"code"`
+			Message string         `json:"message"`
+			Details map[string]any `json:"details"`
+		} `json:"error"`
+	}
 
 	e.free()
-	e.upload("/v1/media", e.key, nil, "big.png", file(6), 402, nil) // the test plan: 5 MB
+	e.upload("/v1/media", e.key, nil, "big.png", file(6), 413, nil) // the test plan: 5 MB
 	e.upload("/v1/media", e.key, nil, "ok.png", file(4), 201, nil)
+	for _, c := range []struct {
+		plan    string
+		ok, big int
+		msg     string
+	}{
+		{"starter", 9, 11, "The Starter plan takes files up to 10 MB; Plus takes files up to 25 MB."},
+		{"plus", 24, 26, "The Plus plan takes files up to 25 MB; Pro takes files up to 50 MB."},
+		{"pro", 49, 51, "The Pro plan takes files up to 50 MB; Business takes files up to 100 MB."},
+		{"business", 99, 101, "The Business plan takes files up to 100 MB."},
+	} {
+		e.plan(c.plan)
+		e.upload("/v1/media", e.key, nil, "ok.png", file(c.ok), 201, nil)
+		e.upload("/v1/media", e.key, nil, "big.png", file(c.big), 413, &errBody)
+		if errBody.Error.Code != "plan_limit_exceeded" || errBody.Error.Message != c.msg || errBody.Error.Details["plan"] != c.plan {
+			t.Errorf("%s: %+v, want %q", c.plan, errBody.Error, c.msg)
+		}
+	}
+	// Under MAX_UPLOAD_MB the server's limit is what the error names.
+	e.svc.Cfg.MaxUploadBytes = 30 << 20
+	e.plan("pro")
+	e.upload("/v1/media", e.key, nil, "big.png", file(31), 413, &errBody)
+	if errBody.Error.Code != "too_large" || errBody.Error.Message != "Files can be up to 30 MB." {
+		t.Errorf("server limit: %+v", errBody.Error)
+	}
+}
+
+// A body that says it is bigger than any file the plan takes is refused before it is read.
+func TestUploadRefusedByContentLength(t *testing.T) {
+	e := newEnv(t)
+	e.svc.Cfg.MaxUploadBytes = 200 << 20
+	e.plan("starter")
+	for _, path := range []string{"/v1/media", "/v1/media-projects"} {
+		// Headers only, as a client waiting for 100 Continue sends them: the answer must come from Content-Length alone.
+		conn, err := net.Dial("tcp", e.srv.Listener.Addr().String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		conn.SetDeadline(time.Now().Add(5 * time.Second))
+		fmt.Fprintf(conn, "POST %s HTTP/1.1\r\nHost: test\r\nAuthorization: Bearer %s\r\n"+
+			"Content-Type: multipart/form-data; boundary=x\r\nExpect: 100-continue\r\nContent-Length: %d\r\n\r\n", path, e.key, 50<<20)
+		resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+		if err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		raw, _ := io.ReadAll(resp.Body)
+		conn.Close()
+		if resp.StatusCode != 413 || !strings.Contains(string(raw), "The Starter plan takes files up to 10 MB") {
+			t.Errorf("%s: %d %s", path, resp.StatusCode, raw)
+		}
+	}
+}
+
+// Files too big for the dashboard's proxy go to POST /v1/media/direct with a ticket from
+// POST /v1/media/upload-tickets: no session, the same checks as POST /v1/media.
+func TestDirectUpload(t *testing.T) {
+	e := newEnv(t)
+	e.svc.Cfg.MaxUploadBytes = 200 << 20
 	e.plan("plus")
-	e.upload("/v1/media", e.key, nil, "big.png", file(6), 201, nil) // Plus: 100 MB
-	e.upload("/v1/media", e.key, nil, "huge.png", file(101), 402, nil)
+	var tk app.UploadTicket
+	e.do(nil, "POST", "/v1/media/upload-tickets", e.key, nil, 201, &tk)
+	if tk.MaxBytes != 25<<20 || !strings.Contains(tk.URL, "/v1/media/direct?ticket=") {
+		t.Fatalf("ticket: %+v", tk)
+	}
+	direct := strings.Replace(tk.URL, e.svc.Cfg.PublicURL, "", 1)
+	var m app.Media
+	e.upload(direct, "", nil, "a.png", pngBytes, 201, &m)
+	if m.MimeType != "image/png" {
+		t.Fatalf("media: %+v", m)
+	}
+	var dup app.Media
+	e.upload(direct+"&reuse=true", "", nil, "again.png", pngBytes, 201, &dup)
+	if dup.ID != m.ID {
+		t.Errorf("reuse made a second file: %s, %s", m.ID, dup.ID)
+	}
+	e.upload(direct, "", nil, "page.html", []byte("<html></html>"), 415, nil)
+	e.upload(direct, "", nil, "big.png", append(append([]byte{}, pngBytes...), make([]byte, 26<<20)...), 413, nil)
+	e.upload(direct[:len(direct)-2]+"00", "", nil, "a.png", pngBytes, 401, nil) // signature changed
+	e.upload("/v1/media/direct", "", nil, "a.png", pngBytes, 401, nil)
+	e.svc.Now = func() time.Time { return time.Now().Add(app.UploadTicketTTL + time.Minute) }
+	e.upload(direct, "", nil, "a.png", pngBytes, 401, nil) // expired
 }
 
 // A new cloud workspace gets a 7-day Starter trial; unpaid afterwards it is read-only

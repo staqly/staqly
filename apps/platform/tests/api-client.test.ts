@@ -198,6 +198,94 @@ describe('refusals the app treats in their own way', () => {
   })
 })
 
+/** XMLHttpRequest as far as uploadMediaWithProgress uses it; each send answers `answer`. */
+function fakeXhr(answer: { status: number; body: unknown }) {
+  const sent: { url: string; headers: Record<string, string> }[] = []
+
+  class FakeXhr extends EventTarget {
+    upload = new EventTarget()
+    status = 0
+    responseText = ''
+    private req = { url: '', headers: {} as Record<string, string> }
+
+    open(_method: string, url: string) {
+      this.req.url = url
+    }
+
+    setRequestHeader(k: string, v: string) {
+      this.req.headers[k] = v
+    }
+
+    abort() {}
+
+    send() {
+      sent.push(this.req)
+      this.status = answer.status
+      this.responseText = JSON.stringify(answer.body)
+      queueMicrotask(() => {
+        this.dispatchEvent(new Event('load'))
+        this.dispatchEvent(new Event('loadend'))
+      })
+    }
+  }
+
+  vi.stubGlobal('XMLHttpRequest', FakeXhr)
+
+  return sent
+}
+
+function blobOf(size: number) {
+  const b = new Blob(['x'], { type: 'video/mp4' })
+
+  Object.defineProperty(b, 'size', { value: size })
+
+  return b
+}
+
+describe('media uploads', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('a file over 90 MB goes to the upload ticket, with no session token, keeping reuse', async () => {
+    const mocked = mockApi({
+      'POST /v1/media/upload-tickets': {
+        status: 201,
+        body: {
+          url: 'https://api.example/v1/media/direct?ticket=t.s',
+          expires_at: '2026-11-15T00:10:00Z',
+          max_bytes: 100 * 2 ** 20,
+        },
+      },
+    })
+    const sent = fakeXhr({ status: 201, body: { id: 'med_big', mime_type: 'video/mp4' } })
+
+    const m = await api.uploadMedia(blobOf(95 * 2 ** 20), 'big.mp4', { reuse: true })
+
+    expect(m.id).toBe('med_big')
+    expect(mocked.find('POST', '/v1/media/upload-tickets')).toHaveLength(1)
+    expect(sent).toEqual([
+      { url: 'https://api.example/v1/media/direct?ticket=t.s&reuse=true', headers: { Accept: 'application/json' } },
+    ])
+  })
+
+  it("a direct upload's 401 is its ticket: the person stays signed in", async () => {
+    mockApi({
+      'POST /v1/media/upload-tickets': {
+        status: 201,
+        body: { url: 'https://api.example/v1/media/direct?ticket=t.s', expires_at: '', max_bytes: 0 },
+      },
+    })
+    fakeXhr({
+      status: 401,
+      body: { error: { code: 'unauthorized', message: 'the upload ticket is invalid or expired' } },
+    })
+    const signedOut = vi.fn<(e: ApiError) => void>()
+
+    onUnauthorized(signedOut)
+    expect((await failure(api.uploadMedia(blobOf(95 * 2 ** 20), 'big.mp4'))).status).toBe(401)
+    expect(signedOut).not.toHaveBeenCalled()
+  })
+})
+
 describe('answers that are not our JSON', () => {
   it('an empty 204 is no value', async () => {
     mockApi({ 'DELETE /v1/members/usr_1': { status: 204 } })

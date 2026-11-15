@@ -417,6 +417,10 @@ func Load() (Config, error) {
 	if c.LogFormat, err = logctx.ParseFormat(os.Getenv("LOG_FORMAT"), "json"); err != nil {
 		return Config{}, err
 	}
+	// The dashboard sends files too big for its proxy to the API's own address (POST /v1/media/direct).
+	if !local && c.App.PublicDashboardURL != "" {
+		c.CORSOrigins = append(c.CORSOrigins, strings.TrimRight(c.App.PublicDashboardURL, "/"))
+	}
 	return c, nil
 }
 

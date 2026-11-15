@@ -53,9 +53,21 @@ describe('a plan limit in plain words', () => {
     expect(describePlanLimit({ limit: 'storage_bytes', max: 5 * GB, used: 4.5 * GB, plan: 'starter' }, 'x')).toBe(
       'Your Starter plan includes 5 GB of storage (4.5 GB used).',
     )
-    expect(describePlanLimit({ limit: 'max_upload_bytes', max: 25 * 1024 ** 2, plan: 'starter' }, 'x')).toBe(
-      'Your Starter plan accepts files up to 25 MB.',
+    expect(describePlanLimit({ limit: 'max_upload_bytes', max: 10 * 1024 ** 2, plan: 'starter' }, 'x')).toBe(
+      'The Starter plan takes files up to 10 MB.',
     )
+    expect(
+      describePlanLimit(
+        {
+          limit: 'max_upload_bytes',
+          max: 50 * 1024 ** 2,
+          plan: 'pro',
+          upgrade_plan: 'business',
+          upgrade_max: 100 * 1024 ** 2,
+        },
+        'x',
+      ),
+    ).toBe('The Pro plan takes files up to 50 MB; Business takes files up to 100 MB.')
   })
 
   it("falls back to the server's message when it sent no numbers", () => {

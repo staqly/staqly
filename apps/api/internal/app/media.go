@@ -211,13 +211,9 @@ func (s *Service) uploadMedia(ctx context.Context, p Principal, filename string,
 	if !ok {
 		return Media{}, &Error{Code: "unsupported_media_type", Status: 415, Message: "file type " + mime + " is not allowed: upload " + acceptedMedia}
 	}
-	plan, err := s.planFor(ctx, s.Q, p.WorkspaceID)
+	plan, maxBytes, err := s.uploadMax(ctx, s.Q, p.WorkspaceID)
 	if err != nil {
 		return Media{}, err
-	}
-	maxBytes := s.Cfg.MaxUploadBytes
-	if l := plan.Limits.MaxUploadBytes; l != Unlimited && l < maxBytes {
-		maxBytes = l
 	}
 	used, err := s.Q.StorageUsed(ctx, p.WorkspaceID)
 	if err != nil {
@@ -251,10 +247,8 @@ func (s *Service) uploadMedia(ctx context.Context, p Principal, filename string,
 	}
 	switch {
 	case err != nil:
-	case n > maxBytes && maxBytes < s.Cfg.MaxUploadBytes:
-		err = limitErr(plan, LimitMaxUpload, maxBytes, n)
 	case n > maxBytes:
-		err = &Error{Code: "too_large", Status: 413, Message: "file exceeds upload limit"}
+		err = s.uploadTooLarge(ctx, s.Q, plan, maxBytes, n)
 	case plan.Limits.StorageBytes != Unlimited && used+n > plan.Limits.StorageBytes:
 		// Refused before the store sees the file; checked again with the insert below (concurrent uploads).
 		err = limitErr(plan, LimitStorage, plan.Limits.StorageBytes, used)
@@ -288,7 +282,7 @@ func (s *Service) uploadMedia(ctx context.Context, p Principal, filename string,
 			return err
 		}
 		if limit := plan.Limits.MaxUploadBytes; limit != Unlimited && n > limit {
-			return &Error{Code: "too_large", Status: 413, Message: "file exceeds the current plan's upload limit"}
+			return s.uploadTooLarge(ctx, q, plan, limit, n)
 		}
 		if plan.Limits.StorageBytes != Unlimited {
 			used, err := q.StorageUsed(ctx, p.WorkspaceID)

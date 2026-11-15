@@ -627,7 +627,9 @@ func (e *env) upload(path, key string, fields map[string]string, filename string
 	body, ct := multipartBody(e.t, fields, filename, content)
 	req, _ := http.NewRequest("POST", e.srv.URL+path, body)
 	req.Header.Set("Content-Type", ct)
-	req.Header.Set("Authorization", "Bearer "+key)
+	if key != "" {
+		req.Header.Set("Authorization", "Bearer "+key)
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		e.t.Fatal(err)

@@ -53,6 +53,11 @@ export function planName(id?: string) {
   return PLAN_NAMES[id] ?? id.charAt(0).toUpperCase() + id.slice(1)
 }
 
+/** A file over the plan's size, in the API's words (uploadTooLarge in apps/api/internal/app/plans.go). */
+export function uploadLimitMessage(plan: string, max: number, next?: { name: string; max: number }) {
+  return `The ${plan} plan takes files up to ${formatBytes(max)}${next ? `; ${next.name} takes files up to ${formatBytes(next.max)}` : ''}.`
+}
+
 /** Human description of a plan limit, e.g. "Your Starter plan includes 3 webhooks (3 used)." */
 export function describePlanLimit(d: PlanLimitDetails | undefined, fallback: string): string {
   if (!d?.limit || d.max === undefined) {
@@ -62,7 +67,13 @@ export function describePlanLimit(d: PlanLimitDetails | undefined, fallback: str
   const plan = d.plan ? `Your ${planName(d.plan)} plan` : 'Your plan'
 
   if (d.limit === 'max_upload_bytes') {
-    return `${plan} accepts files up to ${formatBytes(d.max)}.`
+    if (!d.plan) {
+      return `${plan} accepts files up to ${formatBytes(d.max)}.`
+    }
+
+    const next = d.upgrade_plan && d.upgrade_max ? { name: planName(d.upgrade_plan), max: d.upgrade_max } : undefined
+
+    return uploadLimitMessage(planName(d.plan), d.max, next)
   }
 
   if (d.limit === 'storage_bytes') {

@@ -203,12 +203,15 @@ export type BillingInterval = 'month' | 'year'
 export type LimitKey = keyof PlanLimits
 export const UNLIMITED = -1
 
-/** Details of a 402 plan_limit_exceeded error. */
+/** Details of a plan_limit_exceeded error (402; 413 for a file over the plan's size). */
 export interface PlanLimitDetails {
   limit?: LimitKey | (string & {})
   max?: number
   used?: number
   plan?: string
+  /** A file over the plan's size: the next plan that takes bigger files, and its size. */
+  upgrade_plan?: string
+  upgrade_max?: number
 }
 export type APIKeyList = JSONOf<'/v1/api-keys', 'get', 200>
 export type Health = JSONOf<'/health', 'get', 200>
@@ -508,23 +511,37 @@ export async function assistantChat(
 }
 
 /**
+ * Files over this go straight to the API's own address (an upload ticket) instead of through the dashboard's
+ * proxy, which relays bodies up to 95 MB (a Cloudflare proxy in front refuses more than 100 MB).
+ */
+export const PROXY_FILE_MAX = 90 * 2 ** 20
+
+export type UploadTicket = JSONOf<'/v1/media/upload-tickets', 'post', 201>
+
+/**
  * Uploads one file to the media library and reports progress (0 to 1): XMLHttpRequest, because fetch can't
- * tell how much of a request body went out.
+ * tell how much of a request body went out. A file over PROXY_FILE_MAX goes to the URL of an upload ticket.
  */
 export async function uploadMediaWithProgress(
-  file: File,
+  file: Blob,
   onProgress: (share: number) => void,
   signal?: AbortSignal,
+  opts: { name?: string; reuse?: boolean } = {},
 ): Promise<Media> {
-  const token = csrfToken !== null ? csrfToken : await fetchCsrf().catch(() => null)
+  const direct = file.size > PROXY_FILE_MAX
+  const ticket = direct
+    ? await request<UploadTicket>('/v1/media/upload-tickets', { method: 'POST', signal })
+    : undefined
+  const token = direct ? null : csrfToken !== null ? csrfToken : await fetchCsrf().catch(() => null)
   const form = new FormData()
+  const reuse = opts.reuse ? 'reuse=true' : ''
 
-  form.append('file', file, file.name)
+  form.append('file', file, opts.name ?? (file instanceof File ? file.name : 'upload'))
 
   return new Promise<Media>((resolve, reject) => {
     const xhr = new XMLHttpRequest()
 
-    xhr.open('POST', `${API_PREFIX}/v1/media`)
+    xhr.open('POST', ticket ? `${ticket.url}${reuse && `&${reuse}`}` : `${API_PREFIX}/v1/media${reuse && `?${reuse}`}`)
     xhr.setRequestHeader('Accept', 'application/json')
 
     if (token) {
@@ -566,7 +583,8 @@ export async function uploadMediaWithProgress(
       const err = new ApiError(xhr.status, errBody, typeof data === 'string' && data.length < 200 ? data : undefined)
 
       // Signed out meanwhile (session expired, another tab signed out): the same sign-in path as every request.
-      if (err.status === 401) {
+      // A direct upload's 401 is its ticket, not the session.
+      if (err.status === 401 && !direct) {
         setCsrfToken(null)
         unauthorizedHandler?.(err)
       }
@@ -842,6 +860,10 @@ export const api = {
   // Media
   /** `reuse`: an identical file already in the library is returned instead of stored again. */
   uploadMedia: (file: File | Blob, fileName?: string, opts: { reuse?: boolean } = {}) => {
+    if (file.size > PROXY_FILE_MAX) {
+      return uploadMediaWithProgress(file, () => {}, undefined, { name: fileName, reuse: opts.reuse })
+    }
+
     const form = new FormData()
 
     form.append('file', file, fileName ?? (file instanceof File ? file.name : 'upload'))

@@ -315,7 +315,7 @@ describe('cloud: auth, scopes and plan limits', () => {
       expect([pch.type, pch.limit]).toEqual(['PlanLimitError', 'channels'])
     }
 
-    // 26 MB is over Starter's 25 MB per file
+    // 26 MB is over Starter's 10 MB per file
     const big = Buffer.concat([Buffer.from('RIFF\x24\x00\x00\x00WAVEfmt ', 'latin1'), randomBytes(26 << 20)])
     const up = await errorOf(c.media.upload(big, { filename: 'big.wav' }))
 

@@ -133,14 +133,14 @@ describe('Starter plan limits (402)', () => {
     expect((await usage()).channels).toBe(5)
   })
 
-  it('files up to 25 MB', async () => {
+  it('files up to 10 MB (413, naming the plan that takes more)', async () => {
     const big = new FormData()
 
-    // A real PNG header (types are detected from content) padded past 25 MB.
-    big.set('file', new Blob([Buffer.concat([png, Buffer.alloc(26 << 20)])], { type: 'image/png' }), 'big.png')
+    // A real PNG header (types are detected from content) padded past 10 MB.
+    big.set('file', new Blob([Buffer.concat([png, Buffer.alloc(11 << 20)])], { type: 'image/png' }), 'big.png')
     const res = await withKey(ws.key, '/v1/media', { method: 'POST', form: big })
 
-    expect(res.status).toBe(402)
+    expect(res.status).toBe(413)
     expect(limitOf(res)).toBe('max_upload_bytes')
     expect((await usage()).storage_bytes ?? 0).toBe(0)
   })

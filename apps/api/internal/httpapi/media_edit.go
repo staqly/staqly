@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -66,6 +68,9 @@ func multipartFields(w http.ResponseWriter, r *http.Request, max int64, withFile
 }
 
 func (s *Server) replaceMedia(w http.ResponseWriter, r *http.Request) {
+	if s.refuseOversized(w, r, principal(r)) {
+		return
+	}
 	var out app.Media
 	err := multipartFields(w, r, s.svc.Cfg.MaxUploadBytes+(1<<20), func(_ map[string]string, name string, f io.Reader) error {
 		var err error
@@ -86,6 +91,9 @@ func (s *Server) getMediaProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) saveMediaProject(w http.ResponseWriter, r *http.Request) {
+	if s.refuseOversized(w, r, principal(r)) {
+		return
+	}
 	id := chi.URLParam(r, "id")
 	var out app.MediaProject
 	err := multipartFields(w, r, s.svc.Cfg.MaxUploadBytes+(1<<20), func(fields map[string]string, _ string, f io.Reader) error {
@@ -155,7 +163,12 @@ func (s *Server) getAI(w http.ResponseWriter, r *http.Request) {
 func (s *Server) createAIJob(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 2*app.MaxAIImageBytes+(1<<20))
 	if err := r.ParseMultipartForm(8 << 20); err != nil { // #nosec G120 -- the body is capped by http.MaxBytesReader above
-		writeErr(w, r, &app.Error{Code: "bad_request", Status: 400, Message: "expected multipart/form-data with an operation"})
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			writeErr(w, r, &app.Error{Code: "too_large", Status: 413, Message: fmt.Sprintf("send an image and a mask of up to %d MB each", app.MaxAIImageBytes>>20)})
+		} else {
+			writeErr(w, r, &app.Error{Code: "bad_request", Status: 400, Message: "expected multipart/form-data with an operation"})
+		}
 		return
 	}
 	defer r.MultipartForm.RemoveAll()

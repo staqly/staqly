@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -31,8 +32,11 @@ import (
 	"github.com/staqly/staqly/apps/api/internal/logctx"
 )
 
-// MaxProxyBodyBytes caps proxied request bodies (the API's default upload limit is 100 MB).
-const MaxProxyBodyBytes = 110 << 20
+// MaxProxyBodyBytes caps proxied request bodies below the 100 MB a Cloudflare proxy in front takes. The dashboard
+// sends files over 90 MB to the API's own address instead (POST /v1/media/upload-tickets).
+const MaxProxyBodyBytes = 95 << 20
+
+var proxyTooLarge = fmt.Sprintf("request body too large: at most %d MB", MaxProxyBodyBytes>>20)
 
 // Inline scripts/styles: Next's bootstrap and next-themes' no-flash script are
 // inline, and a static export cannot use nonces.
@@ -247,7 +251,7 @@ func apiProxy(upstream *url.URL, log *slog.Logger, trustProxy bool, relayToken s
 			var tooBig *http.MaxBytesError
 			switch {
 			case errors.As(err, &tooBig):
-				errorJSON(w, http.StatusRequestEntityTooLarge, "too_large", "request body too large")
+				errorJSON(w, http.StatusRequestEntityTooLarge, "too_large", proxyTooLarge)
 			case r.Context().Err() != nil: // the browser went away
 			default:
 				log.Error("api proxy", "method", r.Method, "path", logctx.RedactPath(r.URL.Path), "err", err)
@@ -257,7 +261,7 @@ func apiProxy(upstream *url.URL, log *slog.Logger, trustProxy bool, relayToken s
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.ContentLength > MaxProxyBodyBytes {
-			errorJSON(w, http.StatusRequestEntityTooLarge, "too_large", "request body too large")
+			errorJSON(w, http.StatusRequestEntityTooLarge, "too_large", proxyTooLarge)
 			return
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxProxyBodyBytes)

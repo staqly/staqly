@@ -338,6 +338,50 @@ func (s *Server) deleteCollection(w http.ResponseWriter, r *http.Request) {
 // ---- media ----
 
 func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request) {
+	s.receiveMedia(w, r, principal(r))
+}
+
+// uploadMediaDirect: POST /v1/media/direct?ticket=..., a large file sent to the API's own address instead of
+// through the dashboard's proxy (app.MediaUploadTicket); no session or CSRF token, the ticket stands for them.
+func (s *Server) uploadMediaDirect(w http.ResponseWriter, r *http.Request) {
+	p, err := s.svc.UploadTicketPrincipal(r.Context(), r.URL.Query().Get("ticket"))
+	if err == nil {
+		err = s.svc.CheckWritable(r.Context(), p.WorkspaceID) // the workspace may have been suspended since
+	}
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	s.receiveMedia(w, r, p)
+}
+
+func (s *Server) createUploadTicket(w http.ResponseWriter, r *http.Request) {
+	out, err := s.svc.MediaUploadTicket(r.Context(), principal(r))
+	respond(w, r, 201, out, err)
+}
+
+// maxDiscard: how much of a refused body is read and dropped so the client, still sending it, can read the 413
+// (closing mid-upload shows most clients a connection error instead). Larger bodies get the connection closed.
+const maxDiscard = 200 << 20
+
+// refuseOversized answers 413 when the declared body is too big for any file the workspace may upload, before
+// anything is staged or stored; true when it did. A client that sent Expect: 100-continue sends no body at all.
+func (s *Server) refuseOversized(w http.ResponseWriter, r *http.Request, p app.Principal) bool {
+	err := s.svc.CheckUploadSize(r.Context(), p, r.ContentLength)
+	if err == nil {
+		return false
+	}
+	writeErr(w, r, err)
+	if r.Header.Get("Expect") == "" && r.ContentLength <= maxDiscard {
+		_, _ = io.Copy(io.Discard, r.Body)
+	}
+	return true
+}
+
+func (s *Server) receiveMedia(w http.ResponseWriter, r *http.Request, p app.Principal) {
+	if s.refuseOversized(w, r, p) {
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, s.svc.Cfg.MaxUploadBytes+(1<<20))
 	mr, err := r.MultipartReader()
 	if err != nil {
@@ -351,7 +395,7 @@ func (s *Server) uploadMedia(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if part.FormName() == "file" {
-			out, err := s.svc.UploadMedia(r.Context(), principal(r), part.FileName(), part, r.URL.Query().Get("reuse") == "true")
+			out, err := s.svc.UploadMedia(r.Context(), p, part.FileName(), part, r.URL.Query().Get("reuse") == "true")
 			respond(w, r, 201, out, err)
 			return
 		}

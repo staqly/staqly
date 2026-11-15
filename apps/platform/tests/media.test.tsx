@@ -255,6 +255,7 @@ describe('media library page', () => {
     mockApi({
       'GET /v1/media': { data: [] },
       'GET /v1/workspace/usage': usage(PLANS[0]!),
+      'GET /v1/plans': { data: PLANS },
     })
     const user = userEvent.setup()
 
@@ -262,9 +263,14 @@ describe('media library page', () => {
     expect(await screen.findByText('No media yet')).toBeInTheDocument()
     const big = new File([new Uint8Array(1)], 'huge.mp4', { type: 'video/mp4' })
 
-    Object.defineProperty(big, 'size', { value: 5 * 1024 * 1024 * 1024 })
+    Object.defineProperty(big, 'size', { value: 12 * 1024 * 1024 })
     await user.upload(screen.getByTestId('media-upload-input'), big)
-    expect(await screen.findByText('Too big: 5 GB. Your plan takes files up to 25 MB.')).toBeInTheDocument()
+    // The API's own words for the same refusal (plans.go uploadTooLarge), with the plan that takes it.
+    expect(
+      await screen.findByText(
+        'Too big: 12 MB. The Starter plan takes files up to 10 MB; Plus takes files up to 25 MB.',
+      ),
+    ).toBeInTheDocument()
   })
 
   it('refuses a file that is no picture, video or audio before uploading, in plain words', async () => {

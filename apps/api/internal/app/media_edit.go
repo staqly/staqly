@@ -372,13 +372,9 @@ func (s *Service) SaveMediaProject(ctx context.Context, p Principal, id string, 
 			return MediaProject{}, notFound("project")
 		}
 	}
-	plan, err := s.planFor(ctx, s.Q, p.WorkspaceID)
+	plan, maxBytes, err := s.uploadMax(ctx, s.Q, p.WorkspaceID)
 	if err != nil {
 		return MediaProject{}, err
-	}
-	maxBytes := s.Cfg.MaxUploadBytes
-	if l := plan.Limits.MaxUploadBytes; l != Unlimited && l < maxBytes {
-		maxBytes = l
 	}
 	if err := os.MkdirAll(s.Cfg.Blob.TempDir(), 0o750); err != nil {
 		return MediaProject{}, err
@@ -395,7 +391,7 @@ func (s *Service) SaveMediaProject(ctx context.Context, p Principal, id string, 
 	}
 	if n > maxBytes {
 		f.Close()
-		return MediaProject{}, &Error{Code: "too_large", Status: 413, Message: "project file exceeds the upload limit"}
+		return MediaProject{}, s.uploadTooLarge(ctx, s.Q, plan, maxBytes, n)
 	}
 	if plan.Limits.StorageBytes != Unlimited { // before the file is read again to check it
 		used, err := s.Q.StorageUsed(ctx, p.WorkspaceID) // files and projects
@@ -441,7 +437,7 @@ func (s *Service) SaveMediaProject(ctx context.Context, p Principal, id string, 
 			return err
 		}
 		if limit := plan.Limits.MaxUploadBytes; limit != Unlimited && n > limit {
-			return &Error{Code: "too_large", Status: 413, Message: "file exceeds the current plan's upload limit"}
+			return s.uploadTooLarge(ctx, q, plan, limit, n)
 		}
 		replaced = ""
 		var prevBytes int64
