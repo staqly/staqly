@@ -981,9 +981,13 @@ func TestCardRequiredTrial(t *testing.T) {
 		checkout.Get("automatic_tax[enabled]") != "true" {
 		t.Fatalf("starter checkout: %v", checkout)
 	}
-	// The customer is the workspace (id, name) paid for by its owner: their sign-in email and name.
-	if customer.Get("email") != ana.Email || customer.Get("individual_name") != ana.Name ||
-		customer.Get("metadata[workspace_id]") != ws {
+	// The customer is the workspace (id, name) paid for by its owner: their sign-in email and name, and their user id.
+	anaUser, err := e.svc.Q.OldestUserByEmail(context.Background(), ana.Email)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if customer.Get("email") != ana.Email || customer.Get("name") != ana.Name || customer.Get("individual_name") != ana.Name ||
+		customer.Get("metadata[workspace_id]") != ws || customer.Get("metadata[user_id]") != anaUser.ID {
 		t.Fatalf("customer: %v", customer)
 	}
 	trialEnd := time.Now().Add(7 * 24 * time.Hour).Unix()
