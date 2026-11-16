@@ -217,8 +217,9 @@ func TestStripeBillingLifecycle(t *testing.T) {
 		!strings.HasSuffix(checkout.Get("success_url"), "/settings/plan?checkout=success") {
 		t.Errorf("checkout form = %v", checkout)
 	}
-	// The customer is findable in Stripe: the workspace's id and name.
-	if !strings.HasPrefix(customer.Get("name"), "ws_") || customer.Get("metadata[workspace_id]") != customer.Get("name") ||
+	// The customer is findable in Stripe: the owner's name (here none, so the workspace's), the workspace's id and name.
+	if customer.Get("name") != customer.Get("business_name") ||
+		!strings.HasPrefix(customer.Get("metadata[workspace_id]"), "ws_") ||
 		customer.Get("business_name") == "" || customer.Get("description") != "Workspace: "+customer.Get("business_name") {
 		t.Errorf("customer form = %v", customer)
 	}

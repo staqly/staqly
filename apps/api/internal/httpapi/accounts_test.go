@@ -986,7 +986,7 @@ func TestCardRequiredTrial(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if customer.Get("email") != ana.Email || customer.Get("individual_name") != ana.Name ||
+	if customer.Get("email") != ana.Email || customer.Get("name") != ana.Name || customer.Get("individual_name") != ana.Name ||
 		customer.Get("metadata[workspace_id]") != ws || customer.Get("metadata[user_id]") != anaUser.ID {
 		t.Fatalf("customer: %v", customer)
 	}
