@@ -616,7 +616,7 @@ func (s *Service) unpinnedPrice(ctx context.Context, plan Plan, interval string,
 // customerDetails: who a workspace's Stripe customer is, so it can be found in Stripe: the workspace (its id as the
 // customer's name and in the metadata, its name as the business and in the description, "Workspace: <name>"; workspace names repeat, ids
 // don't) and the person who pays, its first owner (their name and the email they sign in with: Google or an email
-// code). Checkout may still change `name` to the cardholder's.
+// code; their user id in the metadata). Checkout may still change `name` to the cardholder's.
 func (s *Service) customerDetails(ctx context.Context, w db.GetWorkspaceBillingRow) url.Values {
 	v := url.Values{
 		"name":                   {w.ID},
@@ -630,6 +630,7 @@ func (s *Service) customerDetails(ctx context.Context, w db.GetWorkspaceBillingR
 			if m.Role != RoleOwner {
 				continue
 			}
+			v.Set("metadata[user_id]", m.UserID)
 			if m.Email != "" {
 				v.Set("email", m.Email)
 			}
