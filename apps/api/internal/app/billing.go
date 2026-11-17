@@ -43,7 +43,7 @@ func (s *Service) managedCheckout(form url.Values) {
 	if !s.Cfg.Billing.ManagedPayments {
 		return
 	}
-	for _, k := range []string{"automatic_tax[enabled]", "tax_id_collection[enabled]", "customer_update[name]",
+	for _, k := range []string{"automatic_tax[enabled]", "tax_id_collection[enabled]", "tax_id_collection[required]", "customer_update[name]",
 		"customer_update[address]", "invoice_creation[enabled]"} {
 		form.Del(k)
 	}
@@ -53,8 +53,14 @@ func (s *Service) managedCheckout(form url.Values) {
 // checkoutTax sets the tax parameters every Checkout Session sends (plans and X post packs alike): Stripe Tax
 // works out the VAT part of the VAT-inclusive prices from the required billing address and the tax ID, both
 // saved on the customer. Under Managed Payments Stripe does that itself and the parameters it refuses go.
+// The business name is its own required field, apart from the tax ID: a business without a VAT number (a
+// Swiss one under the registration threshold) still buys, named on the customer and the invoice, and the
+// tax ID stays optional for those who have one. Both modes take name_collection (checked in test mode).
 func (s *Service) checkoutTax(form url.Values) {
+	form.Set("name_collection[business][enabled]", "true")
+	form.Set("name_collection[business][optional]", "false")
 	form.Set("tax_id_collection[enabled]", "true")
+	form.Set("tax_id_collection[required]", "never")
 	form.Set("customer_update[name]", "auto")
 	form.Set("customer_update[address]", "auto")
 	form.Set("automatic_tax[enabled]", "true")
