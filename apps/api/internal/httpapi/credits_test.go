@@ -119,7 +119,8 @@ func TestXPostsAreMetered(t *testing.T) {
 	// VAT as on plans: Stripe Tax from the required billing address and the tax ID.
 	if checkout.Get("automatic_tax[enabled]") != "true" || checkout.Get("tax_id_collection[enabled]") != "true" ||
 		checkout.Get("billing_address_collection") != "required" || checkout.Get("customer_update[address]") != "auto" ||
-		checkout.Get("customer_update[name]") != "auto" || checkout.Get("invoice_creation[enabled]") != "true" {
+		checkout.Get("customer_update[name]") != "auto" || checkout.Get("invoice_creation[enabled]") != "true" ||
+		checkout.Get("name_collection[business][enabled]") != "true" || checkout.Get("tax_id_collection[required]") != "never" {
 		t.Errorf("credits checkout tax: %v", checkout)
 	}
 	// Managed Payments: Stripe is the merchant of record and refuses the tax and customer parameters.
@@ -127,7 +128,8 @@ func TestXPostsAreMetered(t *testing.T) {
 	e.pay("POST", "/v1/billing/credits/checkout", map[string]any{"posts": 1000}, 200, &out)
 	if checkout.Get("managed_payments[enabled]") != "true" || checkout.Has("automatic_tax[enabled]") ||
 		checkout.Has("tax_id_collection[enabled]") || checkout.Has("customer_update[name]") || checkout.Has("customer_update[address]") ||
-		checkout.Has("invoice_creation[enabled]") || checkout.Get("billing_address_collection") != "required" {
+		checkout.Has("invoice_creation[enabled]") || checkout.Get("billing_address_collection") != "required" ||
+		checkout.Has("tax_id_collection[required]") || checkout.Get("name_collection[business][enabled]") != "true" {
 		t.Errorf("managed payments credits checkout form: %v", checkout)
 	}
 	e.svc.Cfg.Billing.ManagedPayments = false

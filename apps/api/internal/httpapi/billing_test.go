@@ -214,6 +214,9 @@ func TestStripeBillingLifecycle(t *testing.T) {
 		checkout.Get("tax_id_collection[enabled]") != "true" || checkout.Get("billing_address_collection") != "required" ||
 		checkout.Get("automatic_tax[enabled]") != "true" || checkout.Get("payment_method_collection") != "always" ||
 		checkout.Get("allow_promotion_codes") != "true" ||
+		// The business name is required apart from the tax ID, which stays optional (no VAT number needed).
+		checkout.Get("name_collection[business][enabled]") != "true" || checkout.Get("name_collection[business][optional]") != "false" ||
+		checkout.Get("tax_id_collection[required]") != "never" ||
 		!strings.HasSuffix(checkout.Get("success_url"), "/settings/plan?checkout=success") {
 		t.Errorf("checkout form = %v", checkout)
 	}
@@ -235,6 +238,8 @@ func TestStripeBillingLifecycle(t *testing.T) {
 	e.pay("POST", "/v1/billing/checkout", map[string]string{"plan": "plus", "interval": "year"}, 200, &out)
 	if checkout.Get("managed_payments[enabled]") != "true" || checkout.Has("automatic_tax[enabled]") ||
 		checkout.Has("tax_id_collection[enabled]") || checkout.Has("customer_update[name]") || checkout.Has("customer_update[address]") ||
+		checkout.Has("tax_id_collection[required]") || checkout.Get("name_collection[business][enabled]") != "true" ||
+		checkout.Get("name_collection[business][optional]") != "false" ||
 		checkout.Get("line_items[0][price]") != "price_plus_year" || checkout.Get("billing_address_collection") != "required" {
 		t.Errorf("managed payments checkout form = %v", checkout)
 	}
