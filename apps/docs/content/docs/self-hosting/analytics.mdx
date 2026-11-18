@@ -20,7 +20,8 @@ Pass them like any other [setting](/self-hosting/configuration#how-to-change-a-s
 
 `GOOGLE_ANALYTICS_ID` (a GA4 measurement id, `G-...`) also sends the dashboard's page views to
 Google Analytics; off when empty, and staqly cloud sets its own. Each page view carries the
-path alone (no query string or fragment, a generic title), and the dashboard's
+path alone (no query string or fragment, a generic title); a return from Stripe Checkout with a
+new plan adds a page view of `/checkout/success`, to mark as a key event. The dashboard's
 Content-Security-Policy opens to Google's tag and collection hosts only while it is set. GA sets
 its cookies (`_ga`, `_ga_*`), so check what your visitors' law asks of you before you turn it on.
 

@@ -86,6 +86,11 @@ export function captureError(error: unknown, boundary: string) {
 
 let ga: typeof ReactGA | undefined
 
+// Back from Stripe Checkout with a new plan (?checkout=success, on the plan page or the welcome steps): read when the
+// app loads, before the page drops the query, and sent as a page view of /checkout/success (GA's key event).
+const checkoutDone =
+  typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('checkout') === 'success'
+
 /**
  * Google Analytics (GOOGLE_ANALYTICS_ID, staqly cloud): page views only, sent by trackPage with the path alone. The
  * location GA would read itself (query strings with codes and searches, fragments with tokens) never reaches it:
@@ -103,6 +108,10 @@ export function startGoogleAnalytics(measurementId: string) {
 
     ga = g
     trackPage(window.location.pathname)
+
+    if (checkoutDone) {
+      trackPage('/checkout/success')
+    }
   })
 }
 
