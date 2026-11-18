@@ -7,6 +7,8 @@ const config = {
   trailingSlash: true,
   reactStrictMode: true,
   images: { unoptimized: true },
+  // Not experimental.inlineCss: Next.js puts the CSS in the HTML twice (the <style> and the RSC payload), which
+  // nearly doubles the page and scored worse in Lighthouse than the one render-blocking stylesheet.
   // Shared workspace package, shipped as TypeScript source (packages/brand).
   transpilePackages: ['@staqly/brand'],
 }

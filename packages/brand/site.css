@@ -77,7 +77,7 @@
   }
 
   .sq-demo-in {
-    animation: sq-fade-up 0.35s ease-out both;
+    animation: sq-wipe-in 0.35s ease-out both;
   }
 
   .sq-dots {
@@ -98,15 +98,16 @@
   }
 }
 
-@keyframes sq-fade-up {
+/* A wipe, like typed text, not a fade: half-transparent text fails a contrast check that lands mid-animation
+   (Lighthouse's accessibility audit, while the hero demo keeps writing new lines). */
+@keyframes sq-wipe-in {
   from {
-    opacity: 0;
-    transform: translateY(4px);
+    clip-path: inset(0 100% 0 0);
   }
 }
 
 @keyframes sq-blink {
   50% {
-    opacity: 0;
+    visibility: hidden;
   }
 }

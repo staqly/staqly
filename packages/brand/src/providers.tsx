@@ -276,10 +276,10 @@ export function ProviderTile({
         aria-label={label}
         className={classes('inline-flex shrink-0 items-center justify-center', ['size-9'], className)}
       >
-        {/* The tile (role="img") is what assistive tech reads; the alt inside it only names the file for crawlers. */}
+        {/* The tile (role="img") names the platform; an alt on the picture inside would say it twice. */}
         <img
           src={src}
-          alt={label}
+          alt=""
           width={24}
           height={24}
           loading="lazy"
@@ -289,7 +289,7 @@ export function ProviderTile({
         {look.dark && !darkOnly && (
           <img
             src={`/brand/providers/${look.logo}-dark.svg`}
-            alt={label}
+            alt=""
             width={24}
             height={24}
             loading="lazy"
@@ -311,7 +311,7 @@ export function ProviderTile({
     mark = (
       <img
         src={look.image}
-        alt={label}
+        alt=""
         width={24}
         height={24}
         loading="lazy"

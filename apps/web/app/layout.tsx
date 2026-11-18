@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from 'next'
 import type { ReactNode } from 'react'
 
 import { ClosingCta, Footer, Nav } from '@/components/site'
+import { WebMcp } from '@/components/webmcp'
 import { HOME_TITLE as title } from '@/lib/seo'
 import { DESCRIPTION, SITE_URL } from '@/lib/site'
 
@@ -45,6 +46,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <ClosingCta />
         <Footer />
         <Analytics />
+        <WebMcp />
       </body>
     </html>
   )
