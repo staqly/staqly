@@ -28,6 +28,8 @@ repository (a sibling checkout at `../assets` from the monorepo root); the build
 | `components/pricing.tsx` | Plan cards (keep in sync with https://docs.staqly.ai/plans and `apps/api/internal/app/plans.go`) |
 | `lib/site.ts` | URLs: docs, GitHub, hosted app, install command |
 | `lib/env.ts` | The one place that reads `process.env` |
+| `lib/webmcp.ts`, `components/webmcp.tsx` | [WebMCP](https://webmachinelearning.github.io/webmcp/) tools for an agent in the browser (the free tools, the plans); loaded only where the browser has WebMCP |
+| `public/.well-known/ard.json` | [ARD](https://agenticresourcediscovery.org/spec/) manifest: the staqly MCP server for agents and registries |
 
 Build-time settings are read in `lib/env.ts` only: `NEXT_PUBLIC_APP_URL` sets the hosted dashboard (default
 `https://app.staqly.ai`; signup goes to `/signup` there), `NEXT_PUBLIC_DOCS_URL` the docs (default

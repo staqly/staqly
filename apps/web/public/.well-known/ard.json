@@ -1,0 +1,25 @@
+{
+  "entries": [
+    {
+      "identifier": "urn:air:staqly.ai:mcp:staqly",
+      "displayName": "staqly",
+      "type": "application/mcp-server-card+json",
+      "description": "The social media scheduler for people and their AI agents, as an MCP server: write posts, schedule them and publish them to Instagram, LinkedIn, X, TikTok, YouTube, Threads, Bluesky and more. Sign in with an API key of a staqly workspace (Bearer token).",
+      "capabilities": ["create_post", "schedule_post", "publish_post", "list_channels", "upload_media"],
+      "tags": ["social media", "scheduling", "publishing", "content calendar"],
+      "representativeQueries": [
+        "schedule a LinkedIn post for tomorrow at 9:00",
+        "publish this announcement to Instagram, X and Threads",
+        "plan a week of social media posts"
+      ],
+      "data": {
+        "name": "ai.staqly/staqly",
+        "title": "staqly",
+        "description": "Write, schedule and publish social media posts to connected channels.",
+        "websiteUrl": "https://staqly.ai",
+        "documentationUrl": "https://docs.staqly.ai/mcp",
+        "remotes": [{ "type": "streamable-http", "url": "https://app.staqly.ai/mcp" }]
+      }
+    }
+  ]
+}

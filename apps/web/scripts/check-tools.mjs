@@ -23,6 +23,7 @@ import {
   toPlain,
   visibleLength,
 } from '../lib/text-format.ts'
+import { WEBMCP_TOOLS } from '../lib/webmcp.ts'
 import { checkTitle, cutTitle, titleLength } from '../lib/youtube-title.ts'
 import { crc32, zip } from '../lib/zip.ts'
 
@@ -231,5 +232,40 @@ assert.ok(checkTitle(' Bread').some((c) => c.title === 'Extra spaces'))
 assert.equal(titleLength('🍞 bread'), 7)
 assert.equal(cutTitle('How I learned to bake bread', 100), 'How I learned to bake bread')
 assert.equal(cutTitle('How I learned to bake bread', 15), 'How I learned...')
+
+// WebMCP: names the browser accepts, unique, every required field in the schema; each tool answers its input.
+const byName = Object.fromEntries(WEBMCP_TOOLS.map((t) => [t.name, t]))
+
+assert.equal(Object.keys(byName).length, WEBMCP_TOOLS.length)
+
+for (const t of WEBMCP_TOOLS) {
+  assert.match(t.name, /^[A-Za-z0-9_.-]{1,128}$/)
+  assert.ok(t.description && t.title)
+  assert.equal(t.inputSchema.type, 'object')
+
+  for (const r of t.inputSchema.required ?? []) {
+    assert.ok(r in t.inputSchema.properties, `${t.name}: ${r}`)
+  }
+
+  JSON.stringify(t.inputSchema) // plain JSON, as the browser clones it
+}
+
+const counted = await byName.count_characters.execute({ text: 'Hi https://example.com' })
+
+assert.deepEqual(
+  counted.filter((c) => ['x', 'X', 'Bluesky'].includes(c.platform)).map((c) => [c.platform, c.characters]),
+  [
+    ['X', 2],
+    ['Bluesky', 22],
+  ],
+)
+assert.equal((await byName.links_to_plain_text.execute({ text: 'see example.com' })).text, 'see example[.]com')
+assert.equal((await byName.format_text.execute({ text: 'Hi', style: 'bold' })).text, applyStyle('Hi', 'bold'))
+assert.equal((await byName.check_youtube_title.execute({ title: '' })).checks[0].level, 'error')
+assert.equal((await byName.check_aspect_ratio.execute({ width: 1080, height: 1350 })).ratio, '4:5')
+await assert.rejects(byName.check_aspect_ratio.execute({ width: 0, height: 10 }))
+assert.equal((await byName.best_time_to_post.execute({ platform: 'instagram' })).hours.length, 7)
+await assert.rejects(byName.best_time_to_post.execute({ platform: 'myspace' }))
+assert.ok((await byName.get_plans.execute({})).plans.length >= 4)
 
 console.log('tools: ok')

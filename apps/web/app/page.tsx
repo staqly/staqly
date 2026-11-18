@@ -69,15 +69,16 @@ function Hero() {
           <Shot
             name="calendar"
             eager
+            from="40rem"
             alt="The staqly calendar, week view: a tip at 09:00 every weekday on Threads, X and LinkedIn, a product launch on Monday at 13:00 and a live Q&A on Wednesday at 17:00"
-            sizes="(min-width: 80rem) 1000px, (min-width: 64rem) calc(100vw - 20rem), calc(100vw - 4rem)"
+            sizes="(min-width: 80rem) 960px, (min-width: 64rem) calc(100vw - 20rem), calc(100vw - 4rem)"
           />
         </div>
         <div className="mx-auto max-w-md sm:absolute sm:right-8 sm:-bottom-2 sm:w-[25rem] lg:right-8 lg:bottom-6 xl:right-[max(2rem,calc(50%-38rem))]">
           <HeroDemo colorway="dark" />
         </div>
         <div className="absolute bottom-10 left-8 hidden w-44 lg:block xl:left-[max(2rem,calc(50%-38rem))]">
-          <PhoneShot className="sq-float" />
+          <PhoneShot sizes="164px" className="sq-float" />
         </div>
       </div>
     </section>
@@ -202,7 +203,7 @@ const steps: { title: string; body: string; bullets: ReactNode[]; chips?: string
           sizes="(min-width: 64rem) 640px, calc(100vw - 2.5rem)"
           className="hidden sm:block"
         />
-        <PhoneShot className="mx-auto w-60 sm:hidden" />
+        <PhoneShot sizes="228px" className="mx-auto w-60 sm:hidden" />
       </>
     ),
   },
