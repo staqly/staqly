@@ -1,0 +1,3 @@
+# The app is behind sign-in: nothing here for search engines.
+User-agent: *
+Disallow: /

@@ -39,3 +39,20 @@ describe('Google Analytics in the app', () => {
     expect(JSON.stringify(calls)).not.toMatch(/secret|stk_local|launch/)
   })
 })
+
+describe('Google Analytics back from Stripe Checkout', () => {
+  it('sends a page view of /checkout/success, still without the query', async () => {
+    vi.resetModules()
+    calls.init.length = calls.set.length = calls.send.length = 0
+    window.history.pushState({}, '', '/settings/plan?checkout=success')
+
+    const a = await import('@/lib/analytics')
+
+    window.history.replaceState(null, '', '/settings/plan') // the plan page drops the query before GA starts
+    a.startGoogleAnalytics('G-TEST123')
+    await vi.waitFor(() => expect(calls.send).toHaveLength(2))
+
+    expect((calls.send as { page: string }[]).map((s) => s.page)).toEqual(['/settings/plan', '/checkout/success'])
+    expect(JSON.stringify(calls)).not.toMatch(/checkout=/)
+  })
+})
