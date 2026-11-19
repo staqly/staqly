@@ -19,6 +19,8 @@ export const metadata: Metadata = {
   appleWebApp: { title: 'staqly', statusBarStyle: 'default' },
   openGraph: { type: 'website', siteName: 'staqly', title: 'staqly', description },
   twitter: { card: 'summary_large_image', title: 'staqly', description },
+  // The app is behind sign-in: keep every page out of search (robots.txt lets crawlers in to see this).
+  robots: { index: false, follow: false },
 }
 
 export const viewport: Viewport = {
