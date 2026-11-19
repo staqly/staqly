@@ -30,6 +30,9 @@ func TestMediaLinks(t *testing.T) {
 	if res.Header.Get("Content-Type") != "image/png" {
 		t.Fatalf("type: %s", res.Header.Get("Content-Type"))
 	}
+	if res.Header.Get("X-Robots-Tag") != "noindex, nofollow" {
+		t.Fatalf("a media link must stay out of search: %q", res.Header.Get("X-Robots-Tag"))
+	}
 	sig := path[strings.LastIndex(path, "/")+1:]
 	e.do(nil, "GET", "/v1/media-links/"+ws+"/"+other.ID+"/"+sig, "", nil, 404, nil)
 	e.do(nil, "GET", "/v1/media-links/ws_other/"+pic.ID+"/"+sig, "", nil, 404, nil)

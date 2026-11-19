@@ -48,6 +48,7 @@ func (s *Server) linkedMedia(w http.ResponseWriter, r *http.Request) {
 	defer f.Close()
 	w.Header().Set("Content-Type", m.MimeType)
 	w.Header().Set("Cache-Control", "public, max-age=3600")
+	w.Header().Set("X-Robots-Tag", "noindex, nofollow") // for platforms to download, never a search result
 	serveMediaFile(w, r, f, m)
 }
 
