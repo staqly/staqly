@@ -511,7 +511,7 @@ func (s *Service) personalEmail(ctx context.Context, ev db.Event, u db.User) (st
 	case "channel.needs_reconnect":
 		ch, _ := data["channel"].(map[string]any)
 		d.Title = firstNonEmpty(str(ch, "name"), "A channel") + " needs reconnecting"
-		d.Channel = &emailChannel{Name: firstNonEmpty(str(ch, "name"), "A channel"), AvatarURL: str(ch, "avatar_url"),
+		d.Channel = &emailChannel{Name: firstNonEmpty(str(ch, "name"), "A channel"), AvatarURL: s.emailAvatar(ev.WorkspaceID, ch),
 			Detail: strings.Join(slices.DeleteFunc([]string{providerName(str(ch, "provider")), str(ch, "handle")}, func(v string) bool { return v == "" }), " · ")}
 		d.Paragraphs = []string{"Staqly can't publish to this channel until someone signs in to it again. Posts for it wait meanwhile."}
 		d.Error = truncateRunes(str(data, "error"), 300)
@@ -523,7 +523,7 @@ func (s *Service) personalEmail(ctx context.Context, ev db.Event, u db.User) (st
 			by = "on " + t.Format("2 January")
 		}
 		d.Title = name + ": renew the sign-in, it runs out " + by
-		d.Channel = &emailChannel{Name: name, AvatarURL: str(ch, "avatar_url"),
+		d.Channel = &emailChannel{Name: name, AvatarURL: s.emailAvatar(ev.WorkspaceID, ch),
 			Detail: strings.Join(slices.DeleteFunc([]string{platform, str(ch, "handle")}, func(v string) bool { return v == "" }), " · ")}
 		d.Paragraphs = []string{platform + " ends this channel's sign-in " + by + " and gives staqly no way to renew it by itself. " +
 			"Renew it before then: one click while you are signed in to " + platform + ". After that date its posts wait until someone signs in again."}

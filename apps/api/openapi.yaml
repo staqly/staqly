@@ -2747,6 +2747,20 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "416": { description: Range not satisfiable }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/channel-avatars/{workspace}/{channel}/{hash}:
+    parameters:
+      - { name: workspace, in: path, required: true, description: The channel's workspace id, schema: { type: string } }
+      - { name: channel, in: path, required: true, description: The channel id, schema: { type: string } }
+      - { name: hash, in: path, required: true, description: The hash of the stored picture (emails carry the link), schema: { type: string } }
+    get:
+      operationId: getChannelAvatar
+      tags: [channels]
+      security: []
+      summary: The channel's own copy of its picture, for emails; a wrong hash, or a channel without its own copy, is 404
+      responses:
+        "200": { description: The picture, content: { "image/jpeg": { schema: { type: string, format: binary } }, "image/png": { schema: { type: string, format: binary } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /v1/posts/{id}/events:
     parameters: [{ $ref: "#/components/parameters/id" }]
     get:
@@ -6514,7 +6528,7 @@ components:
         provider: { type: string, description: Provider id (see GET /v1/providers) }
         name: { type: string }
         handle: { type: string, description: "The account's handle on the platform (@name, a channel id)" }
-        avatar_url: { type: string }
+        avatar_url: { type: string, description: "The channel's picture: usually staqly's own copy as a data: URL (up to 64 KB, taken at connect and reconnect: platform links expire), else a link; empty when it has none" }
         profile_url: { type: string }
         status: { $ref: "#/components/schemas/ChannelStatus" }
         settings: { type: object, additionalProperties: true, description: "Provider-level defaults for new targets, and `links` (one of the provider's limits.link_modes) to choose what the channel does with links" }

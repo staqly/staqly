@@ -99,6 +99,7 @@ var accessRules = map[string]rule{
 	"POST /v1/previews/{token}/comments/{comment}/reopen":  public(),
 	"GET /v1/previews/{token}/media/{media}":               public(),
 	"GET /v1/media-links/{workspace}/{media}/{signature}":  public(),
+	"GET /v1/channel-avatars/{workspace}/{channel}/{hash}": public(),
 	"POST /v1/billing/webhook":                             public(),
 	"GET /v1/meta/webhook":                                 public(),
 	"POST /v1/meta/webhook":                                public(),

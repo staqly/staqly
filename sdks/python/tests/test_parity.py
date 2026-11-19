@@ -85,6 +85,10 @@ NOT_IN_SDK = {
     ("DELETE", "/v1/members/{}"),
     ("GET", "/v1/oauth/{}/client-metadata.json"),
     ("GET", "/v1/media-links/{}/{}/{}"),  # platforms download from these links, clients never call them
+    (
+        "GET",
+        "/v1/channel-avatars/{}/{}/{}",
+    ),  # emails show the picture from these links, clients never call them
     ("POST", "/v1/notifications/unsubscribe"),
     ("POST", "/v1/billing/webhook"),
     ("GET", "/v1/meta/webhook"),  # Meta calls these, clients never do
