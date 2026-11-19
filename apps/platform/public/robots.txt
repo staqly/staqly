@@ -1,3 +1,4 @@
-# The app is behind sign-in: nothing here for search engines.
+# The app is behind sign-in: every page says noindex. Crawling stays allowed so search engines
+# see that and drop pages they already listed (a Disallow would hide the noindex from them).
 User-agent: *
-Disallow: /
+Allow: /
