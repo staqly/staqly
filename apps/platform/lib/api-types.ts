@@ -2232,6 +2232,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/channel-avatars/{workspace}/{channel}/{hash}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The channel's workspace id */
+                workspace: string;
+                /** @description The channel id */
+                channel: string;
+                /** @description The hash of the stored picture (emails carry the link) */
+                hash: string;
+            };
+            cookie?: never;
+        };
+        /** The channel's own copy of its picture, for emails; a wrong hash, or a channel without its own copy, is 404 */
+        get: operations["getChannelAvatar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/posts/{id}/events": {
         parameters: {
             query?: never;
@@ -5819,6 +5843,7 @@ export interface components {
             name: string;
             /** @description The account's handle on the platform (@name, a channel id) */
             handle: string;
+            /** @description The channel's picture: usually staqly's own copy as a data: URL (up to 64 KB, taken at connect and reconnect: platform links expire), else a link; empty when it has none */
             avatar_url: string;
             profile_url: string;
             status: components["schemas"]["ChannelStatus"];
@@ -11115,6 +11140,36 @@ export interface operations {
                 };
                 content?: never;
             };
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    getChannelAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The channel's workspace id */
+                workspace: string;
+                /** @description The channel id */
+                channel: string;
+                /** @description The hash of the stored picture (emails carry the link) */
+                hash: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The picture */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                };
+            };
+            404: components["responses"]["NotFound"];
             429: components["responses"]["RateLimited"];
         };
     };

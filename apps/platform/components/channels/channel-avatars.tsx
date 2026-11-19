@@ -1,6 +1,7 @@
 'use client'
 
 import { Share2 } from 'lucide-react'
+import { useState } from 'react'
 
 import { ProviderIcon, ProviderTile } from '@/lib/providers'
 import { safeImageSrc } from '@/lib/safe'
@@ -17,14 +18,22 @@ export interface ChannelLike {
 export function ChannelAvatar({ channel, className }: { channel: ChannelLike; className?: string }) {
   // A link, or a small picture kept inline (a Telegram chat's: its file address would carry the bot's token).
   const avatar = safeImageSrc(channel.avatar_url)
+  // A platform link that stopped working (Meta's expire after a few days): the tile below instead of a broken image.
+  const [broken, setBroken] = useState<string>()
 
-  if (avatar) {
+  if (avatar && avatar !== broken) {
     return (
       <span className={cn('relative inline-flex size-9 shrink-0', className)}>
         {/* Many platforms hand out pictures already cut to a circle (white or dark corners, not always centred): a
             slight zoom inside our circle hides that edge instead of showing it as a lopsided ring. */}
         <span className="size-full overflow-hidden rounded-full">
-          <img src={avatar} alt="" className="size-full scale-[1.12] object-cover" referrerPolicy="no-referrer" />
+          <img
+            src={avatar}
+            alt=""
+            className="size-full scale-[1.12] object-cover"
+            referrerPolicy="no-referrer"
+            onError={() => setBroken(avatar)}
+          />
         </span>
         {/* The platform badge scales with the avatar (16 px on a 36 px one), its mark centred inside. */}
         <span className="absolute -right-[6%] -bottom-[6%] grid aspect-square w-[44%] place-items-center rounded-full bg-background ring-1 ring-background">

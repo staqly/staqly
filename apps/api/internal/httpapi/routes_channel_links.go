@@ -208,5 +208,17 @@ func init() {
 			}
 			writeJSON(w, 200, m)
 		})
+		// A channel's own copy of its picture, for emails (mail apps show no data: URLs): the hash is the credential.
+		r.Get("/channel-avatars/{workspace}/{channel}/{hash}", func(w http.ResponseWriter, r *http.Request) {
+			mime, b, err := s.svc.ChannelAvatar(r.Context(), chi.URLParam(r, "workspace"), chi.URLParam(r, "channel"), chi.URLParam(r, "hash"))
+			if err != nil {
+				writeErr(w, r, err)
+				return
+			}
+			w.Header().Set("Content-Type", mime)
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable") // another picture is another hash
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			_, _ = w.Write(b) // #nosec G705 -- image/jpeg or image/png + nosniff: the stored picture, never the request's
+		})
 	})
 }

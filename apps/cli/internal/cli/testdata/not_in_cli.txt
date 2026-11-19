@@ -45,6 +45,7 @@
 /v1/billing/sync
 /v1/billing/webhook
 /v1/billing/x-posts
+/v1/channel-avatars/{}/{}/{}
 /v1/channels/moltbook/register
 /v1/channels/oauth/{}/callback
 /v1/channels/telegram/connect

@@ -561,6 +561,7 @@ func (s *Service) saveChannel(ctx context.Context, p Principal, e providers.Entr
 	if err := s.guardChannel(ctx, p.WorkspaceID, fp); err != nil {
 		return Channel{}, err
 	}
+	profile.AvatarURL = providers.OwnAvatar(s.providerCtx(ctx), profile.AvatarURL) // before the transaction: a download
 	now := s.now()
 	row := db.Channel{ID: newID("ch"), WorkspaceID: p.WorkspaceID, Provider: e.ID(), Name: name, Handle: profile.Handle,
 		AvatarUrl: profile.AvatarURL, ProfileUrl: profile.ProfileURL, Status: "connected", Credentials: sealed,
@@ -816,6 +817,7 @@ func (s *Service) reconnectChannel(ctx context.Context, p Principal, row db.Chan
 	if err != nil {
 		return Channel{}, err
 	}
+	profile.AvatarURL = providers.OwnAvatar(s.providerCtx(ctx), profile.AvatarURL)
 	row.Credentials, row.Status, row.LastError, row.UpdatedAt = sealed, "connected", "", s.now()
 	row.AvatarUrl, row.ProfileUrl = firstNonEmpty(profile.AvatarURL, row.AvatarUrl), firstNonEmpty(profile.ProfileURL, row.ProfileUrl)
 	row.Comments = boolInt(!profile.NoComments) // a reconnect through an app that may comment turns them on
@@ -1003,6 +1005,7 @@ func (s *Service) UpdateChannel(ctx context.Context, p Principal, id string, in 
 		if err != nil {
 			return Channel{}, err
 		}
+		profile.AvatarURL = providers.OwnAvatar(s.providerCtx(ctx), profile.AvatarURL)
 		reconnected = &struct {
 			sealed  string
 			profile providers.Profile
