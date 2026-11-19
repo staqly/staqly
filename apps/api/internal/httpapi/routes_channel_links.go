@@ -217,6 +217,7 @@ func init() {
 			}
 			w.Header().Set("Content-Type", mime)
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable") // another picture is another hash
+			w.Header().Set("X-Robots-Tag", "noindex, nofollow")
 			w.Header().Set("X-Content-Type-Options", "nosniff")
 			_, _ = w.Write(b) // #nosec G705 -- image/jpeg or image/png + nosniff: the stored picture, never the request's
 		})
